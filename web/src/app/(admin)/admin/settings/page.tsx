@@ -469,8 +469,8 @@ export default function AdminSettingsPage() {
                                                     render: (_, item) => (
                                                         <InputNumber
                                                             min={0}
-                                                            step={1}
-                                                            precision={0}
+                                                            step={0.5}
+                                                            precision={2}
                                                             className="!w-full"
                                                             value={item.credits}
                                                             addonAfter="点"
