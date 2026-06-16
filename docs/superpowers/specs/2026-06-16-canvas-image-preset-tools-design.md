@@ -84,9 +84,15 @@ onPresetEdit: (node: CanvasNodeData, preset: CanvasImagePresetEditId) => void;
 
 ### 画布页面执行逻辑
 
-在 `canvas-client-page.tsx` 增加预设配置和执行函数：
+在 `web/src/app/(user)/canvas/constants.ts` 增加统一预设配置：
 
-- `IMAGE_PRESET_EDIT_PROMPTS`
+- `CanvasImagePresetEditId`
+- `IMAGE_PRESET_EDIT_CONFIG`
+
+配置集中保存三个工具的节点标题、按钮文案、面板文案、提示词、错误提示和 tooltip，避免提示词散落在组件里。
+
+在 `canvas-client-page.tsx` 增加执行函数：
+
 - `presetEditImageNode(node, preset)`
 
 执行函数复用现有能力：

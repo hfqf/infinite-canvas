@@ -1,11 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Brush, Camera, Copy, FileText, Grid2x2, Lock, LockOpen, Maximize2, Scissors, Sparkles, Upload, ZoomIn } from "lucide-react";
+import { Brush, Camera, Copy, FileText, Focus, Grid2x2, Layers3, Lock, LockOpen, Maximize2, Scissors, Sparkles, Upload, WandSparkles, ZoomIn } from "lucide-react";
 
+import { IMAGE_PRESET_EDIT_CONFIG, type CanvasImagePresetEditId } from "../constants";
 import type { CanvasNodeData } from "../types";
 
-export type ImageNodeActionToolId = "copyPrompt" | "reversePrompt" | "replace" | "resize" | "maskEdit" | "crop" | "split" | "upscale" | "superResolve" | "angle" | "view";
+export type ImageNodeActionToolId = "copyPrompt" | "reversePrompt" | "replace" | "resize" | "maskEdit" | "crop" | "split" | "upscale" | "superResolve" | "angle" | "view" | CanvasImagePresetEditId;
 export type ImageQuickToolId = "info" | "delete" | "saveAsset" | "download" | "edit" | ImageNodeActionToolId;
 
 export type ImageToolHandlers = {
@@ -20,6 +21,7 @@ export type ImageToolHandlers = {
     onViewImage: (node: CanvasNodeData) => void;
     onCopyPrompt: (node: CanvasNodeData) => void;
     onReversePrompt: (node: CanvasNodeData) => void;
+    onPresetEdit: (node: CanvasNodeData, preset: CanvasImagePresetEditId) => void;
 };
 
 export type ImageToolDefinition = {
@@ -38,7 +40,7 @@ export type ImageQuickToolsConfig = {
     showLabels: boolean;
 };
 
-export const IMAGE_QUICK_TOOLS_STORAGE_KEY = "canvas-image-quick-tools-v6";
+export const IMAGE_QUICK_TOOLS_STORAGE_KEY = "canvas-image-quick-tools-v7";
 
 const defaultBaseToolIds: ImageQuickToolId[] = ["info", "delete", "saveAsset", "download", "edit"];
 
@@ -124,6 +126,33 @@ export const imageToolDefinitions: ImageToolDefinition[] = [
         title: "AI 超分",
         icon: () => <Sparkles className="size-4" />,
         run: (node, handlers) => handlers.onSuperResolve(node),
+    },
+    {
+        id: "vectorize",
+        defaultVisible: true,
+        panelLabel: IMAGE_PRESET_EDIT_CONFIG.vectorize.panelLabel,
+        label: IMAGE_PRESET_EDIT_CONFIG.vectorize.label,
+        title: IMAGE_PRESET_EDIT_CONFIG.vectorize.tooltip,
+        icon: () => <WandSparkles className="size-4" />,
+        run: (node, handlers) => handlers.onPresetEdit(node, "vectorize"),
+    },
+    {
+        id: "decompose",
+        defaultVisible: true,
+        panelLabel: IMAGE_PRESET_EDIT_CONFIG.decompose.panelLabel,
+        label: IMAGE_PRESET_EDIT_CONFIG.decompose.label,
+        title: IMAGE_PRESET_EDIT_CONFIG.decompose.tooltip,
+        icon: () => <Layers3 className="size-4" />,
+        run: (node, handlers) => handlers.onPresetEdit(node, "decompose"),
+    },
+    {
+        id: "clarify",
+        defaultVisible: true,
+        panelLabel: IMAGE_PRESET_EDIT_CONFIG.clarify.panelLabel,
+        label: IMAGE_PRESET_EDIT_CONFIG.clarify.label,
+        title: IMAGE_PRESET_EDIT_CONFIG.clarify.tooltip,
+        icon: () => <Focus className="size-4" />,
+        run: (node, handlers) => handlers.onPresetEdit(node, "clarify"),
     },
     {
         id: "angle",
