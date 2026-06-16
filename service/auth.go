@@ -91,12 +91,22 @@ func Register(username string, password string) (model.AuthSession, error) {
 		Role:      model.UserRoleUser,
 		AffCode:   newAffCode(),
 		Status:    model.UserStatusActive,
+		Credits:   100,
 		CreatedAt: now(),
 		UpdatedAt: now(),
 	})
 	if err != nil {
 		return model.AuthSession{}, err
 	}
+	_, _ = repository.SaveCreditLog(model.CreditLog{
+		ID:        newID("credit"),
+		UserID:    user.ID,
+		Type:      model.CreditLogTypeRegisterGift,
+		Amount:    100,
+		Balance:   100,
+		Remark:    "新用户注册赠送",
+		CreatedAt: now(),
+	})
 	return newSession(user)
 }
 
@@ -183,6 +193,7 @@ func LoginWithLinuxDo(r *http.Request, code string, state string) (model.AuthSes
 			AffCode:     newAffCode(),
 			LinuxDoID:   linuxDoID,
 			Status:      model.UserStatusActive,
+			Credits:     100,
 			CreatedAt:   now(),
 		}
 	} else if user.Status == model.UserStatusBan {
@@ -194,9 +205,21 @@ func LoginWithLinuxDo(r *http.Request, code string, state string) (model.AuthSes
 	user.UpdatedAt = now()
 	extra, _ := json.Marshal(userExtra{LinuxDo: profile})
 	user.Extra = string(extra)
+	isNewUser := !ok
 	user, err = repository.SaveUser(user)
 	if err != nil {
 		return model.AuthSession{}, redirect, err
+	}
+	if isNewUser {
+		_, _ = repository.SaveCreditLog(model.CreditLog{
+			ID:        newID("credit"),
+			UserID:    user.ID,
+			Type:      model.CreditLogTypeRegisterGift,
+			Amount:    100,
+			Balance:   100,
+			Remark:    "新用户注册赠送",
+			CreatedAt: now(),
+		})
 	}
 	session, err := newSession(user)
 	return session, redirect, err

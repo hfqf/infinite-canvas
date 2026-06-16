@@ -37,7 +37,6 @@ export default function AdminUsersPage() {
     const saveUser = async () => {
         const value = await form.validateFields();
         const userValue = { ...value };
-        delete userValue.credits;
         await saveAdminUser({ ...editingUser, ...userValue, password: value.password || undefined });
         setEditingUser(null);
     };

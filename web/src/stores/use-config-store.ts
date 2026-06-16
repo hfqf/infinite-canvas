@@ -49,7 +49,7 @@ export const CONFIG_STORE_KEY = "infinite-canvas:ai_config_store";
 export type ModelCapability = "image" | "video" | "text" | "audio";
 
 export const defaultConfig: AiConfig = {
-    channelMode: "local",
+    channelMode: "remote",
     baseUrl: "https://api.openai.com",
     apiKey: "",
     model: "gpt-image-2",
@@ -104,6 +104,10 @@ type ConfigStore = {
 
 function resolveEffectiveConfig(config: AiConfig, modelChannel: AdminPublicSettings["modelChannel"] | null) {
     const channelMode = modelChannel?.allowCustomChannel ? config.channelMode : "remote";
+    // 智能 fallback：local 模式下未填写 baseUrl/apiKey 时，自动回 remote
+    if (channelMode === "local" && (!config.baseUrl.trim() || !config.apiKey.trim())) {
+        return resolveEffectiveConfig({ ...config, channelMode: "remote" }, modelChannel);
+    }
     if (channelMode === "local" || !modelChannel) return { ...config, channelMode };
     const models = modelChannel.availableModels;
     const textModels = filterModelsByCapability(models, "text");

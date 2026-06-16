@@ -78,9 +78,10 @@ func PublicUser(user User) AuthUser {
 type CreditLogType string
 
 const (
-	CreditLogTypeAdminAdjust CreditLogType = "admin_adjust"
-	CreditLogTypeAIConsume   CreditLogType = "ai_consume"
-	CreditLogTypeAIRefund    CreditLogType = "ai_refund"
+	CreditLogTypeAdminAdjust  CreditLogType = "admin_adjust"
+	CreditLogTypeAIConsume    CreditLogType = "ai_consume"
+	CreditLogTypeAIRefund     CreditLogType = "ai_refund"
+	CreditLogTypeRegisterGift CreditLogType = "register_gift"
 )
 
 // CreditLog 用户算力点变更流水。

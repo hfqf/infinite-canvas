@@ -26,7 +26,14 @@ export function useAdminUsers() {
     });
 
     const saveMutation = useMutation({
-        mutationFn: (user: Partial<AdminUser> & { password?: string }) => saveAdminUser(token, user),
+        mutationFn: async (user: Partial<AdminUser> & { password?: string }) => {
+            const result = await saveAdminUser(token, user);
+            // 同步算力点：仅在已存在用户且传入了 credits 时调整
+            if (user.id && typeof user.credits === "number") {
+                await adjustAdminUserCredits(token, user.id, user.credits);
+            }
+            return result;
+        },
         onSuccess: async (_, user) => {
             await queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
             message.success(user.id ? "用户已保存" : "用户已新增");
