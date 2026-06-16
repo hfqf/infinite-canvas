@@ -24,7 +24,7 @@ type ModelChannel struct {
 // ModelCost 模型算力点配置。
 type ModelCost struct {
 	Model   string `json:"model"`
-	Credits int    `json:"credits"`
+	Credits float64 `json:"credits"`
 }
 
 // PublicModelChannelSetting 公开模型渠道配置。

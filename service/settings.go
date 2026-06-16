@@ -106,7 +106,7 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 	return setting
 }
 
-func ModelCost(modelName string) (int, error) {
+func ModelCost(modelName string) (float64, error) {
 	settings, err := repository.GetSettings()
 	if err != nil {
 		return 0, err

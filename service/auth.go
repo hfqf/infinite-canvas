@@ -325,7 +325,7 @@ func SaveUser(user model.User, password string) (model.User, error) {
 	return user, err
 }
 
-func AdjustUserCredits(id string, credits int) (model.User, error) {
+func AdjustUserCredits(id string, credits float64) (model.User, error) {
 	user, ok, err := repository.GetUserByID(id)
 	if err != nil || !ok {
 		if err != nil {
@@ -352,7 +352,7 @@ func AdjustUserCredits(id string, credits int) (model.User, error) {
 	return user, err
 }
 
-func ConsumeUserCredits(userID string, modelName string, credits int, path string) error {
+func ConsumeUserCredits(userID string, modelName string, credits float64, path string) error {
 	if credits <= 0 {
 		return nil
 	}
@@ -377,7 +377,7 @@ func ConsumeUserCredits(userID string, modelName string, credits int, path strin
 	return err
 }
 
-func RefundUserCredits(userID string, modelName string, credits int, path string) error {
+func RefundUserCredits(userID string, modelName string, credits float64, path string) error {
 	if credits <= 0 {
 		return nil
 	}

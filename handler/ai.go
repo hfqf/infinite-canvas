@@ -183,8 +183,8 @@ func readMultipartModel(body []byte, contentType string) string {
 	return ""
 }
 
-func readAIRequestCount(body []byte, contentType string) int {
-	count := 1
+func readAIRequestCount(body []byte, contentType string) float64 {
+	count := 1.0
 	if strings.HasPrefix(contentType, "multipart/form-data") {
 		_, params, err := mime.ParseMediaType(contentType)
 		if err != nil {
@@ -200,7 +200,7 @@ func readAIRequestCount(body []byte, contentType string) int {
 		}
 	} else {
 		var payload struct {
-			N int `json:"n"`
+			N float64 `json:"n"`
 		}
 		_ = json.Unmarshal(body, &payload)
 		count = payload.N

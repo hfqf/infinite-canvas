@@ -79,7 +79,7 @@ func SaveUser(user model.User) (model.User, error) {
 	return user, db.Save(&user).Error
 }
 
-func ConsumeUserCredits(id string, credits int, now string) (model.User, bool, error) {
+func ConsumeUserCredits(id string, credits float64, now string) (model.User, bool, error) {
 	db, err := DB()
 	if err != nil {
 		return model.User{}, false, err
@@ -99,7 +99,7 @@ func ConsumeUserCredits(id string, credits int, now string) (model.User, bool, e
 	return user, ok && tx.RowsAffected > 0, err
 }
 
-func RefundUserCredits(id string, credits int, now string) (model.User, bool, error) {
+func RefundUserCredits(id string, credits float64, now string) (model.User, bool, error) {
 	db, err := DB()
 	if err != nil {
 		return model.User{}, false, err
