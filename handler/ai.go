@@ -142,6 +142,13 @@ func copyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func
 	if shouldNormalizeImagesResponse(request.URL.Path) {
 		body, readErr := io.ReadAll(io.LimitReader(response.Body, 16<<20))
 		if readErr == nil {
+			// aicodeme 返的是异步 task（如 {status:"queued", task_id:"..."}）。
+			// 后端代理轮询 task 直到 succeeded/failed/超时，再转 OpenAI 标准。
+			// 轮询后的 body 走 normalizeAicodemeImagesResponse → OpenAI 标准。
+			finalBody, polled := pollAicodemeImageTaskIfNeeded(request, body, response.Header)
+			if polled {
+				body = finalBody
+			}
 			if normalized, ok := normalizeAicodemeImagesResponse(body); ok {
 				copyHeaders(w.Header(), response.Header)
 				w.Header().Set("Content-Type", "application/json")
@@ -248,6 +255,105 @@ func normalizeAicodemeImagesResponse(body []byte) ([]byte, bool) {
 
 func shouldNormalizeImagesResponse(path string) bool {
 	return strings.HasSuffix(path, "/images/generations")
+}
+
+// aicodeme 的 images/generations 返 task 格式：{status, task_id, retry_after, result, ...}。
+// 如果 status 是 queued/running 还没完，后端代理用 task_id 轮询
+// GET /v1/images/generations/{task_id}，隔 retry_after 秒一次，
+// 直到 status="succeeded"/"failed" 或超过 maxPollTimes。
+// 成功后将完整的 task body 返出去（由 normalizeAicodemeImagesResponse 转 OpenAI 标准）。
+//
+// 注意：这是串行轮询，会让 canvas 前端感觉这个 HTTP 请求"很久"才回，
+// 但前端既然能等（status code 还没返），就不必改前端。
+// aicodeme retry_after 2s 默认，最坏情况 30 轮 × 2s = 60s。
+const (
+	aicodemeTaskPollMaxTimes = 30
+	aicodemeTaskPollMinDelay = 1 * time.Second
+)
+
+func pollAicodemeImageTaskIfNeeded(req *http.Request, body []byte, upstreamHeader http.Header) ([]byte, bool) {
+	var probe struct {
+		TaskID     string `json:"task_id"`
+		Status     string `json:"status"`
+		RetryAfter int    `json:"retry_after"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return body, false
+	}
+	if probe.TaskID == "" {
+		return body, false
+	}
+	// OpenAI 标准任务 API 也可能返 task_id（status: in_progress），这里也轮询。
+	// 但前端目前走的是同步逻辑，所以 OpenAI 标准任务 API 不会到这里。
+	if probe.Status == "succeeded" {
+		return body, true // 已经完成，让 normalize 转格式即可
+	}
+	if probe.Status == "failed" || probe.Status == "error" || probe.Status == "canceled" {
+		return body, true // 终态，转给 normalize 处理（normalize 返 OpenAI 标准或 false）
+	}
+	if probe.Status != "" && probe.Status != "queued" && probe.Status != "running" && probe.Status != "in_progress" && probe.Status != "processing" && probe.Status != "pending" {
+		// 不认识的状态，当成"已完成或不能轮询"，让 normalize 试着转
+		return body, true
+	}
+
+	// 拼轮询 URL：把 path 的 "/images/generations" 替换成 "/images/generations/{task_id}"
+	pollPath := req.URL.Path
+	if idx := strings.LastIndex(pollPath, "/images/generations"); idx >= 0 {
+		pollPath = pollPath[:idx] + "/images/generations/" + probe.TaskID
+	} else {
+		pollPath = "/v1/images/generations/" + probe.TaskID
+	}
+	pollURL := *req.URL
+	pollURL.Path = pollPath
+
+	authHeader := req.Header.Get("Authorization")
+
+	delay := time.Duration(probe.RetryAfter) * time.Second
+	if delay <= 0 {
+		delay = aicodemeTaskPollMinDelay
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	for i := 0; i < aicodemeTaskPollMaxTimes; i++ {
+		time.Sleep(delay)
+		pollReq, _ := http.NewRequest(http.MethodGet, pollURL.String(), nil)
+		if authHeader != "" {
+			pollReq.Header.Set("Authorization", authHeader)
+		}
+		resp, err := client.Do(pollReq)
+		if err != nil {
+			log.Printf("AI task poll failed: url=%s err=%v", pollURL.String(), err)
+			continue
+		}
+		raw, readErr := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+		resp.Body.Close()
+		if readErr != nil {
+			continue
+		}
+		var next struct {
+			Status     string          `json:"status"`
+			RetryAfter int             `json:"retry_after"`
+			Result     json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(raw, &next); err != nil {
+			continue
+		}
+		log.Printf("AI task poll: task=%s status=%s progress=%d%% iter=%d", probe.TaskID, next.Status, i, i)
+		if next.Status == "succeeded" {
+			return raw, true
+		}
+		if next.Status == "failed" || next.Status == "error" || next.Status == "canceled" {
+			return raw, true
+		}
+		// 更新下一轮 delay
+		if d := time.Duration(next.RetryAfter) * time.Second; d > 0 {
+			delay = d
+		}
+		if d := aicodemeTaskPollMinDelay; delay < d {
+			delay = d
+		}
+	}
+	log.Printf("AI task poll timeout: task=%s max=%d", probe.TaskID, aicodemeTaskPollMaxTimes)
+	return body, true // 轮询超时也返原 body（queued 状态），让 normalize 决定怎么处理
 }
 
 // aicodeme 的 images/generations 默认返 task 格式。一种猜测是加上 async:true
