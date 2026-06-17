@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/basketikun/infinite-canvas/service"
 )
@@ -132,6 +133,27 @@ func copyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func
 		return
 	}
 
+	// /images/generations 上游可能是非 OpenAI 标准格式（如 aicodeme 返的是
+	// {id, task_id, status, result: {data: [{url, ...}]}}，而非 OpenAI 的
+	// {created, data: [{b64_json|url}]}）。在写响应前探测一次，是就转。
+	if shouldNormalizeImagesResponse(request.URL.Path) {
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, 16<<20))
+		if readErr == nil {
+			if normalized, ok := normalizeAicodemeImagesResponse(body); ok {
+				copyHeaders(w.Header(), response.Header)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(response.StatusCode)
+				_, _ = w.Write(normalized)
+				return
+			}
+			// 不是 aicodeme 格式（或无法识别），原样写回
+			copyHeaders(w.Header(), response.Header)
+			w.WriteHeader(response.StatusCode)
+			_, _ = w.Write(body)
+			return
+		}
+	}
+
 	for key, values := range response.Header {
 		if strings.EqualFold(key, "Content-Length") {
 			continue
@@ -142,6 +164,87 @@ func copyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func
 	}
 	w.WriteHeader(response.StatusCode)
 	_, _ = io.Copy(w, response.Body)
+}
+
+func copyHeaders(dst http.Header, src http.Header) {
+	for key, values := range src {
+		if strings.EqualFold(key, "Content-Length") || strings.EqualFold(key, "Content-Type") {
+			continue
+		}
+		for _, value := range values {
+			dst.Add(key, value)
+		}
+	}
+}
+
+// aicodeme 等非标准上游 images/generations 返的格式是
+// {id, task_id, status:"succeeded", result:{data:[{url,...}]}}，
+// OpenAI 标准是 {created, data:[{b64_json|url}]}。这里转一次，让前端按 OpenAI 标准解析。
+// 返回 (normalized, true) 表示转换成功；返回 (nil, false) 表示不是 aicodeme 格式，原样写回。
+func normalizeAicodemeImagesResponse(body []byte) ([]byte, bool) {
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return nil, false
+	}
+	// aicodeme 特征：有 task_id + result.data
+	if _, ok := probe["task_id"]; !ok {
+		return nil, false
+	}
+	if _, ok := probe["result"]; !ok {
+		return nil, false
+	}
+	type aicodemeResult struct {
+		Data []map[string]any `json:"data"`
+	}
+	type aicodemeResp struct {
+		ID       string         `json:"id"`
+		TaskID   string         `json:"task_id"`
+		Status   string         `json:"status"`
+		Progress int            `json:"progress"`
+		Result   aicodemeResult `json:"result"`
+	}
+	var resp aicodemeResp
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, false
+	}
+	if len(resp.Result.Data) == 0 {
+		return nil, false
+	}
+	type openAIDataItem struct {
+		URL     string `json:"url,omitempty"`
+		B64JSON string `json:"b64_json,omitempty"`
+	}
+	type openAIResp struct {
+		Created int64           `json:"created"`
+		Data    []openAIDataItem `json:"data"`
+	}
+	out := openAIResp{
+		Created: time.Now().Unix(),
+		Data:    make([]openAIDataItem, 0, len(resp.Result.Data)),
+	}
+	for _, item := range resp.Result.Data {
+		entry := openAIDataItem{}
+		if u, ok := item["url"].(string); ok && u != "" {
+			entry.URL = u
+		} else if b64, ok := item["b64_json"].(string); ok && b64 != "" {
+			entry.B64JSON = b64
+		} else {
+			continue
+		}
+		out.Data = append(out.Data, entry)
+	}
+	if len(out.Data) == 0 {
+		return nil, false
+	}
+	encoded, err := json.Marshal(out)
+	if err != nil {
+		return nil, false
+	}
+	return encoded, true
+}
+
+func shouldNormalizeImagesResponse(path string) bool {
+	return strings.HasSuffix(path, "/images/generations")
 }
 
 func readAIRequest(r *http.Request) ([]byte, string, string, error) {
