@@ -14,10 +14,13 @@ export type ChatCompletionMessage = {
 };
 
 type ImageApiResponse = {
+    id?: string;
+    task_id?: string;
     data?: Array<Record<string, unknown>>;
     result?: { data?: Array<Record<string, unknown>> };
     error?: { message?: string } | string;
     status?: string;
+    retry_after?: number;
     code?: number;
     msg?: string;
 };
@@ -41,6 +44,9 @@ const IMAGE_MAX_PIXELS = 8294400;
 const IMAGE_MAX_EDGE = 3840;
 const IMAGE_MAX_RATIO = 3;
 const IMAGE_OUTPUT_FORMAT = "png";
+const IMAGE_TASK_MAX_POLLS = 90;
+const IMAGE_TASK_DEFAULT_DELAY = 2000;
+const IMAGE_TASK_MAX_DELAY = 10000;
 
 function normalizeQuality(quality: string) {
     const value = quality.trim().toLowerCase();
@@ -145,6 +151,54 @@ function parseImagePayload(payload: ImageApiResponse) {
     return images;
 }
 
+async function resolveImagePayload(config: AiConfig, payload: ImageApiResponse, retryAfter?: string | number) {
+    if (!isPendingImagePayload(payload)) return parseImagePayload(payload);
+    const taskId = imageTaskId(payload);
+    if (!taskId) return parseImagePayload(payload);
+    return pollImageTask(config, taskId, retryAfter || payload.retry_after);
+}
+
+async function pollImageTask(config: AiConfig, taskId: string, retryAfter?: string | number) {
+    let delay = imageTaskDelay(retryAfter);
+    for (let attempt = 0; attempt < IMAGE_TASK_MAX_POLLS; attempt += 1) {
+        await sleep(delay);
+        const response = await axios.get<ImageApiResponse>(imageTaskApiUrl(config, taskId), { headers: aiHeaders(config) });
+        if (!isPendingImagePayload(response.data)) return parseImagePayload(response.data);
+        delay = imageTaskDelay(retryAfterHeader(response.headers["retry-after"]) || response.data.retry_after);
+    }
+    throw new Error("图片任务处理超时，请稍后重试");
+}
+
+function imageTaskApiUrl(config: AiConfig, taskId: string) {
+    const url = aiApiUrl(config, `/image-tasks/${encodeURIComponent(taskId)}`);
+    return config.channelMode === "remote" ? `${url}?model=${encodeURIComponent(config.model)}` : url;
+}
+
+function isPendingImagePayload(payload: ImageApiResponse) {
+    const status = payload.status?.toLowerCase();
+    return status === "queued" || status === "running";
+}
+
+function imageTaskId(payload: ImageApiResponse) {
+    return payload.task_id || payload.id || "";
+}
+
+function imageTaskDelay(value: string | number | undefined) {
+    const seconds = typeof value === "number" ? value : Number(value);
+    const delay = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : IMAGE_TASK_DEFAULT_DELAY;
+    return Math.min(IMAGE_TASK_MAX_DELAY, Math.max(IMAGE_TASK_DEFAULT_DELAY, delay));
+}
+
+function retryAfterHeader(value: unknown) {
+    if (typeof value === "string" || typeof value === "number") return value;
+    if (Array.isArray(value) && (typeof value[0] === "string" || typeof value[0] === "number")) return value[0];
+    return undefined;
+}
+
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function normalizeImageUrl(value: string) {
     const markdownLink = value.match(/^\[[^\]]+\]\((https?:\/\/[^)]+)\)$/);
     return markdownLink?.[1] || value;
@@ -230,7 +284,6 @@ export async function requestGeneration(config: AiConfig, prompt: string) {
                 model: config.model,
                 prompt: withSystemPrompt(config, prompt),
                 n,
-                async: true,
                 ...(quality ? { quality } : {}),
                 ...(requestSize ? { size: requestSize } : {}),
                 response_format: "b64_json",
@@ -240,7 +293,7 @@ export async function requestGeneration(config: AiConfig, prompt: string) {
                 headers: aiHeaders(config, "application/json"),
             },
         );
-        const images = parseImagePayload(response.data);
+        const images = await resolveImagePayload(config, response.data, retryAfterHeader(response.headers["retry-after"]));
         refreshRemoteUser(config);
         return images;
     } catch (error) {
@@ -257,7 +310,6 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     formData.set("model", config.model);
     formData.set("prompt", withSystemPrompt(config, requestPrompt));
     formData.set("n", String(n));
-    formData.set("async", "true");
     formData.set("response_format", "b64_json");
     formData.set("output_format", IMAGE_OUTPUT_FORMAT);
     if (quality) {
@@ -272,7 +324,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
 
     try {
         const response = await axios.post<ImageApiResponse>(aiApiUrl(config, "/images/edits"), formData, { headers: aiHeaders(config) });
-        const images = parseImagePayload(response.data);
+        const images = await resolveImagePayload(config, response.data, retryAfterHeader(response.headers["retry-after"]));
         refreshRemoteUser(config);
         return images;
     } catch (error) {

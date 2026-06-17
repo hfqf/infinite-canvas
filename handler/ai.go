@@ -23,6 +23,14 @@ func AIImagesEdits(w http.ResponseWriter, r *http.Request) {
 	proxyAIRequest(w, r, "/images/edits")
 }
 
+func AIImageTask(w http.ResponseWriter, r *http.Request, id string) {
+	proxyAIGetRequest(w, r, "/image-tasks/"+id)
+}
+
+func AIImagesGenerationTask(w http.ResponseWriter, r *http.Request, id string) {
+	proxyAIGetRequest(w, r, "/images/generations/"+id)
+}
+
 func AIChatCompletions(w http.ResponseWriter, r *http.Request) {
 	proxyAIRequest(w, r, "/chat/completions")
 }
@@ -71,9 +79,6 @@ func proxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		Fail(w, "AI 接口请求失败")
 		return
 	}
-	// aicodeme 这类非标准上游 images/generations 偶尔需要 async:true 才返 OpenAI 标准。
-	// 不动 user input、content-type、multipart。
-	body, contentType = ensureAsyncTrueOnImages(path, body, contentType)
 	user, ok := service.UserFromContext(r.Context())
 	if !ok {
 		Fail(w, "未登录或权限不足")
