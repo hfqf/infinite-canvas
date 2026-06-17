@@ -11,32 +11,42 @@ const (
 
 // ModelChannel 模型渠道配置。
 type ModelChannel struct {
-	Protocol string   `json:"protocol"`
-	Name     string   `json:"name"`
-	BaseURL  string   `json:"baseUrl"`
-	APIKey   string   `json:"apiKey"`
-	Models   []string `json:"models"`
-	Weight   int      `json:"weight"`
-	Enabled  bool     `json:"enabled"`
-	Remark   string   `json:"remark"`
+	Protocol string              `json:"protocol"`
+	Name     string              `json:"name"`
+	BaseURL  string              `json:"baseUrl"`
+	APIKey   string              `json:"apiKey"`
+	Routes   []ModelChannelRoute `json:"routes"`
+	Enabled  bool                `json:"enabled"`
+	Remark   string              `json:"remark"`
 }
 
-// ModelCost 模型算力点配置。
-type ModelCost struct {
-	Model   string `json:"model"`
-	Credits float64 `json:"credits"`
+// PublicModelSpec 公开模型规格配置。
+type PublicModelSpec struct {
+	Model          string  `json:"model"`
+	Capability     string  `json:"capability"`
+	Enabled        bool    `json:"enabled"`
+	GiftEligible   bool    `json:"giftEligible"`
+	DefaultCredits float64 `json:"defaultCredits"`
+}
+
+// ModelChannelRoute 私有渠道支持的公开模型路由。
+type ModelChannelRoute struct {
+	Model         string  `json:"model"`
+	UpstreamModel string  `json:"upstreamModel"`
+	Credits       float64 `json:"credits"`
+	Weight        int     `json:"weight"`
+	Enabled       bool    `json:"enabled"`
 }
 
 // PublicModelChannelSetting 公开模型渠道配置。
 type PublicModelChannelSetting struct {
-	AvailableModels    []string    `json:"availableModels"`
-	ModelCosts         []ModelCost `json:"modelCosts"`
-	DefaultModel       string      `json:"defaultModel"`
-	DefaultImageModel  string      `json:"defaultImageModel"`
-	DefaultVideoModel  string      `json:"defaultVideoModel"`
-	DefaultTextModel   string      `json:"defaultTextModel"`
-	SystemPrompt       string      `json:"systemPrompt"`
-	AllowCustomChannel *bool       `json:"allowCustomChannel"`
+	Models             []PublicModelSpec `json:"models"`
+	DefaultModel       string            `json:"defaultModel"`
+	DefaultImageModel  string            `json:"defaultImageModel"`
+	DefaultVideoModel  string            `json:"defaultVideoModel"`
+	DefaultTextModel   string            `json:"defaultTextModel"`
+	SystemPrompt       string            `json:"systemPrompt"`
+	AllowCustomChannel *bool             `json:"allowCustomChannel"`
 }
 
 // PublicSetting 公开配置。

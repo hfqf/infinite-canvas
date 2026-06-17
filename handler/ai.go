@@ -47,19 +47,19 @@ func proxyAIGetRequest(w http.ResponseWriter, r *http.Request, path string) {
 	if strings.TrimSpace(modelName) == "" {
 		modelName = "grok-imagine-video"
 	}
-	channel, err := service.SelectModelChannel(modelName)
+	selected, err := service.SelectModelRoute(modelName)
 	if err != nil {
 		log.Printf("AI proxy select channel failed: model=%s err=%v", modelName, err)
 		Fail(w, "AI 接口请求失败")
 		return
 	}
-	path = resolveAIProxyPath(channel.BaseURL, modelName, path)
-	request, err := http.NewRequest(http.MethodGet, service.BuildModelChannelURL(channel, path), nil)
+	path = resolveAIProxyPath(selected.Channel.BaseURL, selected.UpstreamModel, path)
+	request, err := http.NewRequest(http.MethodGet, service.BuildModelChannelURL(selected.Channel, path), nil)
 	if err != nil {
 		Fail(w, "AI 接口请求失败")
 		return
 	}
-	request.Header.Set("Authorization", "Bearer "+channel.APIKey)
+	request.Header.Set("Authorization", "Bearer "+selected.Channel.APIKey)
 	copyAIResponse(w, request, nil)
 }
 
@@ -75,39 +75,106 @@ func proxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		Fail(w, "未登录或权限不足")
 		return
 	}
-	credits, err := service.ModelCost(modelName)
+	selected, err := service.SelectModelRoute(modelName)
 	if err != nil {
-		log.Printf("AI proxy read model cost failed: model=%s err=%v", modelName, err)
+		log.Printf("AI proxy select route failed: model=%s err=%v", modelName, err)
+		FailError(w, err)
+		return
+	}
+	credits := selected.Credits * readAIRequestCount(body, contentType)
+	path = resolveAIProxyPath(selected.Channel.BaseURL, selected.UpstreamModel, path)
+	body, contentType, err = rewriteAIRequestModel(body, contentType, selected.UpstreamModel)
+	if err != nil {
+		log.Printf("AI proxy rewrite model failed: model=%s upstream=%s err=%v", modelName, selected.UpstreamModel, err)
 		Fail(w, "AI 接口请求失败")
 		return
 	}
-	credits *= readAIRequestCount(body, contentType)
-	channel, err := service.SelectModelChannel(modelName)
+	request, err := http.NewRequest(http.MethodPost, service.BuildModelChannelURL(selected.Channel, path), bytes.NewReader(body))
 	if err != nil {
-		log.Printf("AI proxy select channel failed: model=%s err=%v", modelName, err)
+		log.Printf("AI proxy build request failed: url=%s err=%v", service.BuildModelChannelURL(selected.Channel, path), err)
 		Fail(w, "AI 接口请求失败")
 		return
 	}
-	path = resolveAIProxyPath(channel.BaseURL, modelName, path)
-	request, err := http.NewRequest(http.MethodPost, service.BuildModelChannelURL(channel, path), bytes.NewReader(body))
-	if err != nil {
-		log.Printf("AI proxy build request failed: url=%s err=%v", service.BuildModelChannelURL(channel, path), err)
-		Fail(w, "AI 接口请求失败")
-		return
-	}
-	request.Header.Set("Authorization", "Bearer "+channel.APIKey)
+	request.Header.Set("Authorization", "Bearer "+selected.Channel.APIKey)
 	if contentType != "" {
 		request.Header.Set("Content-Type", contentType)
 	}
-	if err := service.ConsumeUserCredits(user.ID, modelName, credits, path); err != nil {
+	debit, err := service.ConsumeUserCredits(user.ID, selected, credits, path)
+	if err != nil {
 		FailError(w, err)
 		return
 	}
 	copyAIResponse(w, request, func() {
-		if err := service.RefundUserCredits(user.ID, modelName, credits, path); err != nil {
-			log.Printf("AI proxy refund credits failed: user=%s model=%s credits=%d err=%v", user.ID, modelName, credits, err)
+		if err := service.RefundUserCredits(user.ID, selected, debit, path); err != nil {
+			log.Printf("AI proxy refund credits failed: user=%s model=%s credits=%f giftCredits=%f err=%v", user.ID, selected.PublicModelName, debit.Credits, debit.GiftCredits, err)
 		}
 	})
+}
+
+func rewriteAIRequestModel(body []byte, contentType string, upstreamModel string) ([]byte, string, error) {
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		return rewriteMultipartModel(body, contentType, upstreamModel)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, "", err
+	}
+	payload["model"] = upstreamModel
+	nextBody, err := json.Marshal(payload)
+	return nextBody, contentType, err
+}
+
+func rewriteMultipartModel(body []byte, contentType string, upstreamModel string) ([]byte, string, error) {
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return nil, "", err
+	}
+	reader := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+	form, err := reader.ReadForm(64 << 20)
+	if err != nil {
+		return nil, "", err
+	}
+	defer form.RemoveAll()
+
+	var buffer bytes.Buffer
+	writer := multipart.NewWriter(&buffer)
+	for key, values := range form.Value {
+		for _, value := range values {
+			if key == "model" {
+				value = upstreamModel
+			}
+			if err := writer.WriteField(key, value); err != nil {
+				return nil, "", err
+			}
+		}
+	}
+	if len(form.Value["model"]) == 0 {
+		if err := writer.WriteField("model", upstreamModel); err != nil {
+			return nil, "", err
+		}
+	}
+	for key, files := range form.File {
+		for _, fileHeader := range files {
+			source, err := fileHeader.Open()
+			if err != nil {
+				return nil, "", err
+			}
+			target, err := writer.CreateFormFile(key, fileHeader.Filename)
+			if err != nil {
+				_ = source.Close()
+				return nil, "", err
+			}
+			_, copyErr := io.Copy(target, source)
+			_ = source.Close()
+			if copyErr != nil {
+				return nil, "", copyErr
+			}
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return nil, "", err
+	}
+	return buffer.Bytes(), writer.FormDataContentType(), nil
 }
 
 func copyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func()) {

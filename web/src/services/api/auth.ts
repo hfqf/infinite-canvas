@@ -11,6 +11,7 @@ export type AuthUser = {
     avatarUrl: string;
     role: UserRole;
     credits: number;
+    giftCredits: number;
     createdAt: string;
     updatedAt: string;
 };

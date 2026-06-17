@@ -18,6 +18,15 @@ import (
 
 var adminModelHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
+type SelectedModelRoute struct {
+	PublicModel     model.PublicModelSpec
+	Channel         model.ModelChannel
+	Route           model.ModelChannelRoute
+	PublicModelName string
+	UpstreamModel   string
+	Credits         float64
+}
+
 func PublicSettings() (model.PublicSetting, error) {
 	settings, err := repository.GetSettings()
 	return normalizeSettings(settings).Public, err
@@ -73,51 +82,46 @@ func normalizePublicSetting(setting model.PublicSetting) model.PublicSetting {
 }
 
 func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []model.ModelChannel) model.PublicSetting {
-	if setting.ModelChannel.AvailableModels == nil {
-		setting.ModelChannel.AvailableModels = []string{}
-	}
-	if setting.ModelChannel.ModelCosts == nil {
-		setting.ModelChannel.ModelCosts = []model.ModelCost{}
-	}
-	for i := range setting.ModelChannel.ModelCosts {
-		setting.ModelChannel.ModelCosts[i].Model = strings.TrimSpace(setting.ModelChannel.ModelCosts[i].Model)
-		if setting.ModelChannel.ModelCosts[i].Credits < 0 {
-			setting.ModelChannel.ModelCosts[i].Credits = 0
+	models := make([]model.PublicModelSpec, 0, len(setting.ModelChannel.Models))
+	for _, item := range setting.ModelChannel.Models {
+		normalized := normalizePublicModelSpec(item)
+		if normalized.Model == "" {
+			continue
 		}
+		models = append(models, normalized)
 	}
+	setting.ModelChannel.Models = models
 	if setting.ModelChannel.AllowCustomChannel == nil {
-		enabled := true
+		enabled := false
 		setting.ModelChannel.AllowCustomChannel = &enabled
 	}
 	if setting.Auth.AllowRegister == nil {
 		enabled := true
 		setting.Auth.AllowRegister = &enabled
 	}
-	enabledModels := enabledChannelModels(channels)
-	if len(enabledModels) > 0 {
-		setting.ModelChannel.AvailableModels = enabledModels
-	} else {
-		setting.ModelChannel.AvailableModels = uniqueModelNames(setting.ModelChannel.AvailableModels)
+	if len(channels) > 0 {
+		setting.ModelChannel.Models = onlyRoutablePublicModels(setting.ModelChannel.Models, channels)
 	}
-	setting.ModelChannel.DefaultTextModel = repairDefaultModel(setting.ModelChannel.DefaultTextModel, setting.ModelChannel.AvailableModels, isTextModelName)
-	setting.ModelChannel.DefaultImageModel = repairDefaultModel(setting.ModelChannel.DefaultImageModel, setting.ModelChannel.AvailableModels, isImageModelName)
-	setting.ModelChannel.DefaultVideoModel = repairDefaultModel(setting.ModelChannel.DefaultVideoModel, setting.ModelChannel.AvailableModels, isVideoModelName)
-	setting.ModelChannel.DefaultModel = repairDefaultModel(setting.ModelChannel.DefaultModel, setting.ModelChannel.AvailableModels, isTextModelName)
+	textModels := publicModelNamesByCapability(setting.ModelChannel.Models, "text")
+	imageModels := publicModelNamesByCapability(setting.ModelChannel.Models, "image")
+	videoModels := publicModelNamesByCapability(setting.ModelChannel.Models, "video")
+	setting.ModelChannel.DefaultTextModel = repairDefaultModel(setting.ModelChannel.DefaultTextModel, textModels, isTextModelName)
+	setting.ModelChannel.DefaultImageModel = repairDefaultModel(setting.ModelChannel.DefaultImageModel, imageModels, isImageModelName)
+	setting.ModelChannel.DefaultVideoModel = repairDefaultModel(setting.ModelChannel.DefaultVideoModel, videoModels, isVideoModelName)
+	setting.ModelChannel.DefaultModel = repairDefaultModel(setting.ModelChannel.DefaultModel, textModels, isTextModelName)
 	return setting
 }
 
-func ModelCost(modelName string) (float64, error) {
-	settings, err := repository.GetSettings()
-	if err != nil {
-		return 0, err
+func normalizePublicModelSpec(item model.PublicModelSpec) model.PublicModelSpec {
+	item.Model = strings.TrimSpace(item.Model)
+	item.Capability = strings.TrimSpace(item.Capability)
+	if item.Capability == "" {
+		item.Capability = "image"
 	}
-	modelName = strings.TrimSpace(modelName)
-	for _, item := range normalizePublicSetting(settings.Public).ModelChannel.ModelCosts {
-		if item.Model == modelName {
-			return item.Credits, nil
-		}
+	if item.DefaultCredits < 0 {
+		item.DefaultCredits = 0
 	}
-	return 0, nil
+	return item
 }
 
 func normalizePrivateSetting(setting model.PrivateSetting) model.PrivateSetting {
@@ -126,15 +130,7 @@ func normalizePrivateSetting(setting model.PrivateSetting) model.PrivateSetting 
 	}
 	setting.PromptSync = normalizePromptSyncSetting(setting.PromptSync)
 	for i := range setting.Channels {
-		if setting.Channels[i].Protocol == "" {
-			setting.Channels[i].Protocol = "openai"
-		}
-		if setting.Channels[i].Models == nil {
-			setting.Channels[i].Models = []string{}
-		}
-		if setting.Channels[i].Weight <= 0 {
-			setting.Channels[i].Weight = 1
-		}
+		setting.Channels[i] = normalizeModelChannel(setting.Channels[i])
 	}
 	return setting
 }
@@ -177,26 +173,76 @@ func findSavedChannel(channel model.ModelChannel, saved []model.ModelChannel, in
 }
 
 func SelectModelChannel(modelName string) (model.ModelChannel, error) {
+	selected, err := SelectModelRoute(modelName)
+	return selected.Channel, err
+}
+
+func SelectModelRoute(modelName string) (SelectedModelRoute, error) {
 	settings, err := repository.GetSettings()
 	if err != nil {
-		return model.ModelChannel{}, err
+		return SelectedModelRoute{}, err
 	}
-	channels := modelChannelsForModel(normalizePrivateSetting(settings.Private).Channels, modelName)
-	if len(channels) == 0 {
-		return model.ModelChannel{}, errors.New("没有可用模型渠道")
+	return selectModelRouteFromSettings(normalizeSettings(settings), modelName)
+}
+
+func selectModelRouteFromSettings(settings model.Settings, modelName string) (SelectedModelRoute, error) {
+	modelName = strings.TrimSpace(modelName)
+	publicModel, ok := publicModelForName(settings, modelName)
+	if !ok {
+		return SelectedModelRoute{}, safeMessageError{message: "模型未启用或不存在"}
 	}
-	total := 0
-	for _, channel := range channels {
-		total += channel.Weight
-	}
-	hit := rand.Intn(total)
-	for _, channel := range channels {
-		hit -= channel.Weight
-		if hit < 0 {
-			return channel, nil
+	candidates := []SelectedModelRoute{}
+	for _, channel := range normalizePrivateSetting(settings.Private).Channels {
+		if !channel.Enabled || strings.TrimSpace(channel.BaseURL) == "" || strings.TrimSpace(channel.APIKey) == "" {
+			continue
+		}
+		for _, route := range channel.Routes {
+			if !route.Enabled || strings.TrimSpace(route.Model) != modelName {
+				continue
+			}
+			upstreamModel := strings.TrimSpace(route.UpstreamModel)
+			if upstreamModel == "" {
+				upstreamModel = "gpt-image-2"
+			}
+			credits := route.Credits
+			if credits <= 0 {
+				credits = publicModel.DefaultCredits
+			}
+			candidates = append(candidates, SelectedModelRoute{
+				PublicModel:     publicModel,
+				Channel:         channel,
+				Route:           route,
+				PublicModelName: modelName,
+				UpstreamModel:   upstreamModel,
+				Credits:         credits,
+			})
 		}
 	}
-	return channels[0], nil
+	if len(candidates) == 0 {
+		return SelectedModelRoute{}, safeMessageError{message: "没有可用模型渠道"}
+	}
+
+	total := 0
+	for _, item := range candidates {
+		total += item.Route.Weight
+	}
+	hit := rand.Intn(total)
+	for _, item := range candidates {
+		hit -= item.Route.Weight
+		if hit < 0 {
+			return item, nil
+		}
+	}
+	return candidates[0], nil
+}
+
+func publicModelForName(settings model.Settings, modelName string) (model.PublicModelSpec, bool) {
+	for _, item := range normalizePublicSetting(settings.Public).ModelChannel.Models {
+		if item.Enabled && strings.TrimSpace(item.Model) == strings.TrimSpace(modelName) {
+			return item, true
+		}
+	}
+	return model.PublicModelSpec{}, false
 }
 
 func BuildModelChannelURL(channel model.ModelChannel, path string) string {
@@ -238,15 +284,35 @@ func isSeedanceModelName(modelName string) bool {
 	return strings.Contains(modelName, "seedance") || strings.Contains(modelName, "doubao-seedance")
 }
 
-func enabledChannelModels(channels []model.ModelChannel) []string {
-	models := []string{}
+func onlyRoutablePublicModels(models []model.PublicModelSpec, channels []model.ModelChannel) []model.PublicModelSpec {
+	routable := map[string]bool{}
 	for _, channel := range channels {
 		if !channel.Enabled {
 			continue
 		}
-		models = append(models, channel.Models...)
+		for _, route := range channel.Routes {
+			if route.Enabled && strings.TrimSpace(route.Model) != "" {
+				routable[strings.TrimSpace(route.Model)] = true
+			}
+		}
 	}
-	return uniqueModelNames(models)
+	result := make([]model.PublicModelSpec, 0, len(models))
+	for _, item := range models {
+		if routable[item.Model] {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func publicModelNamesByCapability(models []model.PublicModelSpec, capability string) []string {
+	result := []string{}
+	for _, item := range models {
+		if item.Enabled && strings.TrimSpace(item.Capability) == capability {
+			result = append(result, item.Model)
+		}
+	}
+	return uniqueModelNames(result)
 }
 
 func uniqueModelNames(models []string) []string {
@@ -299,13 +365,31 @@ func normalizeModelChannel(channel model.ModelChannel) model.ModelChannel {
 	if channel.Protocol == "" {
 		channel.Protocol = "openai"
 	}
-	if channel.Models == nil {
-		channel.Models = []string{}
+	routes := make([]model.ModelChannelRoute, 0, len(channel.Routes))
+	for _, route := range channel.Routes {
+		normalized := normalizeModelChannelRoute(route)
+		if normalized.Model == "" {
+			continue
+		}
+		routes = append(routes, normalized)
 	}
-	if channel.Weight <= 0 {
-		channel.Weight = 1
-	}
+	channel.Routes = routes
 	return channel
+}
+
+func normalizeModelChannelRoute(route model.ModelChannelRoute) model.ModelChannelRoute {
+	route.Model = strings.TrimSpace(route.Model)
+	route.UpstreamModel = strings.TrimSpace(route.UpstreamModel)
+	if route.UpstreamModel == "" {
+		route.UpstreamModel = "gpt-image-2"
+	}
+	if route.Credits < 0 {
+		route.Credits = 0
+	}
+	if route.Weight <= 0 {
+		route.Weight = 1
+	}
+	return route
 }
 
 func resolveAdminChannel(index *int, channel model.ModelChannel) (model.ModelChannel, error) {
@@ -469,20 +553,4 @@ func (err safeMessageError) Error() string {
 
 func (err safeMessageError) SafeMessage() string {
 	return err.message
-}
-
-func modelChannelsForModel(channels []model.ModelChannel, modelName string) []model.ModelChannel {
-	result := []model.ModelChannel{}
-	for _, channel := range channels {
-		if !channel.Enabled || channel.BaseURL == "" || channel.APIKey == "" {
-			continue
-		}
-		for _, item := range channel.Models {
-			if strings.TrimSpace(item) == modelName {
-				result = append(result, channel)
-				break
-			}
-		}
-	}
-	return result
 }

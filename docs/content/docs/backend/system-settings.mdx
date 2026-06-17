@@ -17,16 +17,27 @@ description: settings 表中 public 和 private 配置结构说明
 ```json
 {
   "modelChannel": {
-    "availableModels": ["gpt-5.5", "gpt-image-2"],
-    "modelCosts": [
-      { "model": "gpt-5.5", "credits": 1 },
-      { "model": "gpt-image-2", "credits": 10 }
+    "models": [
+      {
+        "model": "gpt-image-2-0.5k",
+        "capability": "image",
+        "enabled": true,
+        "giftEligible": true,
+        "defaultCredits": 5
+      },
+      {
+        "model": "gpt-image-2-1k",
+        "capability": "image",
+        "enabled": true,
+        "giftEligible": false,
+        "defaultCredits": 10
+      }
     ],
-    "defaultModel": "gpt-image-2",
-    "defaultImageModel": "gpt-image-2",
-    "defaultTextModel": "gpt-5.5",
+    "defaultModel": "gpt-image-2-1k",
+    "defaultImageModel": "gpt-image-2-1k",
+    "defaultTextModel": "",
     "systemPrompt": "",
-    "allowCustomChannel": true
+    "allowCustomChannel": false
   },
   "auth": {
     "allowRegister": true,
@@ -46,35 +57,23 @@ description: settings 表中 public 和 private 配置结构说明
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `availableModels` | string[] | 系统可用模型；保存设置时会自动合并所有已启用私有渠道的模型 |
-| `modelCosts` | object[] | 模型算力点配置，后端模型接口调用前按模型预扣，上游失败时返还；未配置默认不扣除 |
-| `defaultModel` | string | 默认模型，从 `availableModels` 中选择；为空或失效时优先选择文本模型 |
-| `defaultImageModel` | string | 默认图片模型，从 `availableModels` 中选择；为空或失效时优先选择 `seedream`、`image`、`gpt-image` 模型 |
-| `defaultVideoModel` | string | 默认视频模型，从 `availableModels` 中选择；为空或失效时优先选择 `seedance`、`video` 模型 |
-| `defaultTextModel` | string | 默认文本模型，从 `availableModels` 中选择；为空或失效时优先选择非图片/视频模型 |
+| `models` | object[] | 前端可展示的公开模型规格，`model` 同时作为展示文案和请求模型名 |
+| `defaultModel` | string | 默认模型，从启用且可路由的 `models` 中选择 |
+| `defaultImageModel` | string | 默认图片模型，从启用且 `capability=image` 的模型中选择 |
+| `defaultVideoModel` | string | 默认视频模型，从启用且 `capability=video` 的模型中选择 |
+| `defaultTextModel` | string | 默认文本模型，从启用且 `capability=text` 的模型中选择 |
 | `systemPrompt` | string | 系统提示词 |
-| `allowCustomChannel` | boolean | 是否允许用户在配置弹窗中切换为本地直连渠道，默认允许 |
+| `allowCustomChannel` | boolean | 当前默认关闭，前端统一走后端中转接口 |
 
-`modelCosts` 每项字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `model` | string | 模型名称 |
-| `credits` | number | 每次后端模型接口调用前预扣的算力点 |
-
-用户侧请求模式：
-
-| 模式 | 说明 |
-| --- | --- |
-| 云端渠道 | 使用后端 `/api/v1/*` 代理接口，请求会按模型名匹配 `private.value.channels` 中的可用渠道 |
-| 本地直连 | 默认可选；`allowCustomChannel` 关闭后不可选，用户在浏览器本地配置 `baseUrl`、`apiKey` 和模型列表后直接请求模型接口 |
-
-`auth` 字段：
+`models` 每项字段：
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `allowRegister` | boolean | 是否允许用户注册，默认允许；关闭后注册入口隐藏，注册接口拒绝新用户创建 |
-| `linuxDo.enabled` | boolean | 是否开启 Linux.do 登录 |
+| `model` | string | 公开模型名，也是前端展示文案，例如 `gpt-image-2-0.5k`、`gpt-image-2-1k` |
+| `capability` | string | 能力类型：`image`、`video`、`audio`、`text` |
+| `enabled` | boolean | 是否开放给前端使用；`gpt-image-2-0.5k` 可按系统供给情况动态关闭 |
+| `giftEligible` | boolean | 是否允许使用系统赠送额度；当前只用于 `gpt-image-2-0.5k` |
+| `defaultCredits` | number | 默认预估算力点；实际扣费优先使用命中的私有路由价格 |
 
 ## private.value
 
@@ -83,11 +82,18 @@ description: settings 表中 public 和 private 配置结构说明
   "channels": [
     {
       "protocol": "openai",
-      "name": "默认渠道",
+      "name": "中转服务商 A",
       "baseUrl": "https://api.example.com",
       "apiKey": "sk-xxx",
-      "models": ["gpt-5.5", "gpt-image-2"],
-      "weight": 1,
+      "routes": [
+        {
+          "model": "gpt-image-2-1k",
+          "upstreamModel": "gpt-image-2",
+          "credits": 10,
+          "weight": 1,
+          "enabled": true
+        }
+      ],
       "enabled": true,
       "remark": ""
     }
@@ -112,12 +118,23 @@ description: settings 表中 public 和 private 配置结构说明
 | `name` | string | 渠道名称 |
 | `baseUrl` | string | OpenAI 兼容接口地址 |
 | `apiKey` | string | 渠道密钥 |
-| `models` | string[] | 该渠道可用模型 |
-| `weight` | number | 渠道权重；同一模型有多个可用渠道时按权重随机 |
+| `routes` | object[] | 该渠道可服务的公开模型路由 |
 | `enabled` | boolean | 是否启用 |
 | `remark` | string | 备注 |
 
-后端调用模型时，会从已启用、已配置 `baseUrl` 和 `apiKey`、且 `models` 包含目标模型的渠道中选择一个。
+`routes` 每项字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `model` | string | 公开模型名，必须匹配 `public.value.modelChannel.models[].model` |
+| `upstreamModel` | string | 实际发送给上游的模型名；当前 GPT Image 2 规格统一为 `gpt-image-2` |
+| `credits` | number | 命中该服务商路由时实际扣除的算力点，支持不同服务商单独定价 |
+| `weight` | number | 同一公开模型命中多个可用路由时的加权随机权重 |
+| `enabled` | boolean | 是否启用该路由 |
+
+后端调用模型时，先用公开模型名筛选启用的公开规格，再从启用、配置了 `baseUrl` 和 `apiKey`、且包含对应 `routes.model` 的渠道路由中按 `weight` 选择一个。请求发往上游前会把请求体里的 `model` 改写为命中路由的 `upstreamModel`，因此前端和用户只需要感知 `gpt-image-2-0.5k`、`gpt-image-2-1k` 等公开规格。
+
+赠送额度只会在公开模型 `giftEligible=true` 时参与扣费；通用额度不足但赠送额度足够时，只有这类模型可以继续调用。上游调用失败时，已扣除的通用额度和赠送额度会按原扣费桶返还。
 
 `promptSync` 字段：
 

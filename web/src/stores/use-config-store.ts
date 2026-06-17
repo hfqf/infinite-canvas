@@ -5,7 +5,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 import { apiGet } from "@/services/api/request";
-import type { AdminPublicSettings } from "@/services/api/admin";
+import type { AdminPublicModelSpec, AdminPublicSettings } from "@/services/api/admin";
 
 export type AiConfig = {
     channelMode: "remote" | "local";
@@ -102,18 +102,14 @@ type ConfigStore = {
     clearPromptContinue: () => void;
 };
 
-function resolveEffectiveConfig(config: AiConfig, modelChannel: AdminPublicSettings["modelChannel"] | null) {
-    const channelMode = modelChannel?.allowCustomChannel ? config.channelMode : "remote";
-    // 智能 fallback：local 模式下未填写 baseUrl/apiKey 时，自动回 remote
-    if (channelMode === "local" && (!config.baseUrl.trim() || !config.apiKey.trim())) {
-        return resolveEffectiveConfig({ ...config, channelMode: "remote" }, modelChannel);
-    }
-    if (channelMode === "local" || !modelChannel) return { ...config, channelMode };
-    const models = modelChannel.availableModels;
-    const textModels = filterModelsByCapability(models, "text");
-    const imageModels = filterModelsByCapability(models, "image");
-    const videoModels = filterModelsByCapability(models, "video");
-    const audioModels = filterModelsByCapability(models, "audio");
+function resolveEffectiveConfig(config: AiConfig, modelChannel: AdminPublicSettings["modelChannel"] | null): AiConfig {
+    const channelMode: AiConfig["channelMode"] = "remote";
+    if (!modelChannel) return { ...config, channelMode };
+    const models = enabledPublicModels(modelChannel.models);
+    const textModels = enabledPublicModelsByCapability(modelChannel.models, "text");
+    const imageModels = enabledPublicModelsByCapability(modelChannel.models, "image");
+    const videoModels = enabledPublicModelsByCapability(modelChannel.models, "video");
+    const audioModels = enabledPublicModelsByCapability(modelChannel.models, "audio");
     const fallbackTextModel = validDefault(modelChannel.defaultTextModel, textModels) || preferredModel(textModels, isTextModelName);
     const fallbackModel = validDefault(modelChannel.defaultModel, textModels) || fallbackTextModel;
     const fallbackImageModel = validDefault(modelChannel.defaultImageModel, imageModels) || preferredModel(imageModels, isImageModelName);
@@ -134,6 +130,14 @@ function resolveEffectiveConfig(config: AiConfig, modelChannel: AdminPublicSetti
         audioModel: audioModels.includes(config.audioModel) ? config.audioModel : fallbackAudioModel,
         systemPrompt: modelChannel.systemPrompt,
     };
+}
+
+function enabledPublicModels(models: AdminPublicModelSpec[] = []) {
+    return models.filter((item) => item.enabled).map((item) => item.model);
+}
+
+function enabledPublicModelsByCapability(models: AdminPublicModelSpec[] = [], capability: ModelCapability) {
+    return models.filter((item) => item.enabled && item.capability === capability).map((item) => item.model);
 }
 
 function validDefault(model: string, models: string[]) {
@@ -185,7 +189,7 @@ function modelListKey(capability: ModelCapability) {
 }
 
 function isAiConfigReady(config: AiConfig, model: string) {
-    return Boolean(model.trim()) && (config.channelMode === "remote" || Boolean(config.baseUrl.trim() && config.apiKey.trim()));
+    return Boolean(model.trim()) && config.channelMode === "remote";
 }
 
 export const useConfigStore = create<ConfigStore>()(
@@ -238,7 +242,7 @@ export const useConfigStore = create<ConfigStore>()(
                     webdav: { ...defaultWebdavSyncConfig, ...persistedWebdav },
                     config: {
                         ...config,
-                        channelMode: config.channelMode || "remote",
+                        channelMode: "remote",
                         imageModel: config.imageModel || config.model,
                         videoModel: config.videoModel || "grok-imagine-video",
                         textModel: config.textModel || config.model,

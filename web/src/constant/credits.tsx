@@ -12,14 +12,15 @@ export function CreditSymbol({ className, ...props }: ComponentProps<"span">) {
 export type ModelCreditCost = {
     model: string;
     credits: number;
+    giftEligible?: boolean;
 };
 
-export function modelCreditCost(modelCosts: ModelCreditCost[] | undefined, model: string) {
-    return modelCosts?.find((item) => item.model === model)?.credits || 0;
+export function modelCreditCost(modelCreditCosts: ModelCreditCost[] | undefined, model: string) {
+    return modelCreditCosts?.find((item) => item.model === model)?.credits || 0;
 }
 
-export function requestCreditCost(options: { channelMode: string; modelCosts?: ModelCreditCost[]; model: string; count?: string | number }) {
+export function requestCreditCost(options: { channelMode: string; modelCreditCosts?: ModelCreditCost[]; model: string; count?: string | number }) {
     if (options.channelMode !== "remote") return 0;
     const count = Math.max(1, Math.floor(Math.abs(Number(options.count)) || 1));
-    return modelCreditCost(options.modelCosts, options.model) * count;
+    return modelCreditCost(options.modelCreditCosts, options.model) * count;
 }

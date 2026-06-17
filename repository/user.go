@@ -6,6 +6,7 @@ import (
 
 	"github.com/basketikun/infinite-canvas/model"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ListUsers 分页查询用户。
@@ -111,6 +112,60 @@ func RefundUserCredits(id string, credits float64, now string) (model.User, bool
 	tx := db.Model(&model.User{}).Where("id = ?", id).Updates(map[string]any{
 		"credits":    gorm.Expr("credits + ?", credits),
 		"updated_at": now,
+	})
+	if tx.Error != nil {
+		return model.User{}, false, tx.Error
+	}
+	user, ok, err := GetUserByID(id)
+	return user, ok && tx.RowsAffected > 0, err
+}
+
+func ConsumeUserCreditBuckets(id string, debit model.CreditDebit, now string) (model.User, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.User{}, false, err
+	}
+	if debit.Credits <= 0 && debit.GiftCredits <= 0 {
+		user, ok, err := GetUserByID(id)
+		return user, ok, err
+	}
+	var user model.User
+	err = db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).First(&user).Error; err != nil {
+			return err
+		}
+		if user.Credits < debit.Credits || user.GiftCredits < debit.GiftCredits {
+			return gorm.ErrRecordNotFound
+		}
+		return tx.Model(&model.User{}).Where("id = ?", id).Updates(map[string]any{
+			"credits":      gorm.Expr("credits - ?", debit.Credits),
+			"gift_credits": gorm.Expr("gift_credits - ?", debit.GiftCredits),
+			"updated_at":   now,
+		}).Error
+	})
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return model.User{}, false, nil
+	}
+	if err != nil {
+		return model.User{}, false, err
+	}
+	user, ok, err := GetUserByID(id)
+	return user, ok, err
+}
+
+func RefundUserCreditBuckets(id string, debit model.CreditDebit, now string) (model.User, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.User{}, false, err
+	}
+	if debit.Credits <= 0 && debit.GiftCredits <= 0 {
+		user, ok, err := GetUserByID(id)
+		return user, ok, err
+	}
+	tx := db.Model(&model.User{}).Where("id = ?", id).Updates(map[string]any{
+		"credits":      gorm.Expr("credits + ?", debit.Credits),
+		"gift_credits": gorm.Expr("gift_credits + ?", debit.GiftCredits),
+		"updated_at":   now,
 	})
 	if tx.Error != nil {
 		return model.User{}, false, tx.Error

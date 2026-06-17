@@ -161,15 +161,29 @@ export type AdminModelChannel = {
     name: string;
     baseUrl: string;
     apiKey: string;
-    models: string[];
-    weight: number;
+    routes: AdminModelChannelRoute[];
     enabled: boolean;
     remark: string;
 };
 
+export type AdminPublicModelSpec = {
+    model: string;
+    capability: "image" | "video" | "text" | "audio";
+    enabled: boolean;
+    giftEligible: boolean;
+    defaultCredits: number;
+};
+
+export type AdminModelChannelRoute = {
+    model: string;
+    upstreamModel: string;
+    credits: number;
+    weight: number;
+    enabled: boolean;
+};
+
 export type AdminPublicModelChannelSettings = {
-    availableModels: string[];
-    modelCosts: AdminModelCost[];
+    models: AdminPublicModelSpec[];
     defaultModel: string;
     defaultImageModel: string;
     defaultVideoModel: string;
@@ -181,6 +195,7 @@ export type AdminPublicModelChannelSettings = {
 export type AdminModelCost = {
     model: string;
     credits: number;
+    giftEligible?: boolean;
 };
 
 export type AdminPublicSettings = {

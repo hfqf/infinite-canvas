@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -85,15 +86,16 @@ func Register(username string, password string) (model.AuthSession, error) {
 		return model.AuthSession{}, err
 	}
 	user, err := repository.SaveUser(model.User{
-		ID:        newID("user"),
-		Username:  username,
-		Password:  hash,
-		Role:      model.UserRoleUser,
-		AffCode:   newAffCode(),
-		Status:    model.UserStatusActive,
-		Credits:   100,
-		CreatedAt: now(),
-		UpdatedAt: now(),
+		ID:          newID("user"),
+		Username:    username,
+		Password:    hash,
+		Role:        model.UserRoleUser,
+		AffCode:     newAffCode(),
+		Status:      model.UserStatusActive,
+		Credits:     0,
+		GiftCredits: 100,
+		CreatedAt:   now(),
+		UpdatedAt:   now(),
 	})
 	if err != nil {
 		return model.AuthSession{}, err
@@ -103,8 +105,9 @@ func Register(username string, password string) (model.AuthSession, error) {
 		UserID:    user.ID,
 		Type:      model.CreditLogTypeRegisterGift,
 		Amount:    100,
-		Balance:   100,
-		Remark:    "新用户注册赠送",
+		Balance:   user.Credits,
+		Remark:    "新用户注册赠送，仅限支持赠送额度的模型",
+		Extra:     `{"giftCredits":100,"giftBalance":100}`,
 		CreatedAt: now(),
 	})
 	return newSession(user)
@@ -193,7 +196,8 @@ func LoginWithLinuxDo(r *http.Request, code string, state string) (model.AuthSes
 			AffCode:     newAffCode(),
 			LinuxDoID:   linuxDoID,
 			Status:      model.UserStatusActive,
-			Credits:     100,
+			Credits:     0,
+			GiftCredits: 100,
 			CreatedAt:   now(),
 		}
 	} else if user.Status == model.UserStatusBan {
@@ -216,8 +220,9 @@ func LoginWithLinuxDo(r *http.Request, code string, state string) (model.AuthSes
 			UserID:    user.ID,
 			Type:      model.CreditLogTypeRegisterGift,
 			Amount:    100,
-			Balance:   100,
-			Remark:    "新用户注册赠送",
+			Balance:   user.Credits,
+			Remark:    "新用户注册赠送，仅限支持赠送额度的模型",
+			Extra:     `{"giftCredits":100,"giftBalance":100}`,
 			CreatedAt: now(),
 		})
 	}
@@ -297,6 +302,7 @@ func SaveUser(user model.User, password string) (model.User, error) {
 		user.Password = saved.Password
 		user.AvatarURL = saved.AvatarURL
 		user.Credits = saved.Credits
+		user.GiftCredits = saved.GiftCredits
 		user.Extra = saved.Extra
 		if user.AffCode == "" {
 			user.AffCode = saved.AffCode
@@ -352,54 +358,88 @@ func AdjustUserCredits(id string, credits float64) (model.User, error) {
 	return user, err
 }
 
-func ConsumeUserCredits(userID string, modelName string, credits float64, path string) error {
+func ConsumeUserCredits(userID string, selected SelectedModelRoute, credits float64, path string) (model.CreditDebit, error) {
 	if credits <= 0 {
-		return nil
+		return model.CreditDebit{}, nil
 	}
-	user, ok, err := repository.ConsumeUserCredits(userID, credits, now())
+	currentUser, ok, err := repository.GetUserByID(userID)
 	if err != nil {
-		return err
+		return model.CreditDebit{}, err
 	}
 	if !ok {
-		return safeMessageError{message: "算力点不足"}
+		return model.CreditDebit{}, safeMessageError{message: "用户不存在"}
 	}
-	extra, _ := json.Marshal(map[string]string{"model": modelName, "path": path})
+	debit, ok := buildCreditDebit(currentUser, selected, credits)
+	if !ok {
+		return model.CreditDebit{}, safeMessageError{message: "算力点不足"}
+	}
+	user, ok, err := repository.ConsumeUserCreditBuckets(userID, debit, now())
+	if err != nil {
+		return model.CreditDebit{}, err
+	}
+	if !ok {
+		return model.CreditDebit{}, safeMessageError{message: "算力点不足"}
+	}
+	extra, _ := json.Marshal(map[string]any{
+		"publicModel":   selected.PublicModelName,
+		"upstreamModel": selected.UpstreamModel,
+		"channel":       selected.Channel.Name,
+		"credits":       debit.Credits,
+		"giftCredits":   debit.GiftCredits,
+		"path":          path,
+	})
 	_, err = repository.SaveCreditLog(model.CreditLog{
 		ID:        newID("credit"),
 		UserID:    userID,
 		Type:      model.CreditLogTypeAIConsume,
 		Amount:    -credits,
 		Balance:   user.Credits,
-		Remark:    "调用模型 " + modelName,
+		Remark:    "调用模型 " + selected.PublicModelName,
 		Extra:     string(extra),
 		CreatedAt: now(),
 	})
-	return err
+	return debit, err
 }
 
-func RefundUserCredits(userID string, modelName string, credits float64, path string) error {
-	if credits <= 0 {
+func RefundUserCredits(userID string, selected SelectedModelRoute, debit model.CreditDebit, path string) error {
+	if debit.Credits <= 0 && debit.GiftCredits <= 0 {
 		return nil
 	}
-	user, ok, err := repository.RefundUserCredits(userID, credits, now())
+	user, ok, err := repository.RefundUserCreditBuckets(userID, debit, now())
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return safeMessageError{message: "用户不存在"}
 	}
-	extra, _ := json.Marshal(map[string]string{"model": modelName, "path": path})
+	extra, _ := json.Marshal(map[string]any{
+		"publicModel":   selected.PublicModelName,
+		"upstreamModel": selected.UpstreamModel,
+		"channel":       selected.Channel.Name,
+		"credits":       debit.Credits,
+		"giftCredits":   debit.GiftCredits,
+		"path":          path,
+	})
 	_, err = repository.SaveCreditLog(model.CreditLog{
 		ID:        newID("credit"),
 		UserID:    userID,
 		Type:      model.CreditLogTypeAIRefund,
-		Amount:    credits,
+		Amount:    debit.Total,
 		Balance:   user.Credits,
-		Remark:    "模型调用失败返还 " + modelName,
+		Remark:    "模型调用失败返还 " + selected.PublicModelName,
 		Extra:     string(extra),
 		CreatedAt: now(),
 	})
 	return err
+}
+
+func buildCreditDebit(user model.User, selected SelectedModelRoute, total float64) (model.CreditDebit, bool) {
+	debit := model.CreditDebit{Total: total}
+	if selected.PublicModel.GiftEligible {
+		debit.GiftCredits = math.Min(user.GiftCredits, total)
+	}
+	debit.Credits = total - debit.GiftCredits
+	return debit, user.Credits >= debit.Credits && user.GiftCredits >= debit.GiftCredits
 }
 
 func ListCreditLogs(q model.Query) (model.CreditLogList, error) {

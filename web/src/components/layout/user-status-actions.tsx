@@ -36,6 +36,7 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
     const canvasTheme = canvasThemes[theme];
     const userName = user?.displayName || user?.username || "";
     const credits = user?.credits ?? 0;
+    const giftCredits = user?.giftCredits ?? 0;
     const avatarUrl = user?.avatarUrl?.trim();
     const avatarText = (userName.trim()[0] || "U").toUpperCase();
     const naturalIconClass = "inline-flex size-7 shrink-0 items-center justify-center text-stone-600 transition hover:text-stone-950 dark:text-stone-300 dark:hover:text-white [&_svg]:size-4";
@@ -66,10 +67,11 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
             <VersionReleaseModal style={versionStyle} />
             <GitHubLink className={cn("bg-transparent hover:bg-transparent dark:hover:bg-transparent", gitHubClassName)} style={gitHubStyle} />
             {variant === "canvas" && user ? (
-                <Tooltip title="当前算力点余额" placement="bottom">
+                <Tooltip title={`通用额度 ${credits.toLocaleString()}，赠送额度 ${giftCredits.toLocaleString()}`} placement="bottom">
                     <div className="flex h-8 shrink-0 items-center gap-1.5 px-1.5 text-xs font-medium tabular-nums opacity-75 transition hover:opacity-100" style={{ color: canvasTheme.node.text }}>
                         <CreditSymbol className="text-sm leading-none" />
                         <span>{credits.toLocaleString()}</span>
+                        {giftCredits > 0 ? <span className="text-[11px] opacity-60">赠送 {giftCredits.toLocaleString()}</span> : null}
                     </div>
                 </Tooltip>
             ) : null}

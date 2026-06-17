@@ -44,7 +44,8 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
     const draw = (event: ReactPointerEvent<HTMLCanvasElement>) => {
         const point = readCanvasPoint(event.currentTarget, event.clientX, event.clientY);
         const maskCanvas = maskCanvasRef.current;
-        const context = maskCanvas?.getContext("2d");
+        if (!maskCanvas) return;
+        const context = maskCanvas.getContext("2d");
         if (!context) return;
         context.lineCap = "round";
         context.lineJoin = "round";
@@ -57,7 +58,9 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
         } else {
             drawMaskStroke(context, drawingRef.current.last, point, brushSize);
         }
-        renderMaskPreview(maskCanvas, previewCanvasRef.current);
+        const previewCanvas = previewCanvasRef.current;
+        if (!previewCanvas) return;
+        renderMaskPreview(maskCanvas, previewCanvas);
         drawingRef.current.last = point;
         if (mode === "paint") {
             setError("");
@@ -69,7 +72,8 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
         event.stopPropagation();
         event.currentTarget.setPointerCapture(event.pointerId);
         drawingRef.current = { active: true, last: null };
-        if (maskCanvasRef.current) renderMaskPreview(maskCanvasRef.current, previewCanvasRef.current);
+        const previewCanvas = previewCanvasRef.current;
+        if (maskCanvasRef.current && previewCanvas) renderMaskPreview(maskCanvasRef.current, previewCanvas);
         draw(event);
     };
 

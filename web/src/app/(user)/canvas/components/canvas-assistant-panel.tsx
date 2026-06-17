@@ -674,8 +674,8 @@ function pendingReply(text: string) {
         .replace(/已(?:经)?将/g, "准备将");
 }
 
-function normalizeOnlineOps(ops: CanvasAgentOp[], intent: string, snapshot: CanvasAgentSnapshot) {
-    if (/删|删除|移除|清空/.test(intent) && /连线|连接线|线条|边/.test(intent)) return snapshot.connections.length ? [...ops.filter((op) => op.type !== "connect_nodes"), { type: "delete_connections", all: true }] : ops;
+function normalizeOnlineOps(ops: CanvasAgentOp[], intent: string, snapshot: CanvasAgentSnapshot): CanvasAgentOp[] {
+    if (/删|删除|移除|清空/.test(intent) && /连线|连接线|线条|边/.test(intent)) return snapshot.connections.length ? [...ops.filter((op) => op.type !== "connect_nodes"), { type: "delete_connections" as const, all: true }] : ops;
     if (/删|删除|移除/.test(intent) && /生成配置|配置节点|config/i.test(intent)) {
         const ids = snapshot.nodes.filter((node) => node.type === CanvasNodeType.Config).map((node) => node.id);
         return ids.length ? (ops.some((op) => op.type === "delete_node") ? ops.map((op) => (op.type === "delete_node" && !op.id && !op.ids?.length ? { ...op, ids } : op)) : [...ops, { type: "delete_node", ids }]) : ops;

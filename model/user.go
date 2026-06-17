@@ -25,6 +25,7 @@ type User struct {
 	AvatarURL   string     `json:"avatarUrl"`
 	Role        UserRole   `json:"role"`
 	Credits     float64    `json:"credits"`
+	GiftCredits float64    `json:"giftCredits"`
 	AffCode     string     `json:"affCode" gorm:"uniqueIndex"`
 	AffCount    int        `json:"affCount"`
 	InviterID   string     `json:"inviterId"`
@@ -52,6 +53,7 @@ type AuthUser struct {
 	AvatarURL   string   `json:"avatarUrl"`
 	Role        UserRole `json:"role"`
 	Credits     float64  `json:"credits"`
+	GiftCredits float64  `json:"giftCredits"`
 	CreatedAt   string   `json:"createdAt"`
 	UpdatedAt   string   `json:"updatedAt"`
 }
@@ -70,9 +72,17 @@ func PublicUser(user User) AuthUser {
 		AvatarURL:   user.AvatarURL,
 		Role:        user.Role,
 		Credits:     user.Credits,
+		GiftCredits: user.GiftCredits,
 		CreatedAt:   user.CreatedAt,
 		UpdatedAt:   user.UpdatedAt,
 	}
+}
+
+// CreditDebit 记录一次模型调用实际扣除的额度来源。
+type CreditDebit struct {
+	Credits     float64 `json:"credits"`
+	GiftCredits float64 `json:"giftCredits"`
+	Total       float64 `json:"total"`
 }
 
 type CreditLogType string
@@ -89,8 +99,8 @@ type CreditLog struct {
 	ID        string        `json:"id" gorm:"primaryKey"`
 	UserID    string        `json:"userId" gorm:"index"`
 	Type      CreditLogType `json:"type"`
-	Amount    float64      `json:"amount"`
-	Balance   float64      `json:"balance"`
+	Amount    float64       `json:"amount"`
+	Balance   float64       `json:"balance"`
 	RelatedID string        `json:"relatedId"`
 	Remark    string        `json:"remark"`
 	Extra     string        `json:"extra" gorm:"type:text"`
