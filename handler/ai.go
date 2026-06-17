@@ -71,6 +71,9 @@ func proxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		Fail(w, "AI 接口请求失败")
 		return
 	}
+	// aicodeme 这类非标准上游 images/generations 偶尔需要 async:true 才返 OpenAI 标准。
+	// 不动 user input、content-type、multipart。
+	body, contentType = ensureAsyncTrueOnImages(path, body, contentType)
 	user, ok := service.UserFromContext(r.Context())
 	if !ok {
 		Fail(w, "未登录或权限不足")
@@ -245,6 +248,33 @@ func normalizeAicodemeImagesResponse(body []byte) ([]byte, bool) {
 
 func shouldNormalizeImagesResponse(path string) bool {
 	return strings.HasSuffix(path, "/images/generations")
+}
+
+// aicodeme 的 images/generations 默认返 task 格式。一种猜测是加上 async:true
+// 后会返 OpenAI 标准 / 同步结果 —— 为了避免依赖此行为不确定，这里两个都做：
+// 1. 转发时在 JSON body 上固定加 async:true（不动 multipart）
+// 2. 响应端保留 normalizeAicodemeImagesResponse 作为兑底（处理仍返 task 格式的情况）
+func ensureAsyncTrueOnImages(path string, body []byte, contentType string) ([]byte, string) {
+	if !strings.HasSuffix(path, "/images/generations") {
+		return body, contentType
+	}
+	if !strings.HasPrefix(contentType, "application/json") {
+		return body, contentType
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return body, contentType
+	}
+	// 用户可能已带 async 参数，不覆盖
+	if _, ok := payload["async"]; !ok {
+		asyncTrue, _ := json.Marshal(true)
+		payload["async"] = asyncTrue
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return body, contentType
+	}
+	return encoded, contentType
 }
 
 func readAIRequest(r *http.Request) ([]byte, string, string, error) {
