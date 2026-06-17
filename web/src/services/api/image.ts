@@ -15,7 +15,9 @@ export type ChatCompletionMessage = {
 
 type ImageApiResponse = {
     data?: Array<Record<string, unknown>>;
-    error?: { message?: string };
+    result?: { data?: Array<Record<string, unknown>> };
+    error?: { message?: string } | string;
+    status?: string;
     code?: number;
     msg?: string;
 };
@@ -113,7 +115,7 @@ function resolveImageDataUrl(item: Record<string, unknown>) {
         return `data:image/png;base64,${item.b64_json}`;
     }
     if (typeof item.url === "string" && item.url) {
-        return item.url;
+        return normalizeImageUrl(item.url);
     }
     return null;
 }
@@ -122,11 +124,19 @@ function parseImagePayload(payload: ImageApiResponse) {
     if (typeof payload.code === "number" && payload.code !== 0) {
         throw new Error(payload.msg || "请求失败");
     }
+    const status = payload.status?.toLowerCase();
+    if (status === "failed" || status === "error") {
+        throw new Error(readApiError(payload) || "图片生成失败");
+    }
+    if (status === "queued" || status === "running") {
+        throw new Error("图片任务仍在处理中，请稍后重试");
+    }
+    const items = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.result?.data) ? payload.result.data : [];
     const images =
-        payload.data
-            ?.map(resolveImageDataUrl)
+        items
+            .map(resolveImageDataUrl)
             .filter((value): value is string => Boolean(value))
-            .map((dataUrl) => ({ id: nanoid(), dataUrl })) || [];
+            .map((dataUrl) => ({ id: nanoid(), dataUrl }));
 
     if (images.length === 0) {
         throw new Error("接口没有返回图片");
@@ -135,10 +145,25 @@ function parseImagePayload(payload: ImageApiResponse) {
     return images;
 }
 
+function normalizeImageUrl(value: string) {
+    const markdownLink = value.match(/^\[[^\]]+\]\((https?:\/\/[^)]+)\)$/);
+    return markdownLink?.[1] || value;
+}
+
+function readApiError(data: { error?: { message?: string } | string; msg?: string; detail?: { error?: { message?: string } | string } | string } | undefined) {
+    if (!data) return undefined;
+    if (data.msg) return data.msg;
+    if (typeof data.error === "string") return data.error;
+    if (data.error?.message) return data.error.message;
+    if (typeof data.detail === "string") return data.detail;
+    if (typeof data.detail?.error === "string") return data.detail.error;
+    return data.detail?.error?.message;
+}
+
 function readAxiosError(error: unknown, fallback: string) {
-    if (axios.isAxiosError<{ error?: { message?: string }; msg?: string; code?: number }>(error)) {
+    if (axios.isAxiosError<{ error?: { message?: string } | string; msg?: string; code?: number; detail?: { error?: { message?: string } | string } | string }>(error)) {
         const responseData = error.response?.data;
-        return responseData?.msg || responseData?.error?.message || readStatusError(error.response?.status, fallback);
+        return readApiError(responseData) || readStatusError(error.response?.status, fallback);
     }
     return error instanceof Error ? error.message : fallback;
 }
@@ -205,6 +230,7 @@ export async function requestGeneration(config: AiConfig, prompt: string) {
                 model: config.model,
                 prompt: withSystemPrompt(config, prompt),
                 n,
+                async: true,
                 ...(quality ? { quality } : {}),
                 ...(requestSize ? { size: requestSize } : {}),
                 response_format: "b64_json",
@@ -231,6 +257,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     formData.set("model", config.model);
     formData.set("prompt", withSystemPrompt(config, requestPrompt));
     formData.set("n", String(n));
+    formData.set("async", "true");
     formData.set("response_format", "b64_json");
     formData.set("output_format", IMAGE_OUTPUT_FORMAT);
     if (quality) {
