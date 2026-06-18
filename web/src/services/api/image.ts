@@ -5,6 +5,7 @@ import { useUserStore } from "@/stores/use-user-store";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
+import { apiPost } from "@/services/api/request";
 import { imageToDataUrl } from "@/services/image-storage";
 import type { ReferenceImage } from "@/types/image";
 
@@ -23,6 +24,16 @@ type ImageApiResponse = {
     retry_after?: number;
     code?: number;
     msg?: string;
+};
+
+export type VectorizeImageResult = {
+    content: string;
+    dataUrl: string;
+    width: number;
+    height: number;
+    bytes: number;
+    mimeType: string;
+    engine?: string;
 };
 
 const QUALITY_BASE: Record<string, number> = {
@@ -266,6 +277,15 @@ function aiHeaders(config: AiConfig, contentType?: string) {
 
 function refreshRemoteUser(config: AiConfig) {
     if (config.channelMode === "remote") void useUserStore.getState().hydrateUser();
+}
+
+export async function requestVectorizeImage(dataUrl: string) {
+    const token = useUserStore.getState().token;
+    const result = await apiPost<Omit<VectorizeImageResult, "dataUrl">>("/api/v1/images/vectorize", { dataUrl }, token || undefined);
+    return {
+        ...result,
+        dataUrl: `data:${result.mimeType || "image/svg+xml"};charset=utf-8,${encodeURIComponent(result.content)}`,
+    };
 }
 
 function withSystemMessage(config: AiConfig, messages: ChatCompletionMessage[]) {

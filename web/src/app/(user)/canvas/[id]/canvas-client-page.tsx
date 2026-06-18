@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { BookOpen, Bot, Home, ImageIcon, Images, List, Menu, Music2, Plus, Redo2, Settings2, Trash2, Undo2, Upload, Video } from "lucide-react";
 import { saveAs } from "file-saver";
 
-import { requestEdit, requestGeneration, requestImageQuestion } from "@/services/api/image";
+import { requestEdit, requestGeneration, requestImageQuestion, requestVectorizeImage } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { requestVideoGeneration, storeGeneratedVideo } from "@/services/api/video";
 import { DOCS_URL } from "@/constant/env";
@@ -20,7 +20,7 @@ import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
-import { svgBlob, svgToDataUrl, traceImageToSvg } from "../utils/canvas-svg";
+import { svgBlob, svgToDataUrl } from "../utils/canvas-svg";
 import { fitNodeSize, nodeSizeFromRatio } from "../utils/canvas-node-size";
 import { App, Button, Dropdown, Modal } from "antd";
 import { IMAGE_PRESET_EDIT_CONFIG, NODE_DEFAULT_SIZE, getNodeSpec, type CanvasImagePresetEditId } from "../constants";
@@ -1812,7 +1812,7 @@ function InfiniteCanvasPage() {
                     setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: childId, toNodeId: svgId }]);
                     setSelectedNodeIds(new Set([svgId]));
                     try {
-                        const svg = await traceImageToSvg(uploaded.url);
+                        const svg = await requestVectorizeImage(image.dataUrl);
                         const svgSize = fitNodeSize(svg.width, svg.height, size.width, size.height);
                         setNodes((prev) =>
                             prev.map((item) =>

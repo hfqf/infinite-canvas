@@ -31,6 +31,7 @@ func New() *gin.Engine {
 	v1 := api.Group("/v1", middleware.UserAuth)
 	v1.POST("/images/generations", gin.WrapF(handler.AIImagesGenerations))
 	v1.POST("/images/edits", gin.WrapF(handler.AIImagesEdits))
+	v1.POST("/images/vectorize", gin.WrapF(handler.VectorizeImage))
 	v1.GET("/image-tasks/:id", func(c *gin.Context) {
 		handler.AIImageTask(c.Writer, c.Request, c.Param("id"))
 	})

@@ -67,3 +67,5 @@ DATABASE_DSN=/app/data/infinite-canvas.db
 ```
 
 如果需要让火山方舟拉取本地上传的 Seedance 参考素材，还需要把 `PUBLIC_BASE_URL` 设置为公网可访问的站点地址。
+
+主应用镜像已内置 VTracer，用于画布图片节点“转矢量”的后端 SVG 转换。如果不使用 Docker 部署，需要在后端运行环境安装 `vtracer`，或通过 `VTRACER_PATH` 指定可执行文件路径。
