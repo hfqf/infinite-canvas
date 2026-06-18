@@ -9,6 +9,7 @@ import { formatBytes } from "@/lib/image-utils";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasResourceMentionTextarea } from "./canvas-resource-mention-textarea";
 import { CanvasNodeType, type CanvasNodeData, type Position } from "../types";
+import { svgToDataUrl } from "../utils/canvas-svg";
 import type { CanvasResourceReference } from "../utils/canvas-resource-references";
 
 type ResizeCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -107,6 +108,7 @@ export const CanvasNode = React.memo(function CanvasNode({
     const [hovered, setHovered] = useState(false);
     const [isEditingContent, setIsEditingContent] = useState(false);
     const hasImageContent = data.type === CanvasNodeType.Image && Boolean(data.metadata?.content);
+    const hasSvgContent = data.type === CanvasNodeType.Svg && Boolean(data.metadata?.content);
     const hasVideoContent = data.type === CanvasNodeType.Video && Boolean(data.metadata?.content);
     const hasAudioContent = data.type === CanvasNodeType.Audio && Boolean(data.metadata?.content);
     const isBatchRoot = data.type === CanvasNodeType.Image && Boolean(data.metadata?.isBatchRoot) && batchCount > 1;
@@ -222,7 +224,7 @@ export const CanvasNode = React.memo(function CanvasNode({
             startTop: data.position.y,
             startWidth: data.width,
             startHeight: data.height,
-            keepRatio: (data.type === CanvasNodeType.Image && !data.metadata?.freeResize) || data.type === CanvasNodeType.Video,
+            keepRatio: ((data.type === CanvasNodeType.Image || data.type === CanvasNodeType.Svg) && !data.metadata?.freeResize) || data.type === CanvasNodeType.Video,
             ratio: (data.metadata?.naturalWidth || data.width) / (data.metadata?.naturalHeight || data.height || 1),
         };
         window.addEventListener("mousemove", handleResizeMove);
@@ -260,8 +262,8 @@ export const CanvasNode = React.memo(function CanvasNode({
             <div
                 className="relative h-full w-full overflow-visible rounded-3xl border-2"
                 style={{
-                    background: hasImageContent || hasVideoContent ? "transparent" : theme.node.fill,
-                    borderColor: hasImageContent ? imageBorderColor : isActive ? selectionBlue : isRelated ? theme.node.muted : theme.node.stroke,
+                    background: hasImageContent || hasSvgContent || hasVideoContent ? "transparent" : theme.node.fill,
+                    borderColor: hasImageContent || hasSvgContent ? imageBorderColor : isActive ? selectionBlue : isRelated ? theme.node.muted : theme.node.stroke,
                     boxShadow: isActive ? `0 0 0 1px ${selectionBlue}55` : isRelated && !isBatchChild ? `0 0 0 1px ${theme.node.muted}55, 0 18px 48px rgba(0,0,0,.14)` : undefined,
                 }}
                 onMouseDown={(event) => onMouseDown(event, data.id)}
@@ -285,7 +287,7 @@ export const CanvasNode = React.memo(function CanvasNode({
                     className={`relative flex h-full w-full items-center justify-center rounded-[inherit] ${isBatchRoot ? "overflow-visible" : "overflow-hidden"}`}
                     style={
                         {
-                            background: hasImageContent || hasVideoContent ? "transparent" : theme.node.fill,
+                            background: hasImageContent || hasSvgContent || hasVideoContent ? "transparent" : theme.node.fill,
                             "--batch-from-x": `${batchMotion?.x || 0}px`,
                             "--batch-from-y": `${batchMotion?.y || 0}px`,
                             "--batch-from-rotate": `${6 + (batchMotion?.index || 0) * 4}deg`,
@@ -318,7 +320,7 @@ export const CanvasNode = React.memo(function CanvasNode({
                 {showImageInfo && hasImageContent ? <ImageInfoBar node={data} /> : null}
                 {resourceLabel ? <ResourceLabelBadge reference={resourceLabel} /> : null}
 
-                {!hasImageContent && !hasVideoContent && !hasAudioContent ? <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12" style={{ background: `linear-gradient(to top, ${theme.canvas.background}66, transparent)` }} /> : null}
+                {!hasImageContent && !hasSvgContent && !hasVideoContent && !hasAudioContent ? <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12" style={{ background: `linear-gradient(to top, ${theme.canvas.background}66, transparent)` }} /> : null}
 
                 <ResizeHandle corner="top-left" onMouseDown={handleResizeMouseDown} />
                 <ResizeHandle corner="top-right" onMouseDown={handleResizeMouseDown} />
@@ -347,6 +349,7 @@ function NodeContent(props: NodeContentRendererProps) {
 const nodeContentRenderers = {
     [CanvasNodeType.Text]: TextContent,
     [CanvasNodeType.Image]: ImageNodeContent,
+    [CanvasNodeType.Svg]: SvgNodeContent,
     [CanvasNodeType.Config]: EmptyImageContent,
     [CanvasNodeType.Video]: VideoNodeContent,
     [CanvasNodeType.Audio]: AudioNodeContent,
@@ -498,6 +501,21 @@ function EmptyImageContent({ theme, isBatchRoot, batchCount, batchExpanded, batc
             </BatchFrame>
         );
     return content;
+}
+
+function SvgNodeContent({ node, theme }: NodeContentRendererProps) {
+    if (!node.metadata?.content)
+        return (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-3" style={{ color: theme.node.placeholder }}>
+                <ImageIcon className="size-7 opacity-35" />
+                <span className="text-sm">空 SVG 节点</span>
+            </div>
+        );
+    return (
+        <div className="h-full w-full overflow-hidden rounded-3xl">
+            <img src={svgToDataUrl(node.metadata.content)} alt={node.title} draggable={false} onDragStart={(event) => event.preventDefault()} className={`pointer-events-none block h-full w-full select-none ${node.metadata?.freeResize ? "object-fill" : "object-contain"}`} />
+        </div>
+    );
 }
 
 function VideoNodeContent({ node, theme }: NodeContentRendererProps) {

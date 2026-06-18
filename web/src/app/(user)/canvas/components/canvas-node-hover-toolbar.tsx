@@ -108,9 +108,11 @@ export function CanvasNodeHoverToolbar({
     const left = viewport.x + (node.position.x + node.width / 2) * viewport.k;
     const top = viewport.y + node.position.y * viewport.k - 14;
     const isImage = node.type === CanvasNodeType.Image;
+    const isSvg = node.type === CanvasNodeType.Svg;
     const isVideo = node.type === CanvasNodeType.Video;
     const isAudio = node.type === CanvasNodeType.Audio;
     const hasImage = isImage && Boolean(node.metadata?.content);
+    const hasSvg = isSvg && Boolean(node.metadata?.content);
     const hasVideo = isVideo && Boolean(node.metadata?.content);
     const hasAudio = isAudio && Boolean(node.metadata?.content);
     const isText = node.type === CanvasNodeType.Text;
@@ -141,8 +143,8 @@ export function CanvasNodeHoverToolbar({
     ];
     const nodeToolbarTools: ToolbarTool[] = [
         ...(canRetry ? [{ id: "retry", title: "重新生成", label: "重试", icon: <RefreshCw className="size-4" />, onClick: () => onRetry(node) }] : []),
-        ...(hasImage || hasVideo || isText ? [{ id: "saveAsset", title: "加入我的素材", label: "存素材", icon: <FolderPlus className="size-4" />, onClick: () => onSaveAsset(node) }] : []),
-        ...(hasImage || hasVideo || hasAudio ? [{ id: "download", title: hasAudio ? "下载音频" : hasVideo ? "下载视频" : "下载图片", label: "下载", icon: <Download className="size-4" />, onClick: () => onDownload(node) }] : []),
+        ...(hasImage || hasSvg || hasVideo || isText ? [{ id: "saveAsset", title: "加入我的素材", label: "存素材", icon: <FolderPlus className="size-4" />, onClick: () => onSaveAsset(node) }] : []),
+        ...(hasImage || hasSvg || hasVideo || hasAudio ? [{ id: "download", title: hasAudio ? "下载音频" : hasVideo ? "下载视频" : hasSvg ? "下载 SVG" : "下载图片", label: "下载", icon: <Download className="size-4" />, onClick: () => onDownload(node) }] : []),
         ...(canOpenDialog ? [{ id: "edit", title: "编辑", label: "编辑", icon: <MessageSquare className="size-4" />, onClick: () => onToggleDialog(node) }] : []),
         ...(isText ? [{ id: "editText", title: "编辑文本", label: "编辑文字", icon: <Pencil className="size-4" />, onClick: () => onEditText(node) }] : []),
         ...(isText ? [{ id: "generateImage", title: "用文本生图", label: "生图", icon: <ImageIcon className="size-4" />, onClick: () => onGenerateImage(node) }] : []),
@@ -215,7 +217,7 @@ export function CanvasNodeHoverToolbar({
 export function CanvasNodeInfoModal({ node, open, onClose }: { node: CanvasNodeData | null; open: boolean; onClose: () => void }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [view, setView] = useState<"info" | "json">("info");
-    const imageBytes = node?.type === CanvasNodeType.Image && node.metadata?.content ? getDataUrlByteSize(node.metadata.content) : 0;
+    const imageBytes = node?.type === CanvasNodeType.Image && node.metadata?.content ? getDataUrlByteSize(node.metadata.content) : node?.type === CanvasNodeType.Svg ? node.metadata?.bytes || 0 : 0;
     const batchCount = node?.type === CanvasNodeType.Image ? node.metadata?.batchChildIds?.length || 0 : 0;
     const json = useMemo(() => {
         if (!node) return "";
@@ -225,6 +227,9 @@ export function CanvasNodeInfoModal({ node, open, onClose }: { node: CanvasNodeD
                 if (key === "title") return undefined;
                 if (key === "content" && typeof value === "string" && value.startsWith("data:image/")) {
                     return "[base64 image]";
+                }
+                if (key === "content" && typeof value === "string" && value.trim().startsWith("<svg")) {
+                    return "[svg source]";
                 }
                 return value;
             },
@@ -258,13 +263,13 @@ export function CanvasNodeInfoModal({ node, open, onClose }: { node: CanvasNodeD
                     {view === "info" ? (
                         <div className="thin-scrollbar h-full space-y-3 overflow-auto pr-1">
                             <InfoRow label="ID" value={node.id} />
-                            <InfoRow label="类型" value={node.type === CanvasNodeType.Text ? "文本" : node.type === CanvasNodeType.Image ? "图片" : node.type === CanvasNodeType.Video ? "视频" : node.type === CanvasNodeType.Audio ? "音频" : "生成配置"} />
+                            <InfoRow label="类型" value={node.type === CanvasNodeType.Text ? "文本" : node.type === CanvasNodeType.Image ? "图片" : node.type === CanvasNodeType.Svg ? "SVG" : node.type === CanvasNodeType.Video ? "视频" : node.type === CanvasNodeType.Audio ? "音频" : "生成配置"} />
                             <InfoRow label="尺寸" value={`${Math.round(node.width)} x ${Math.round(node.height)}`} />
                             <InfoRow label="位置" value={`${Math.round(node.position.x)}, ${Math.round(node.position.y)}`} />
                             <InfoRow label="状态" value={node.metadata?.status || "idle"} />
                             {batchCount > 1 ? <InfoRow label="图片组" value={`${batchCount} 张`} /> : null}
                             {node.metadata?.prompt ? <InfoRow label="提示词" value={node.metadata.prompt} /> : null}
-                            {imageBytes ? <InfoRow label="图片大小" value={formatBytes(imageBytes)} /> : null}
+                            {imageBytes ? <InfoRow label={node.type === CanvasNodeType.Svg ? "SVG 大小" : "图片大小"} value={formatBytes(imageBytes)} /> : null}
                             {node.metadata?.errorDetails ? (
                                 <div className="rounded-lg border p-3 text-red-400" style={{ borderColor: theme.node.stroke }}>
                                     {node.metadata.errorDetails}

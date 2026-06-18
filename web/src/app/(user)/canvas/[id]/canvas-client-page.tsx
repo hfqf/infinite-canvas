@@ -6,12 +6,12 @@ import { useParams, useRouter } from "next/navigation";
 import { BookOpen, Bot, Home, ImageIcon, Images, List, Menu, Music2, Plus, Redo2, Settings2, Trash2, Undo2, Upload, Video } from "lucide-react";
 import { saveAs } from "file-saver";
 
-import { requestEdit, requestGeneration, requestImageQuestion } from "@/services/api/image";
+import { requestEdit, requestGeneration, requestImageQuestion, type ChatCompletionMessage } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { requestVideoGeneration, storeGeneratedVideo } from "@/services/api/video";
 import { DOCS_URL } from "@/constant/env";
 import { defaultConfig, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
-import { resolveImageUrl, uploadImage, type UploadedImage } from "@/services/image-storage";
+import { imageToDataUrl, resolveImageUrl, uploadImage, type UploadedImage } from "@/services/image-storage";
 import { resolveMediaUrl, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { nanoid } from "nanoid";
 import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
@@ -20,6 +20,7 @@ import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
+import { buildSvgMeta, svgBlob, svgToDataUrl } from "../utils/canvas-svg";
 import { fitNodeSize, nodeSizeFromRatio } from "../utils/canvas-node-size";
 import { App, Button, Dropdown, Modal } from "antd";
 import { IMAGE_PRESET_EDIT_CONFIG, NODE_DEFAULT_SIZE, getNodeSpec, type CanvasImagePresetEditId } from "../constants";
@@ -98,6 +99,11 @@ const IMAGE_PROMPT_REVERSE_PRESET = `请根据参考图片反推一段适合用�
 1. 只输出提示词正文，不要解释。
 2. 覆盖主体、构图、风格、光线、色彩、材质、镜头和氛围。
 3. 尽量写成可直接用于生图模型的完整提示词。`;
+const SVG_OUTPUT_PROMPT = `输出要求：
+1. 只输出完整 SVG 源码，从 <svg 开始，到 </svg> 结束，不要 Markdown，不要解释。
+2. SVG 必须设置 viewBox，尽量使用 path、rect、circle、ellipse、line、polyline、polygon、text、linearGradient、radialGradient 等矢量元素。
+3. 禁止内嵌位图，禁止使用 <image>、base64 图片、外链资源、script、foreignObject。
+4. 尽量保持参考图原来的视觉效果，包括比例、透视、边缘、颜色关系、文字/LOGO 位置、材质层次和光影气质。`;
 
 function createCanvasNode(type: CanvasNodeType, position: Position, metadata?: CanvasNodeMetadata): CanvasNodeData {
     const spec = getNodeSpec(type);
@@ -1456,7 +1462,11 @@ function InfiniteCanvasPage() {
     }, []);
 
     const downloadNodeImage = useCallback((node: CanvasNodeData) => {
-        if ((node.type !== CanvasNodeType.Image && node.type !== CanvasNodeType.Video && node.type !== CanvasNodeType.Audio) || !node.metadata?.content) return;
+        if ((node.type !== CanvasNodeType.Image && node.type !== CanvasNodeType.Svg && node.type !== CanvasNodeType.Video && node.type !== CanvasNodeType.Audio) || !node.metadata?.content) return;
+        if (node.type === CanvasNodeType.Svg) {
+            saveAs(svgBlob(node.metadata.content), `canvas-svg-${node.id}.svg`);
+            return;
+        }
         saveAs(node.metadata.content, `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(node.metadata.content)}`);
     }, []);
 
@@ -1472,6 +1482,27 @@ function InfiniteCanvasPage() {
             if (node.type === CanvasNodeType.Video) {
                 if (!node.metadata?.content) return message.error("没有可保存的视频");
                 addAsset({ kind: "video", title: node.metadata?.prompt?.slice(0, 24) || "画布视频", coverUrl: "", tags: [], source: "Canvas", data: { url: node.metadata.content, storageKey: node.metadata.storageKey, width: node.width, height: node.height, bytes: node.metadata.bytes || 0, mimeType: node.metadata.mimeType || "video/mp4" }, metadata: { source: "canvas", nodeId: node.id, prompt: node.metadata?.prompt } });
+                message.success("已加入我的素材");
+                return;
+            }
+            if (node.type === CanvasNodeType.Svg) {
+                if (!node.metadata?.content) return message.error("没有可保存的 SVG");
+                const dataUrl = svgToDataUrl(node.metadata.content);
+                addAsset({
+                    kind: "image",
+                    title: node.metadata?.prompt?.slice(0, 24) || "画布 SVG",
+                    coverUrl: dataUrl,
+                    tags: [],
+                    source: "Canvas",
+                    data: {
+                        dataUrl,
+                        width: node.metadata.naturalWidth || node.width,
+                        height: node.metadata.naturalHeight || node.height,
+                        bytes: node.metadata.bytes || getDataUrlByteSize(dataUrl),
+                        mimeType: "image/svg+xml",
+                    },
+                    metadata: { source: "canvas", nodeId: node.id, prompt: node.metadata?.prompt },
+                });
                 message.success("已加入我的素材");
                 return;
             }
@@ -1736,6 +1767,57 @@ function InfiniteCanvasPage() {
                 return;
             }
             const presetConfig = IMAGE_PRESET_EDIT_CONFIG[preset];
+            if (preset === "vectorize") {
+                const generationConfig = { ...buildGenerationConfig(effectiveConfig, node, "text"), count: "1" };
+                if (!isAiConfigReady(generationConfig, generationConfig.model)) {
+                    openConfigDialog(true);
+                    return;
+                }
+                const childId = nanoid();
+                const source = { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey };
+                const references = [referenceUrl(source)].filter((url): url is string => Boolean(url));
+                setRunningNodeId(childId);
+                setNodes((prev) => [
+                    ...prev,
+                    {
+                        id: childId,
+                        type: CanvasNodeType.Svg,
+                        title: presetConfig.title,
+                        position: { x: node.position.x + node.width + 96, y: node.position.y },
+                        width: node.width,
+                        height: node.height,
+                        metadata: { prompt: presetConfig.prompt, status: NODE_STATUS_LOADING, model: generationConfig.model, references, mimeType: "image/svg+xml" },
+                    },
+                ]);
+                setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
+                setSelectedNodeIds(new Set([childId]));
+                setSelectedConnectionId(null);
+                setDialogNodeId(null);
+                setContextMenu(null);
+                try {
+                    const svg = await requestVectorSvg(generationConfig, presetConfig.prompt, source);
+                    const size = fitNodeSize(svg.width, svg.height, node.width, node.height);
+                    setNodes((prev) =>
+                        prev.map((item) =>
+                            item.id === childId
+                                ? {
+                                      ...item,
+                                      width: size.width,
+                                      height: size.height,
+                                      metadata: { ...item.metadata, content: svg.content, status: NODE_STATUS_SUCCESS, naturalWidth: svg.width, naturalHeight: svg.height, bytes: svg.bytes, mimeType: svg.mimeType, prompt: presetConfig.prompt, model: generationConfig.model, references },
+                                  }
+                                : item,
+                        ),
+                    );
+                } catch (error) {
+                    const errorDetails = error instanceof Error ? error.message : presetConfig.error;
+                    message.error(errorDetails);
+                    setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, metadata: { ...item.metadata, status: NODE_STATUS_ERROR, errorDetails } } : item)));
+                } finally {
+                    setRunningNodeId(null);
+                }
+                return;
+            }
             const generationConfig = { ...buildGenerationConfig(effectiveConfig, node, "image"), count: "1", size: node.metadata?.size || "auto" };
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
@@ -2200,9 +2282,16 @@ function InfiniteCanvasPage() {
             const sourceNode = findRetrySourceNode(node.id, nodesRef.current, connectionsRef.current) || node;
             const batchRoot = node.metadata?.batchRootId ? nodesRef.current.find((item) => item.id === node.metadata?.batchRootId) : null;
             const savedImageMetadata = node.type === CanvasNodeType.Image ? { ...batchRoot?.metadata, ...node.metadata } : undefined;
+            const savedSvgMetadata = node.type === CanvasNodeType.Svg ? node.metadata : undefined;
             const hasSavedImageMetadata = Boolean(savedImageMetadata?.generationType);
             const generationConfig =
-                hasSavedImageMetadata && savedImageMetadata
+                savedSvgMetadata
+                    ? {
+                          ...effectiveConfig,
+                          model: savedSvgMetadata.model || effectiveConfig.textModel || effectiveConfig.model,
+                          count: "1",
+                      }
+                    : hasSavedImageMetadata && savedImageMetadata
                     ? {
                           ...effectiveConfig,
                           model: savedImageMetadata.model || effectiveConfig.imageModel || effectiveConfig.model,
@@ -2216,8 +2305,8 @@ function InfiniteCanvasPage() {
                 return;
             }
 
-            const context = hasSavedImageMetadata ? null : await hydrateNodeGenerationContext(buildNodeGenerationContext(sourceNode.id, nodesRef.current, connectionsRef.current, sourceNode.metadata?.prompt || node.metadata?.prompt || ""));
-            const prompt = (savedImageMetadata?.prompt || context?.prompt || "").trim();
+            const context = hasSavedImageMetadata || savedSvgMetadata ? null : await hydrateNodeGenerationContext(buildNodeGenerationContext(sourceNode.id, nodesRef.current, connectionsRef.current, sourceNode.metadata?.prompt || node.metadata?.prompt || ""));
+            const prompt = (savedSvgMetadata?.prompt || savedImageMetadata?.prompt || context?.prompt || "").trim();
             if (!prompt) {
                 message.warning("找不到提示词，无法重试");
                 return;
@@ -2245,6 +2334,31 @@ function InfiniteCanvasPage() {
                         setNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, type: CanvasNodeType.Text, metadata: { ...item.metadata, content: text, status: NODE_STATUS_LOADING } } : item)));
                     });
                     setNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, type: CanvasNodeType.Text, metadata: { ...item.metadata, content: answer || streamed, prompt, status: NODE_STATUS_SUCCESS } } : item)));
+                    return;
+                }
+                if (node.type === CanvasNodeType.Svg) {
+                    const references = savedSvgMetadata?.references?.length ? await resolveSvgReferences(savedSvgMetadata) : sourceNodeReferenceImages(sourceNode);
+                    if (!references?.length) {
+                        const errorDetails = "参考图片已丢失，无法继续重试";
+                        message.error(errorDetails);
+                        setNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, metadata: { ...item.metadata, status: NODE_STATUS_ERROR, errorDetails } } : item)));
+                        return;
+                    }
+                    const svg = await requestVectorSvg(generationConfig, prompt, references[0]);
+                    const svgSize = fitNodeSize(svg.width, svg.height, node.width, node.height);
+                    setNodes((prev) =>
+                        prev.map((item) =>
+                            item.id === node.id
+                                ? {
+                                      ...item,
+                                      type: CanvasNodeType.Svg,
+                                      width: svgSize.width,
+                                      height: svgSize.height,
+                                      metadata: { ...item.metadata, content: svg.content, status: NODE_STATUS_SUCCESS, naturalWidth: svg.width, naturalHeight: svg.height, bytes: svg.bytes, mimeType: svg.mimeType, prompt, model: generationConfig.model },
+                                  }
+                                : item,
+                        ),
+                    );
                     return;
                 }
                 if (node.type === CanvasNodeType.Video) {
@@ -2958,6 +3072,24 @@ function buildImageGenerationMetadata(type: CanvasImageGenerationType, config: A
     };
 }
 
+async function requestVectorSvg(config: AiConfig, prompt: string, source: ReferenceImage) {
+    const imageDataUrl = await imageToDataUrl(source);
+    const answer = await requestImageQuestion(config, buildVectorSvgMessages(prompt, imageDataUrl), () => {});
+    return buildSvgMeta(answer);
+}
+
+function buildVectorSvgMessages(prompt: string, imageDataUrl: string): ChatCompletionMessage[] {
+    return [
+        {
+            role: "user",
+            content: [
+                { type: "text", text: `${prompt}\n\n${SVG_OUTPUT_PROMPT}` },
+                { type: "image_url", image_url: { url: imageDataUrl } },
+            ],
+        },
+    ];
+}
+
 function buildAudioGenerationMetadata(config: AiConfig): CanvasNodeMetadata {
     return {
         model: config.model,
@@ -2990,6 +3122,17 @@ async function resolveMetadataReferences(metadata: CanvasNodeMetadata) {
         }),
     );
     return references.every(Boolean) ? (references as ReferenceImage[]) : null;
+}
+
+async function resolveSvgReferences(metadata: CanvasNodeMetadata) {
+    if (!metadata.references?.length) return null;
+    const references = await Promise.all(
+        metadata.references.map(async (url, index) => {
+            const dataUrl = url.startsWith("image:") ? await resolveImageUrl(url, "") : url;
+            return dataUrl ? { id: `${index}`, name: `reference-${index}.png`, type: "image/png", dataUrl, storageKey: url.startsWith("image:") ? url : undefined } : null;
+        }),
+    );
+    return references.filter(Boolean) as ReferenceImage[];
 }
 
 async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
