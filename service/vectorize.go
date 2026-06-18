@@ -115,7 +115,7 @@ func vectorizeArgs(inputPath string, outputPath string, mode string) []string {
 	if isLogoVectorizeMode(mode) {
 		return append(args,
 			"--hierarchical", "cutout",
-			"--filter_speckle", "64",
+			"--filter_speckle", "16",
 			"--color_precision", "5",
 			"--gradient_step", "48",
 			"--corner_threshold", "85",
