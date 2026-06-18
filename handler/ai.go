@@ -84,13 +84,12 @@ func proxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		Fail(w, "未登录或权限不足")
 		return
 	}
-	credits, err := service.ModelCost(modelName)
+	credits, err := requestCredits(modelName, path, body, contentType)
 	if err != nil {
 		log.Printf("AI proxy read model cost failed: model=%s err=%v", modelName, err)
 		Fail(w, "AI 接口请求失败")
 		return
 	}
-	credits *= readAIRequestCount(body, contentType)
 	channel, err := service.SelectModelChannel(modelName)
 	if err != nil {
 		log.Printf("AI proxy select channel failed: model=%s err=%v", modelName, err)
@@ -425,6 +424,75 @@ func readMultipartModel(body []byte, contentType string) string {
 		return values[0]
 	}
 	return ""
+}
+
+func requestCredits(modelName string, path string, body []byte, contentType string) (int, error) {
+	credits, err := service.ModelCost(modelName)
+	if err != nil {
+		return 0, err
+	}
+	if isImageRequestPath(path) && is4KImageRequest(body, contentType) {
+		credits = 6
+	}
+	return credits * readAIRequestCount(body, contentType), nil
+}
+
+func isImageRequestPath(path string) bool {
+	return path == "/images/generations" || path == "/images/edits"
+}
+
+func is4KImageRequest(body []byte, contentType string) bool {
+	size, quality := readAIImageRequestSizeQuality(body, contentType)
+	return is4KImageValue(size) || strings.EqualFold(strings.TrimSpace(quality), "4k")
+}
+
+func readAIImageRequestSizeQuality(body []byte, contentType string) (string, string) {
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		_, params, err := mime.ParseMediaType(contentType)
+		if err != nil {
+			return "", ""
+		}
+		form, err := multipart.NewReader(bytes.NewReader(body), params["boundary"]).ReadForm(32 << 20)
+		if err != nil {
+			return "", ""
+		}
+		defer form.RemoveAll()
+		return firstFormValue(form.Value["size"]), firstFormValue(form.Value["quality"])
+	}
+	var payload struct {
+		Size    string `json:"size"`
+		Quality string `json:"quality"`
+	}
+	_ = json.Unmarshal(body, &payload)
+	return payload.Size, payload.Quality
+}
+
+func firstFormValue(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
+func is4KImageValue(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if strings.Contains(value, "4k") {
+		return true
+	}
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == 'x' || r == '×' || r == '*' || r == ' '
+	})
+	if len(parts) != 2 {
+		return false
+	}
+	var width, height int
+	if _, err := fmt.Sscan(parts[0], &width); err != nil {
+		return false
+	}
+	if _, err := fmt.Sscan(parts[1], &height); err != nil {
+		return false
+	}
+	return width >= 3840 || height >= 3840
 }
 
 func readAIRequestCount(body []byte, contentType string) int {
