@@ -150,7 +150,7 @@ export default function AssetsPage() {
 
     const downloadImage = (asset: Asset) => {
         if (asset.kind !== "image" && asset.kind !== "video") return;
-        saveAs(asset.kind === "video" ? asset.data.url : asset.data.dataUrl, `${asset.title || "asset"}.${asset.data.mimeType.split("/")[1] || "png"}`);
+        saveAs(asset.kind === "video" ? asset.data.url : asset.data.dataUrl, `${asset.title || "asset"}.${assetExtension(asset)}`);
     };
 
     const exportAllAssets = async () => {
@@ -540,4 +540,13 @@ function assetSummary(asset: Asset) {
 
 function assetSearchText(asset: Asset) {
     return [asset.title, asset.source || "", asset.note || "", (asset.tags || []).join(" "), asset.kind === "text" ? asset.data.content : asset.data.mimeType].join(" ").toLowerCase();
+}
+
+function assetExtension(asset: Asset) {
+    if (asset.kind === "video") return asset.data.mimeType.includes("webm") ? "webm" : "mp4";
+    if (asset.data.mimeType.includes("svg")) return "svg";
+    if (asset.data.mimeType.includes("jpeg")) return "jpg";
+    if (asset.data.mimeType.includes("webp")) return "webp";
+    if (asset.data.mimeType.includes("gif")) return "gif";
+    return "png";
 }

@@ -284,6 +284,7 @@ export async function requestVectorizeImage(image: string, mode: "general" | "lo
     const value = image.trim();
     const payload = /^https?:\/\//i.test(value) ? { imageUrl: value, mode } : { dataUrl: value, mode };
     const result = await apiPost<Omit<VectorizeImageResult, "dataUrl">>("/api/v1/images/vectorize", payload, token || undefined);
+    if (!result.content.trim().startsWith("<svg")) throw new Error("后端没有返回有效 SVG");
     return {
         ...result,
         dataUrl: `data:${result.mimeType || "image/svg+xml"};charset=utf-8,${encodeURIComponent(result.content)}`,

@@ -3031,7 +3031,8 @@ function Shortcut({ keys, value }: { keys: string[]; value: string }) {
 }
 
 function imageExtension(dataUrl: string) {
-    return dataUrl.match(/^data:image[/]([^;]+)/)?.[1] || dataUrl.match(/image[/]([^;]+)/)?.[1] || "png";
+    const extension = dataUrl.match(/^data:image[/]([^;]+)/)?.[1] || dataUrl.match(/image[/]([^;]+)/)?.[1] || "png";
+    return extension === "svg+xml" ? "svg" : extension;
 }
 
 function audioExtension(mimeType?: string) {

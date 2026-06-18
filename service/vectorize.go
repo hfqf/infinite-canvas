@@ -90,6 +90,9 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 	if err != nil {
 		return VectorizeResult{}, err
 	}
+	if !strings.Contains(strings.ToLower(string(svg[:min(len(svg), 512)])), "<svg") {
+		return VectorizeResult{}, safeMessageError{message: "VTracer 没有生成有效 SVG"}
+	}
 	width, height := readSVGSizeText(string(svg))
 	return VectorizeResult{
 		Content:  string(svg),
