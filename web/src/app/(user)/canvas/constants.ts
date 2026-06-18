@@ -44,7 +44,7 @@ export const NODE_SPECS = {
     },
 } satisfies Record<CanvasNodeType, CanvasNodeSpec>;
 
-export type CanvasImagePresetEditId = "vectorize" | "decompose" | "clarify";
+export type CanvasImagePresetEditId = "vectorize" | "logoVectorize" | "decompose" | "clarify";
 
 export const IMAGE_PRESET_EDIT_CONFIG = {
     vectorize: {
@@ -54,6 +54,14 @@ export const IMAGE_PRESET_EDIT_CONFIG = {
         tooltip: "生成产品设计矢量化还原图",
         error: "转矢量失败",
         prompt: "请基于参考图片，重新绘制为适合后续转 SVG / AI / EPS 的高清纯色矢量友好设计稿。\n\n核心目标：尽量保持原图的视觉识别效果和设计结构，但把画面整理成更适合自动描摹的纯色、清晰、闭合形状图。不要生成真实摄影图，不要重新设计。\n\n适用对象包括工业产品、消费电子、家具家电、包装、产品 LOGO、品牌标识、门头招牌、店招灯箱、展陈导视和商业空间外立面。\n\n要求：\n1. 严格保留原图的整体比例、视角、构图、外轮廓、结构分件、接缝、倒角、圆角、按钮、接口、孔位、螺丝、图案、文字排布、LOGO/标识位置、门头字牌比例、招牌边框和灯箱结构。\n2. 保持原有文字和标识的相对位置、大小、字形轮廓和排版关系，不新增文字，不改字，不替换品牌元素。\n3. 将复杂照片质感简化为干净的平面色块、闭合轮廓和少量必要线条；边缘锐利，线条连续，线宽尽量统一。\n4. 使用有限色阶表达材质差异，例如金属、塑料、玻璃、亚克力、发光字、喷绘、木纹、橡胶、织物等只保留主要颜色关系和结构层次，不保留细碎纹理。\n5. 背景为纯白或透明风格，主体居中，轮廓完整，四周留白均匀，适合后续 Illustrator / Figma / Inkscape 自动描摹。\n6. 如果原图是产品照片，保持原视角或轻微整理为稳定产品设计视角；如果原图是门头、LOGO、包装或平面图，必须保持原版式和透视关系。\n\n避免：照片级渲染、真实反光、复杂渐变、强投影、纹理噪点、脏背景、模糊边缘、锯齿、手绘抖动、卡通化、贴纸化、图标化、重新设计、改变比例、遗漏接口/按钮/分割线、修改文字、添加水印。",
+    },
+    logoVectorize: {
+        title: "Logo SVG",
+        label: "Logo矢量",
+        panelLabel: "Logo矢量",
+        tooltip: "生成可导入 CDR 的 Logo/文字 SVG 初稿",
+        error: "Logo 矢量失败",
+        prompt: "",
     },
     decompose: {
         title: "Decomposed Image",

@@ -23,8 +23,9 @@ const (
 )
 
 type VectorizeInput struct {
-	ImageURL string
-	DataURL  string
+	ImageURL string `json:"imageUrl"`
+	DataURL  string `json:"dataUrl"`
+	Mode     string `json:"mode"`
 }
 
 type VectorizeResult struct {
@@ -60,21 +61,16 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	args := []string{
-		"--input", inputPath,
-		"--output", outputPath,
-		"--preset", "poster",
-		"--mode", "spline",
-		"--colormode", "color",
-		"--hierarchical", "stacked",
-		"--filter_speckle", "4",
-		"--color_precision", "6",
-		"--gradient_step", "16",
-		"--corner_threshold", "60",
-		"--segment_length", "4",
-		"--splice_threshold", "45",
-		"--path_precision", "3",
+	traceInputPath := inputPath
+	if isLogoVectorizeMode(input.Mode) {
+		processedPath, err := preprocessLogoImage(ctx, tempDir, inputPath)
+		if err != nil {
+			return VectorizeResult{}, err
+		}
+		traceInputPath = processedPath
 	}
+
+	args := vectorizeArgs(traceInputPath, outputPath, input.Mode)
 	vtracerPath := strings.TrimSpace(config.Cfg.VTracerPath)
 	if vtracerPath == "" {
 		vtracerPath = "vtracer"
@@ -103,6 +99,89 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 		MimeType: vectorizeMimeType,
 		Engine:   "vtracer",
 	}, nil
+}
+
+func vectorizeArgs(inputPath string, outputPath string, mode string) []string {
+	args := []string{
+		"--input", inputPath,
+		"--output", outputPath,
+		"--preset", "poster",
+		"--mode", "spline",
+		"--colormode", "color",
+	}
+	if isLogoVectorizeMode(mode) {
+		return append(args,
+			"--hierarchical", "cutout",
+			"--filter_speckle", "16",
+			"--color_precision", "4",
+			"--gradient_step", "32",
+			"--corner_threshold", "75",
+			"--segment_length", "8",
+			"--splice_threshold", "60",
+			"--path_precision", "3",
+		)
+	}
+	return append(args,
+		"--hierarchical", "stacked",
+		"--filter_speckle", "4",
+		"--color_precision", "6",
+		"--gradient_step", "16",
+		"--corner_threshold", "60",
+		"--segment_length", "4",
+		"--splice_threshold", "45",
+		"--path_precision", "3",
+	)
+}
+
+func isLogoVectorizeMode(mode string) bool {
+	return strings.EqualFold(strings.TrimSpace(mode), "logo")
+}
+
+func preprocessLogoImage(ctx context.Context, tempDir string, inputPath string) (string, error) {
+	imageMagickPath, err := resolveImageMagickPath()
+	if err != nil {
+		return "", err
+	}
+	outputPath := filepath.Join(tempDir, "logo-clean.png")
+	args := []string{
+		inputPath,
+		"-auto-orient",
+		"-background", "white",
+		"-alpha", "remove",
+		"-alpha", "off",
+		"-filter", "Lanczos",
+		"-resize", "400%",
+		"-resize", "4096x4096>",
+		"-colorspace", "sRGB",
+		"+dither",
+		"-colors", "4",
+		"-strip",
+		outputPath,
+	}
+	cmd := exec.CommandContext(ctx, imageMagickPath, args...)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return "", safeMessageError{message: "Logo 图片预处理超时，请稍后重试"}
+		}
+		return "", fmt.Errorf("imagemagick failed: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return outputPath, nil
+}
+
+func resolveImageMagickPath() (string, error) {
+	if configured := strings.TrimSpace(config.Cfg.ImageMagickPath); configured != "" {
+		if _, err := exec.LookPath(configured); err != nil {
+			return "", safeMessageError{message: "后端未找到 ImageMagick，请检查 IMAGE_MAGICK_PATH"}
+		}
+		return configured, nil
+	}
+	if path, err := exec.LookPath("magick"); err == nil {
+		return path, nil
+	}
+	if path, err := exec.LookPath("convert"); err == nil {
+		return path, nil
+	}
+	return "", safeMessageError{message: "后端未安装 ImageMagick，无法执行 Logo 高清放大和限色清理"}
 }
 
 func readVectorizeInput(input VectorizeInput) ([]byte, string, error) {

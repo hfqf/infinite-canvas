@@ -1762,13 +1762,57 @@ function InfiniteCanvasPage() {
                 return;
             }
             const presetConfig = IMAGE_PRESET_EDIT_CONFIG[preset];
+            const source = { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey };
+            if (preset === "logoVectorize") {
+                const svgId = nanoid();
+                setRunningNodeId(svgId);
+                setNodes((prev) => [
+                    ...prev,
+                    {
+                        id: svgId,
+                        type: CanvasNodeType.Svg,
+                        title: presetConfig.title,
+                        position: { x: node.position.x + node.width + 96, y: node.position.y },
+                        width: node.width,
+                        height: node.height,
+                        metadata: { prompt: presetConfig.tooltip, status: NODE_STATUS_LOADING, mimeType: "image/svg+xml", references: node.metadata.storageKey ? [node.metadata.storageKey] : [] },
+                    },
+                ]);
+                setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: svgId }]);
+                setSelectedNodeIds(new Set([svgId]));
+                setSelectedConnectionId(null);
+                setDialogNodeId(svgId);
+                setContextMenu(null);
+                try {
+                    const svg = await requestVectorizeImage(source.dataUrl, "logo");
+                    const svgSize = fitNodeSize(svg.width, svg.height, node.width, node.height);
+                    setNodes((prev) =>
+                        prev.map((item) =>
+                            item.id === svgId
+                                ? {
+                                      ...item,
+                                      width: svgSize.width,
+                                      height: svgSize.height,
+                                      metadata: { ...item.metadata, content: svg.content, status: NODE_STATUS_SUCCESS, naturalWidth: svg.width, naturalHeight: svg.height, bytes: svg.bytes, mimeType: svg.mimeType },
+                                  }
+                                : item,
+                        ),
+                    );
+                } catch (error) {
+                    const errorDetails = error instanceof Error ? error.message : presetConfig.error;
+                    message.error(errorDetails);
+                    setNodes((prev) => prev.map((item) => (item.id === svgId ? { ...item, metadata: { ...item.metadata, status: NODE_STATUS_ERROR, errorDetails } } : item)));
+                } finally {
+                    setRunningNodeId(null);
+                }
+                return;
+            }
             const generationConfig = { ...buildGenerationConfig(effectiveConfig, node, "image"), count: "1", size: node.metadata?.size || "auto" };
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;
             }
             const childId = nanoid();
-            const source = { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey };
             const requestConfig = preset === "vectorize" ? { ...generationConfig, quality: generationConfig.quality === "auto" ? "high" : generationConfig.quality } : generationConfig;
             const generationMetadata = buildImageGenerationMetadata("edit", requestConfig, 1, [source]);
             setRunningNodeId(childId);
