@@ -106,11 +106,16 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 }
 
 func readVectorizeInput(input VectorizeInput) ([]byte, string, error) {
-	if strings.TrimSpace(input.DataURL) != "" {
-		return readVectorizeDataURL(input.DataURL)
+	dataURL := strings.TrimSpace(input.DataURL)
+	imageURL := strings.TrimSpace(input.ImageURL)
+	if dataURL != "" {
+		if strings.HasPrefix(strings.ToLower(dataURL), "http://") || strings.HasPrefix(strings.ToLower(dataURL), "https://") {
+			return readVectorizeURL(dataURL)
+		}
+		return readVectorizeDataURL(dataURL)
 	}
-	if strings.TrimSpace(input.ImageURL) != "" {
-		return readVectorizeURL(input.ImageURL)
+	if imageURL != "" {
+		return readVectorizeURL(imageURL)
 	}
 	return nil, "", safeMessageError{message: "缺少需要转 SVG 的图片"}
 }

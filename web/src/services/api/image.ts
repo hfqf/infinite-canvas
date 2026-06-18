@@ -279,9 +279,11 @@ function refreshRemoteUser(config: AiConfig) {
     if (config.channelMode === "remote") void useUserStore.getState().hydrateUser();
 }
 
-export async function requestVectorizeImage(dataUrl: string) {
+export async function requestVectorizeImage(image: string) {
     const token = useUserStore.getState().token;
-    const result = await apiPost<Omit<VectorizeImageResult, "dataUrl">>("/api/v1/images/vectorize", { dataUrl }, token || undefined);
+    const value = image.trim();
+    const payload = /^https?:\/\//i.test(value) ? { imageUrl: value } : { dataUrl: value };
+    const result = await apiPost<Omit<VectorizeImageResult, "dataUrl">>("/api/v1/images/vectorize", payload, token || undefined);
     return {
         ...result,
         dataUrl: `data:${result.mimeType || "image/svg+xml"};charset=utf-8,${encodeURIComponent(result.content)}`,
