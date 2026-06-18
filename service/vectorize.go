@@ -113,6 +113,7 @@ func vectorizeArgs(inputPath string, outputPath string, mode string) []string {
 		"--colormode", "color",
 	}
 	if isLogoVectorizeMode(mode) {
+		// VTracer 0.6.4 hard ranges: speckle 0-16, color 1-8, gradient 0-255, corner/splice 0-180, segment 3.5-10.
 		return append(args,
 			"--hierarchical", "cutout",
 			"--filter_speckle", "16",
