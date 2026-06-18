@@ -18,7 +18,7 @@ const store = localforage.createInstance({ name: "infinite-canvas", storeName: "
 const objectUrls = new Map<string, string>();
 
 export async function uploadImage(input: string | Blob): Promise<UploadedImage> {
-    const blob = typeof input === "string" ? await (await fetch(input)).blob() : input;
+    const blob = typeof input === "string" ? await fetchImageBlob(input) : input;
     const storageKey = `image:${nanoid()}`;
     await store.setItem(storageKey, blob);
     const url = URL.createObjectURL(blob);
@@ -52,7 +52,7 @@ export async function setImageBlob(storageKey: string, blob: Blob) {
 export async function imageToDataUrl(image: { url?: string; dataUrl?: string; storageKey?: string }) {
     const url = image.dataUrl || (await resolveImageUrl(image.storageKey, image.url || ""));
     if (!url || url.startsWith("data:")) return url;
-    return blobToDataUrl(await (await fetch(url)).blob());
+    return blobToDataUrl(await fetchImageBlob(url));
 }
 
 export async function deleteStoredImages(keys: Iterable<string>) {
@@ -89,4 +89,14 @@ function blobToDataUrl(blob: Blob) {
         reader.onerror = () => reject(new Error("读取图片失败"));
         reader.readAsDataURL(blob);
     });
+}
+
+async function fetchImageBlob(url: string) {
+    const response = await fetch(proxiedImageUrl(url));
+    if (!response.ok) throw new Error("读取图片失败");
+    return response.blob();
+}
+
+function proxiedImageUrl(url: string) {
+    return /^https?:\/\//i.test(url) ? `/image-proxy?url=${encodeURIComponent(url)}` : url;
 }
