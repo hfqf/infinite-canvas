@@ -116,12 +116,12 @@ func vectorizeArgs(inputPath string, outputPath string, mode string) []string {
 		return append(args,
 			"--hierarchical", "cutout",
 			"--filter_speckle", "16",
-			"--color_precision", "5",
-			"--gradient_step", "48",
-			"--corner_threshold", "85",
-			"--segment_length", "12",
-			"--splice_threshold", "90",
-			"--path_precision", "2",
+			"--color_precision", "4",
+			"--gradient_step", "32",
+			"--corner_threshold", "75",
+			"--segment_length", "8",
+			"--splice_threshold", "60",
+			"--path_precision", "3",
 		)
 	}
 	return append(args,
