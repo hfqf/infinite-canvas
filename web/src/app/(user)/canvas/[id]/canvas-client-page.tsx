@@ -11,7 +11,7 @@ import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audi
 import { requestVideoGeneration, storeGeneratedVideo } from "@/services/api/video";
 import { DOCS_URL } from "@/constant/env";
 import { defaultConfig, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
-import { resolveImageUrl, uploadImage, type UploadedImage } from "@/services/image-storage";
+import { imageToDataUrl, resolveImageUrl, uploadImage, type UploadedImage } from "@/services/image-storage";
 import { resolveMediaUrl, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { nanoid } from "nanoid";
 import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
@@ -1785,7 +1785,9 @@ function InfiniteCanvasPage() {
                 setDialogNodeId(svgId);
                 setContextMenu(null);
                 try {
-                    const svg = await requestVectorizeImage(source.dataUrl, preset === "logoVectorize" ? "logo" : "general");
+                    const vectorizeDataUrl = await imageToDataUrl(source.dataUrl.startsWith("data:") ? { dataUrl: source.dataUrl } : { url: source.dataUrl, storageKey: source.storageKey });
+                    if (!vectorizeDataUrl) throw new Error("读取图片失败");
+                    const svg = await requestVectorizeImage(vectorizeDataUrl, preset === "logoVectorize" ? "logo" : "general");
                     const svgSize = fitNodeSize(svg.width, svg.height, node.width, node.height);
                     setNodes((prev) =>
                         prev.map((item) =>
