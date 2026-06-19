@@ -1763,15 +1763,58 @@ function InfiniteCanvasPage() {
             }
             const presetConfig = IMAGE_PRESET_EDIT_CONFIG[preset];
             const source = { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey };
+            const shouldCreateSvg = preset === "vectorize" || preset === "logoVectorize";
+            if (shouldCreateSvg) {
+                const svgId = nanoid();
+                setRunningNodeId(svgId);
+                setNodes((prev) => [
+                    ...prev,
+                    {
+                        id: svgId,
+                        type: CanvasNodeType.Svg,
+                        title: preset === "logoVectorize" ? "Logo SVG" : "Vector SVG",
+                        position: { x: node.position.x + node.width + 96, y: node.position.y },
+                        width: node.width,
+                        height: node.height,
+                        metadata: { prompt: presetConfig.prompt, status: NODE_STATUS_LOADING, mimeType: "image/svg+xml", references: source.storageKey ? [source.storageKey] : [] },
+                    },
+                ]);
+                setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: svgId }]);
+                setSelectedNodeIds(new Set([svgId]));
+                setSelectedConnectionId(null);
+                setDialogNodeId(svgId);
+                setContextMenu(null);
+                try {
+                    const svg = await requestVectorizeImage(source.dataUrl, preset === "logoVectorize" ? "logo" : "general");
+                    const svgSize = fitNodeSize(svg.width, svg.height, node.width, node.height);
+                    setNodes((prev) =>
+                        prev.map((item) =>
+                            item.id === svgId
+                                ? {
+                                      ...item,
+                                      width: svgSize.width,
+                                      height: svgSize.height,
+                                      metadata: { ...item.metadata, content: svg.content, status: NODE_STATUS_SUCCESS, naturalWidth: svg.width, naturalHeight: svg.height, bytes: svg.bytes, mimeType: svg.mimeType },
+                                  }
+                                : item,
+                        ),
+                    );
+                } catch (error) {
+                    const errorDetails = error instanceof Error ? error.message : presetConfig.error;
+                    message.error(errorDetails);
+                    setNodes((prev) => prev.map((item) => (item.id === svgId ? { ...item, metadata: { ...item.metadata, status: NODE_STATUS_ERROR, errorDetails } } : item)));
+                } finally {
+                    setRunningNodeId(null);
+                }
+                return;
+            }
             const generationConfig = { ...buildGenerationConfig(effectiveConfig, node, "image"), count: "1", size: node.metadata?.size || "auto" };
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;
             }
             const childId = nanoid();
-            const shouldCreateSvg = preset === "vectorize" || preset === "logoVectorize";
-            const requestConfig = shouldCreateSvg ? { ...generationConfig, quality: generationConfig.quality === "auto" ? "high" : generationConfig.quality } : generationConfig;
-            const generationMetadata = buildImageGenerationMetadata("edit", requestConfig, 1, [source]);
+            const generationMetadata = buildImageGenerationMetadata("edit", generationConfig, 1, [source]);
             setRunningNodeId(childId);
             setNodes((prev) => [
                 ...prev,
@@ -1791,47 +1834,10 @@ function InfiniteCanvasPage() {
             setDialogNodeId(childId);
             setContextMenu(null);
             try {
-                const image = await requestEdit(requestConfig, presetConfig.prompt, [source]).then((items) => items[0]);
+                const image = await requestEdit(generationConfig, presetConfig.prompt, [source]).then((items) => items[0]);
                 const uploaded = await uploadImage(image.dataUrl);
                 const size = fitNodeSize(uploaded.width, uploaded.height, node.width, node.height);
                 setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt: presetConfig.prompt, ...generationMetadata } } : item)));
-                if (shouldCreateSvg) {
-                    const svgId = nanoid();
-                    const svgPosition = { x: node.position.x + node.width + size.width + 192, y: node.position.y };
-                    setNodes((prev) => [
-                        ...prev,
-                        {
-                            id: svgId,
-                            type: CanvasNodeType.Svg,
-                            title: preset === "logoVectorize" ? "Logo SVG" : "Vector SVG",
-                            position: svgPosition,
-                            width: size.width,
-                            height: size.height,
-                            metadata: { prompt: presetConfig.prompt, status: NODE_STATUS_LOADING, mimeType: "image/svg+xml", references: [uploaded.storageKey] },
-                        },
-                    ]);
-                    setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: childId, toNodeId: svgId }]);
-                    setSelectedNodeIds(new Set([svgId]));
-                    try {
-                        const svg = await requestVectorizeImage(image.dataUrl, preset === "logoVectorize" ? "logo" : "general");
-                        const svgSize = fitNodeSize(svg.width, svg.height, size.width, size.height);
-                        setNodes((prev) =>
-                            prev.map((item) =>
-                                item.id === svgId
-                                    ? {
-                                          ...item,
-                                          width: svgSize.width,
-                                          height: svgSize.height,
-                                          metadata: { ...item.metadata, content: svg.content, status: NODE_STATUS_SUCCESS, naturalWidth: svg.width, naturalHeight: svg.height, bytes: svg.bytes, mimeType: svg.mimeType },
-                                      }
-                                    : item,
-                            ),
-                        );
-                    } catch (error) {
-                        const errorDetails = error instanceof Error ? error.message : "SVG 转换失败";
-                        setNodes((prev) => prev.map((item) => (item.id === svgId ? { ...item, metadata: { ...item.metadata, status: NODE_STATUS_ERROR, errorDetails } } : item)));
-                    }
-                }
             } catch (error) {
                 const errorDetails = error instanceof Error ? error.message : presetConfig.error;
                 message.error(errorDetails);

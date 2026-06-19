@@ -566,7 +566,7 @@ func createLogoSmallGraySource(ctx context.Context, imageMagickPath string, gray
 		}
 		return fmt.Errorf("imagemagick small alpha failed: %w: %s", err, strings.TrimSpace(string(output)))
 	}
-	cmd = exec.CommandContext(ctx, imageMagickPath, graySourcePath, alphaPath, "-alpha", "off", "-compose", "CopyOpacity", "-composite", "-background", "white", "-alpha", "remove", "-auto-level", outputPath)
+	cmd = exec.CommandContext(ctx, imageMagickPath, graySourcePath, alphaPath, "-alpha", "off", "-compose", "CopyOpacity", "-composite", "-background", "white", "-alpha", "remove", outputPath)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return safeMessageError{message: "Logo 小组件灰度源生成超时，请稍后重试"}
