@@ -113,6 +113,41 @@ def svg_paths(path, fill):
     return "\n".join(re.sub(r'fill="#[0-9A-Fa-f]{6}"', f'fill="{fill}"', item) for item in paths)
 
 
+def round_small_svg_components(svg_text, enabled, min_size, max_size, ratio_tolerance):
+    if not enabled:
+        return svg_text, 0
+    path_pattern = re.compile(r'<path\b[^>]*\bd="([^"]+)"[^>]*\bfill="(#[0-9A-Fa-f]{6})"[^>]*\btransform="translate\(([-0-9.]+),([-0-9.]+)\)"[^>]*/?>')
+    number_pattern = re.compile(r"[-+]?\d*\.?\d+")
+    replaced = 0
+
+    def replace(match):
+        nonlocal replaced
+        d = match.group(1)
+        if d.count("M") != 1 or "Z" not in d:
+            return match.group(0)
+        values = [float(item) for item in number_pattern.findall(d)]
+        if len(values) < 8:
+            return match.group(0)
+        xs = values[0::2]
+        ys = values[1::2]
+        width = max(xs) - min(xs)
+        height = max(ys) - min(ys)
+        if width < min_size or height < min_size or width > max_size or height > max_size:
+            return match.group(0)
+        ratio = width / height if height else 0
+        if ratio < 1 - ratio_tolerance or ratio > 1 + ratio_tolerance:
+            return match.group(0)
+        tx = float(match.group(3))
+        ty = float(match.group(4))
+        cx = tx + (min(xs) + max(xs)) / 2
+        cy = ty + (min(ys) + max(ys)) / 2
+        radius = (width + height) / 4
+        replaced += 1
+        return f'<circle cx="{cx:.3f}" cy="{cy:.3f}" r="{radius:.3f}" fill="{match.group(2)}"/>'
+
+    return path_pattern.sub(replace, svg_text), replaced
+
+
 def generate_layered(params):
     input_path = Path(params.get("input", [str(DEFAULT_INPUT)])[0]).expanduser()
     if not input_path.exists():
@@ -126,8 +161,21 @@ def generate_layered(params):
     segment_length = number(params, "segment_length", 8, float, 3.5, 10)
     splice_threshold = number(params, "splice_threshold", 75, int, 0, 180)
     path_precision = number(params, "path_precision", 3, int, 0, 8)
+    mask_blur = number(params, "mask_blur", 0.8, float, 0, 4)
+    mask_threshold = number(params, "mask_threshold", 50, int, 1, 99)
+    exclude_radius = number(params, "exclude_radius", 2, int, 0, 8)
+    mask_close = number(params, "mask_close", 0, int, 0, 4)
+    mask_open = number(params, "mask_open", 0, int, 0, 4)
+    round_small = number(params, "round_small", 0, int, 0, 1)
+    round_min = number(params, "round_min", 18, float, 1, 200)
+    round_max = number(params, "round_max", 70, float, 1, 300)
+    round_ratio = number(params, "round_ratio", 0.35, float, 0, 1)
 
-    name = safe_name(f"layered-c{colors}-f{fuzz}-seg{segment_length}-ct{corner_threshold}-sp{splice_threshold}-fs{filter_speckle}")
+    name = safe_name(
+        f"layered-c{colors}-f{fuzz}-seg{segment_length}-ct{corner_threshold}-"
+        f"sp{splice_threshold}-fs{filter_speckle}-mb{mask_blur}-mt{mask_threshold}-"
+        f"er{exclude_radius}-mc{mask_close}-mo{mask_open}-rs{round_small}"
+    )
     run_dir = ROOT / name
     run_dir.mkdir(parents=True, exist_ok=True)
     prep = run_dir / "prep.png"
@@ -175,12 +223,22 @@ def generate_layered(params):
             exclude_args += [
                 "-fill", "black", "+opaque", marker,
                 "-fill", "white", "-opaque", marker,
-                "-type", "bilevel", "-morphology", "Dilate", "Disk:2",
-                "-strip", str(remove_mask),
+                "-type", "bilevel",
             ]
+            if exclude_radius > 0:
+                exclude_args += ["-morphology", "Dilate", f"Disk:{exclude_radius}"]
+            exclude_args += ["-strip", str(remove_mask)]
             run_cmd(exclude_args)
             run_cmd([MAGICK, str(mask), str(remove_mask), "-compose", "Lighten", "-composite", "-type", "bilevel", str(mask)])
-        run_cmd([MAGICK, str(mask), "-blur", "0x0.8", "-threshold", "50%", "-type", "bilevel", str(mask)])
+        smooth_args = [MAGICK, str(mask)]
+        if mask_close > 0:
+            smooth_args += ["-morphology", "Close", f"Disk:{mask_close}"]
+        if mask_open > 0:
+            smooth_args += ["-morphology", "Open", f"Disk:{mask_open}"]
+        if mask_blur > 0:
+            smooth_args += ["-blur", f"0x{mask_blur}"]
+        smooth_args += ["-threshold", f"{mask_threshold}%", "-type", "bilevel", str(mask)]
+        run_cmd(smooth_args)
         elapsed, _, _ = run_cmd([
             str(VTRACER), "--input", str(mask), "--output", str(layer_svg), "--preset", "bw",
             "--mode", "spline", "--colormode", "bw", "--filter_speckle", str(filter_speckle),
@@ -192,13 +250,15 @@ def generate_layered(params):
 
     width_height = subprocess.check_output([MAGICK, "identify", "-format", "%w %h", str(prep)], text=True).strip()
     width, height = [int(part) for part in width_height.split()]
-    svg.write_text(
+    svg_text = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         f'<svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">\n'
         f'<rect width="{width}" height="{height}" fill="#FFFFFF"/>\n'
         + "\n".join(rendered_paths)
         + "\n</svg>\n"
     )
+    svg_text, rounded_count = round_small_svg_components(svg_text, round_small, round_min, round_max, round_ratio)
+    svg.write_text(svg_text)
     render_time, _, _ = run_cmd([MAGICK, "-background", "white", str(svg), "-resize", "1200x", str(preview)])
     run_cmd([MAGICK, "-background", "white", str(svg), str(full)])
     run_cmd([MAGICK, str(full), "-crop", "1100x700+1450+850", "+repage", "-resize", "1600x", str(crop)])
@@ -211,7 +271,7 @@ def generate_layered(params):
         "name": name, "run_dir": run_dir, "prep": prep, "svg": svg, "preview": preview, "crop": crop,
         "text_crop": text_crop, "thirty_crop": thirty_crop, "bls_crop": bls_crop, "main_crop": main_crop,
         "paths": paths, "fills": fills, "bytes": bytes_len,
-        "removed_text_shadows": 0, "magick_time": magick_time, "vtracer_time": vtracer_time,
+        "removed_text_shadows": rounded_count, "magick_time": magick_time, "vtracer_time": vtracer_time,
         "render_time": render_time, "magick_err": magick_err,
         "vtracer_out": "layers=" + ", ".join(f'{layer["hex"]}:{len(layer["colors"])}' for layer in layers),
         "vtracer_err": "",
@@ -402,6 +462,15 @@ def form(params):
         ("splice_threshold", 75, "number"),
         ("filter_speckle", 16, "number"),
         ("path_precision", 3, "number"),
+        ("mask_blur", 0.8, "number"),
+        ("mask_threshold", 50, "number"),
+        ("exclude_radius", 2, "number"),
+        ("mask_close", 0, "number"),
+        ("mask_open", 0, "number"),
+        ("round_small", 0, "number"),
+        ("round_min", 18, "number"),
+        ("round_max", 70, "number"),
+        ("round_ratio", 0.35, "number"),
         ("remove_text_shadow", 1, "number"),
         ("text_shadow_min_y", 1700, "number"),
     ]
