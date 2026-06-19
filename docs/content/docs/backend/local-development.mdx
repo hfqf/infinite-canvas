@@ -18,7 +18,7 @@ cp .env.example .env
 - 后端端口是 `8080`
 - 前端端口是 `3000`
 - SQLite 数据库是 `data/infinite-canvas.db`
-- 图片转 SVG 使用本机 `vtracer` 命令；Logo 矢量还会使用 ImageMagick 的 `magick` 或 `convert` 命令做高清放大和限色清理；如果命令不在 `PATH`，可通过 `VTRACER_PATH` 和 `IMAGE_MAGICK_PATH` 指定路径。
+- 图片转 SVG 使用本机 `vtracer` 命令；Logo 矢量还会使用 ImageMagick 的 `magick` 或 `convert` 命令做高清放大、限色清理和分色追踪；如果命令不在 `PATH`，可通过 `VTRACER_PATH` 和 `IMAGE_MAGICK_PATH` 指定路径，Logo 最大量化色数可通过 `LOGO_VECTORIZE_COLORS` 调整。
 
 ## 2. 启动后端
 
