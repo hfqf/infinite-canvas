@@ -115,7 +115,7 @@ func vectorizeArgs(inputPath string, outputPath string, mode string) []string {
 	if isLogoVectorizeMode(mode) {
 		// VTracer 0.6.4 hard ranges: speckle 0-16, color 1-8, gradient 0-255, corner/splice 0-180, segment 3.5-10.
 		return append(args,
-			"--hierarchical", "cutout",
+			"--hierarchical", "stacked",
 			"--filter_speckle", "16",
 			"--color_precision", "4",
 			"--gradient_step", "32",
@@ -153,10 +153,14 @@ func preprocessLogoImage(ctx context.Context, tempDir string, inputPath string) 
 		"-background", "white",
 		"-alpha", "remove",
 		"-alpha", "off",
-		"-filter", "Point",
+		// Point resize creates stair-step logo edges that VTracer preserves as jagged paths.
+		"-filter", "Lanczos",
 		"-resize", "400%",
 		"-resize", "4096x4096>",
 		"-colorspace", "sRGB",
+		"-fuzz", "3%",
+		"-fill", "white",
+		"-opaque", "white",
 		"-median", "1",
 		"-strip",
 		outputPath,
