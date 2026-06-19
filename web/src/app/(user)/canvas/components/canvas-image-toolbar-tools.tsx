@@ -137,15 +137,6 @@ export const imageToolDefinitions: ImageToolDefinition[] = [
         run: (node, handlers) => handlers.onPresetEdit(node, "vectorize"),
     },
     {
-        id: "logoVectorize",
-        defaultVisible: false,
-        panelLabel: IMAGE_PRESET_EDIT_CONFIG.logoVectorize.panelLabel,
-        label: IMAGE_PRESET_EDIT_CONFIG.logoVectorize.label,
-        title: IMAGE_PRESET_EDIT_CONFIG.logoVectorize.tooltip,
-        icon: () => <FileText className="size-4" />,
-        run: (node, handlers) => handlers.onPresetEdit(node, "logoVectorize"),
-    },
-    {
         id: "decompose",
         defaultVisible: true,
         panelLabel: IMAGE_PRESET_EDIT_CONFIG.decompose.panelLabel,

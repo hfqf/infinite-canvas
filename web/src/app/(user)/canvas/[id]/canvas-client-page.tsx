@@ -1763,8 +1763,7 @@ function InfiniteCanvasPage() {
             }
             const presetConfig = IMAGE_PRESET_EDIT_CONFIG[preset];
             const source = { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey };
-            const shouldCreateSvg = preset === "vectorize" || preset === "logoVectorize";
-            if (shouldCreateSvg) {
+            if (preset === "vectorize") {
                 const svgId = nanoid();
                 setRunningNodeId(svgId);
                 setNodes((prev) => [
@@ -1772,7 +1771,7 @@ function InfiniteCanvasPage() {
                     {
                         id: svgId,
                         type: CanvasNodeType.Svg,
-                        title: preset === "logoVectorize" ? "Logo SVG" : "Vector SVG",
+                        title: "Vector SVG",
                         position: { x: node.position.x + node.width + 96, y: node.position.y },
                         width: node.width,
                         height: node.height,
@@ -1787,7 +1786,7 @@ function InfiniteCanvasPage() {
                 try {
                     const vectorizeDataUrl = await imageToDataUrl(source.dataUrl.startsWith("data:") ? { dataUrl: source.dataUrl } : { url: source.dataUrl, storageKey: source.storageKey });
                     if (!vectorizeDataUrl) throw new Error("读取图片失败");
-                    const svg = await requestVectorizeImage(vectorizeDataUrl, preset === "logoVectorize" ? "logo" : "general");
+                    const svg = await requestVectorizeImage(vectorizeDataUrl, "general");
                     const svgSize = fitNodeSize(svg.width, svg.height, node.width, node.height);
                     setNodes((prev) =>
                         prev.map((item) =>
