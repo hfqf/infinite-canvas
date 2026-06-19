@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +23,8 @@ const (
 	vectorizeMaxInputBytes = 40 << 20
 	vectorizeMimeType      = "image/svg+xml"
 )
+
+var svgFillHexPattern = regexp.MustCompile(`fill="#([0-9A-Fa-f]{6})"`)
 
 type VectorizeInput struct {
 	ImageURL string `json:"imageUrl"`
@@ -90,6 +94,9 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 	if err != nil {
 		return VectorizeResult{}, err
 	}
+	if isLogoVectorizeMode(input.Mode) {
+		svg = normalizeLogoSVG(svg)
+	}
 	if !strings.Contains(strings.ToLower(string(svg[:min(len(svg), 512)])), "<svg") {
 		return VectorizeResult{}, safeMessageError{message: "VTracer 没有生成有效 SVG"}
 	}
@@ -117,12 +124,12 @@ func vectorizeArgs(inputPath string, outputPath string, mode string) []string {
 		return append(args,
 			"--hierarchical", "stacked",
 			"--filter_speckle", "16",
-			"--color_precision", "4",
-			"--gradient_step", "32",
-			"--corner_threshold", "75",
-			"--segment_length", "8",
-			"--splice_threshold", "60",
-			"--path_precision", "3",
+			"--color_precision", "3",
+			"--gradient_step", "64",
+			"--corner_threshold", "90",
+			"--segment_length", "10",
+			"--splice_threshold", "90",
+			"--path_precision", "2",
 		)
 	}
 	return append(args,
@@ -161,6 +168,7 @@ func preprocessLogoImage(ctx context.Context, tempDir string, inputPath string) 
 		"-fuzz", "3%",
 		"-fill", "white",
 		"-opaque", "white",
+		"-posterize", "8",
 		"-median", "1",
 		"-strip",
 		outputPath,
@@ -173,6 +181,23 @@ func preprocessLogoImage(ctx context.Context, tempDir string, inputPath string) 
 		return "", fmt.Errorf("imagemagick failed: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 	return outputPath, nil
+}
+
+func normalizeLogoSVG(svg []byte) []byte {
+	return []byte(svgFillHexPattern.ReplaceAllStringFunc(string(svg), func(token string) string {
+		hex := token[len(`fill="#`) : len(token)-1]
+		rgb, err := strconv.ParseUint(hex, 16, 32)
+		if err != nil {
+			return token
+		}
+		r := uint8(rgb >> 16)
+		g := uint8(rgb >> 8)
+		b := uint8(rgb)
+		if r >= 248 && g >= 248 && b >= 248 {
+			return `fill="#FFFFFF"`
+		}
+		return token
+	}))
 }
 
 func resolveImageMagickPath() (string, error) {
