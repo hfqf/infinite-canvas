@@ -162,6 +162,10 @@ func isLogoVectorizeMode(mode string) bool {
 }
 
 func vectorizeLogoImage(ctx context.Context, tempDir string, inputPath string, outputPath string) error {
+	return vectorizeLogoGrayStraightImage(ctx, tempDir, inputPath, outputPath)
+}
+
+func vectorizeLogoGrayStraightImage(ctx context.Context, tempDir string, inputPath string, outputPath string) error {
 	imageMagickPath, err := resolveImageMagickPath()
 	if err != nil {
 		return err
@@ -206,15 +210,29 @@ func vectorizeLogoImage(ctx context.Context, tempDir string, inputPath string, o
 	sort.SliceStable(layers, func(i, j int) bool {
 		return logoLuma(layers[i].R, layers[i].G, layers[i].B) > logoLuma(layers[j].R, layers[j].G, layers[j].B)
 	})
+	detailFill := layers[len(layers)-1].Hex
 
 	var body strings.Builder
 	body.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
-	body.WriteString(fmt.Sprintf(`<svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">`, width, height, width, height) + "\n")
-	body.WriteString(fmt.Sprintf(`<rect width="%d" height="%d" fill="#FFFFFF"/>`, width, height) + "\n")
+	body.WriteString(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">`, width, height, width, height) + "\n")
+	body.WriteString(`<rect width="100%" height="100%" fill="#FFFFFF"/>` + "\n")
+	smallMaskPaths := make([]string, 0, len(layers))
 	for index, layer := range layers {
 		maskPath := filepath.Join(tempDir, fmt.Sprintf("logo-layer-%d.png", index))
-		if err := createLogoLayerMask(ctx, imageMagickPath, quantizedPath, layer.Colors, darkerLogoLayerColors(layers[index+1:]), maskPath); err != nil {
+		if err := createLogoGrayStraightLayerMask(ctx, imageMagickPath, quantizedPath, layer.Colors, darkerLogoLayerColors(layers[index+1:]), maskPath); err != nil {
 			return err
+		}
+		if index < len(layers)-1 {
+			layerSVGPath := filepath.Join(tempDir, fmt.Sprintf("logo-layer-%d.svg", index))
+			if err := runLogoLayerVTracer(ctx, vtracerPath, maskPath, layerSVGPath); err != nil {
+				return err
+			}
+			paths, err := readLogoLayerPaths(layerSVGPath, layer.Hex)
+			if err != nil {
+				return err
+			}
+			body.WriteString(paths)
+			continue
 		}
 		largeMaskPath := filepath.Join(tempDir, fmt.Sprintf("logo-layer-%d-large.png", index))
 		smallMaskPath := filepath.Join(tempDir, fmt.Sprintf("logo-layer-%d-small.png", index))
@@ -234,20 +252,27 @@ func vectorizeLogoImage(ctx context.Context, tempDir string, inputPath string, o
 			body.WriteString(paths)
 		}
 		if hasSmall {
-			smallGrayPath := filepath.Join(tempDir, fmt.Sprintf("logo-layer-%d-small-gray.pgm", index))
-			smallSVGPath := filepath.Join(tempDir, fmt.Sprintf("logo-layer-%d-small.svg", index))
-			if err := createLogoSmallGraySource(ctx, imageMagickPath, graySourcePath, smallMaskPath, smallGrayPath); err != nil {
-				return err
-			}
-			if err := runLogoSmallPotrace(ctx, imageMagickPath, mkbitmapPath, potracePath, smallGrayPath, smallSVGPath, layer.Hex); err != nil {
-				return err
-			}
-			group, err := readLogoPotraceGroup(smallSVGPath, layer.Hex, logoPotraceScale)
-			if err != nil {
-				return err
-			}
-			body.WriteString(group)
+			smallMaskPaths = append(smallMaskPaths, smallMaskPath)
 		}
+	}
+	if len(smallMaskPaths) > 0 {
+		smallMaskPath := filepath.Join(tempDir, "logo-small-mask.png")
+		smallGrayPath := filepath.Join(tempDir, "logo-small-gray.pgm")
+		smallSVGPath := filepath.Join(tempDir, "logo-small.svg")
+		if err := mergeLogoSmallMasks(ctx, imageMagickPath, smallMaskPaths, width, height, smallMaskPath); err != nil {
+			return err
+		}
+		if err := createLogoSmallGraySource(ctx, imageMagickPath, graySourcePath, smallMaskPath, smallGrayPath); err != nil {
+			return err
+		}
+		if err := runLogoSmallPotraceStraight(ctx, mkbitmapPath, potracePath, smallGrayPath, smallSVGPath, detailFill); err != nil {
+			return err
+		}
+		group, err := readLogoPotraceGroup(smallSVGPath, detailFill, logoPotraceScale)
+		if err != nil {
+			return err
+		}
+		body.WriteString(group)
 	}
 	body.WriteString("</svg>\n")
 	return os.WriteFile(outputPath, []byte(body.String()), 0o600)
@@ -490,7 +515,7 @@ func writePNG(path string, img image.Image) error {
 	return png.Encode(file, img)
 }
 
-func createLogoLayerMask(ctx context.Context, imageMagickPath string, inputPath string, colors []logoPaletteColor, excludeColors []logoPaletteColor, outputPath string) error {
+func createLogoGrayStraightLayerMask(ctx context.Context, imageMagickPath string, inputPath string, colors []logoPaletteColor, excludeColors []logoPaletteColor, outputPath string) error {
 	const maskMarkerColor = "#010203"
 	args := []string{inputPath}
 	for _, color := range colors {
@@ -508,7 +533,7 @@ func createLogoLayerMask(ctx context.Context, imageMagickPath string, inputPath 
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return safeMessageError{message: "Logo 色层清理超时，请稍后重试"}
 		}
-		return fmt.Errorf("imagemagick mask failed: %w: %s", err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("imagemagick gray-straight mask failed: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 	if len(excludeColors) > 0 {
 		excludePath := strings.TrimSuffix(outputPath, filepath.Ext(outputPath)) + "-exclude.png"
@@ -529,22 +554,22 @@ func createLogoLayerMask(ctx context.Context, imageMagickPath string, inputPath 
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				return safeMessageError{message: "Logo 色层贴边清理超时，请稍后重试"}
 			}
-			return fmt.Errorf("imagemagick exclude mask failed: %w: %s", err, strings.TrimSpace(string(output)))
+			return fmt.Errorf("imagemagick gray-straight exclude mask failed: %w: %s", err, strings.TrimSpace(string(output)))
 		}
 		cmd = exec.CommandContext(ctx, imageMagickPath, outputPath, excludePath, "-compose", "Lighten", "-composite", "-type", "bilevel", outputPath)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				return safeMessageError{message: "Logo 色层贴边清理超时，请稍后重试"}
 			}
-			return fmt.Errorf("imagemagick exclude composite failed: %w: %s", err, strings.TrimSpace(string(output)))
+			return fmt.Errorf("imagemagick gray-straight exclude composite failed: %w: %s", err, strings.TrimSpace(string(output)))
 		}
 	}
-	cmd = exec.CommandContext(ctx, imageMagickPath, outputPath, "-blur", "0x0.8", "-threshold", "50%", "-type", "bilevel", outputPath)
+	cmd = exec.CommandContext(ctx, imageMagickPath, outputPath, "-morphology", "Close", "Disk:1", "-morphology", "Open", "Disk:1", "-blur", "0x1.2", "-threshold", "47%", "-type", "bilevel", outputPath)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return safeMessageError{message: "Logo 色层几何平滑超时，请稍后重试"}
 		}
-		return fmt.Errorf("imagemagick smooth mask failed: %w: %s", err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("imagemagick gray-straight smooth mask failed: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 	return nil
 }
@@ -576,18 +601,26 @@ func createLogoSmallGraySource(ctx context.Context, imageMagickPath string, gray
 	return nil
 }
 
-func runLogoSmallPotrace(ctx context.Context, imageMagickPath string, mkbitmapPath string, potracePath string, inputPath string, outputPath string, fill string) error {
-	blurredPath := strings.TrimSuffix(outputPath, filepath.Ext(outputPath)) + "-gray.pgm"
-	bitmapPath := strings.TrimSuffix(outputPath, filepath.Ext(outputPath)) + ".pbm"
-	cmd := exec.CommandContext(ctx, imageMagickPath, inputPath, "-blur", "0x0.15", blurredPath)
+func mergeLogoSmallMasks(ctx context.Context, imageMagickPath string, maskPaths []string, width int, height int, outputPath string) error {
+	args := []string{"-size", fmt.Sprintf("%dx%d", width, height), "xc:white"}
+	for _, maskPath := range maskPaths {
+		args = append(args, maskPath, "-compose", "Darken", "-composite")
+	}
+	args = append(args, "-type", "bilevel", outputPath)
+	cmd := exec.CommandContext(ctx, imageMagickPath, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return safeMessageError{message: "Logo 小组件灰度平滑超时，请稍后重试"}
+			return safeMessageError{message: "Logo 小组件遮罩合并超时，请稍后重试"}
 		}
-		return fmt.Errorf("imagemagick small blur failed: %w: %s", err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("imagemagick small mask merge failed: %w: %s", err, strings.TrimSpace(string(output)))
 	}
-	args := []string{"-x", "-n", "-s", strconv.Itoa(logoPotraceScale), "-3", "-t", "0.57", "-o", bitmapPath, blurredPath}
-	cmd = exec.CommandContext(ctx, mkbitmapPath, args...)
+	return nil
+}
+
+func runLogoSmallPotraceStraight(ctx context.Context, mkbitmapPath string, potracePath string, inputPath string, outputPath string, fill string) error {
+	bitmapPath := strings.TrimSuffix(outputPath, filepath.Ext(outputPath)) + ".pbm"
+	args := []string{"-x", "-n", "-s", strconv.Itoa(logoPotraceScale), "-3", "-t", "0.57", "-o", bitmapPath, inputPath}
+	cmd := exec.CommandContext(ctx, mkbitmapPath, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return safeMessageError{message: "mkbitmap 小组件转换超时，请稍后重试"}
