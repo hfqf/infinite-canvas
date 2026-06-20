@@ -317,6 +317,7 @@ export const CanvasNode = React.memo(function CanvasNode({
                     />
                 </div>
 
+                {(hasImageContent || hasSvgContent) && data.metadata?.prompt && data.metadata.status !== "loading" ? <NodePromptBar prompt={data.metadata.prompt} lifted={showImageInfo && hasImageContent} /> : null}
                 {showImageInfo && hasImageContent ? <ImageInfoBar node={data} /> : null}
                 {resourceLabel ? <ResourceLabelBadge reference={resourceLabel} /> : null}
 
@@ -623,10 +624,25 @@ function ImageInfoBar({ node }: { node: CanvasNodeData }) {
     const height = Math.round(node.metadata?.naturalHeight || node.height);
     const size = formatBytes(node.metadata?.bytes || 0);
     return (
-        <div className="pointer-events-none absolute bottom-3 right-3 z-40 max-w-[calc(100%-24px)]">
+        <div className="pointer-events-none absolute bottom-3 right-3 z-40 max-w-[calc(100%_-_24px)]">
             <span className="max-w-full truncate rounded-md bg-black/55 px-2 py-1 text-[11px] font-medium leading-none text-white backdrop-blur-sm">
                 {width} x {height}
                 {size ? ` · ${size}` : ""}
+            </span>
+        </div>
+    );
+}
+
+function NodePromptBar({ prompt, lifted }: { prompt: string; lifted: boolean }) {
+    const text = prompt.trim();
+    if (!text) return null;
+    return (
+        <div className={`pointer-events-none absolute left-3 z-40 max-w-[min(420px,calc(100%_-_24px))] ${lifted ? "bottom-10" : "bottom-3"}`}>
+            <span
+                className="block overflow-hidden rounded-md bg-black/55 px-2 py-1.5 text-[11px] font-medium leading-[15px] text-white backdrop-blur-sm"
+                style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2 } as React.CSSProperties}
+            >
+                {text}
             </span>
         </div>
     );
