@@ -1786,7 +1786,7 @@ function InfiniteCanvasPage() {
                 try {
                     const vectorizeDataUrl = await imageToDataUrl(source.dataUrl.startsWith("data:") ? { dataUrl: source.dataUrl } : { url: source.dataUrl, storageKey: source.storageKey });
                     if (!vectorizeDataUrl) throw new Error("读取图片失败");
-                    const svg = await requestVectorizeImage(vectorizeDataUrl, "logo");
+                    const svg = await requestVectorizeImage(vectorizeDataUrl, "colorMask");
                     const svgSize = fitNodeSize(svg.width, svg.height, node.width, node.height);
                     setNodes((prev) =>
                         prev.map((item) =>

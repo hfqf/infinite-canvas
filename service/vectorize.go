@@ -94,8 +94,8 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	if isLogoVectorizeMode(input.Mode) {
-		if err := vectorizeLogoImage(ctx, tempDir, inputPath, outputPath); err != nil {
+	if shouldUseColorMaskVectorize(input.Mode) {
+		if err := vectorizeColorMaskImage(ctx, tempDir, inputPath, outputPath); err != nil {
 			return VectorizeResult{}, err
 		}
 	} else {
@@ -133,7 +133,7 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 		Height:   height,
 		Bytes:    len(svg),
 		MimeType: vectorizeMimeType,
-		Engine:   "vtracer",
+		Engine:   vectorizeEngine(input.Mode),
 	}, nil
 }
 
@@ -159,6 +159,18 @@ func vectorizeArgs(inputPath string, outputPath string) []string {
 
 func isLogoVectorizeMode(mode string) bool {
 	return strings.EqualFold(strings.TrimSpace(mode), "logo")
+}
+
+func shouldUseColorMaskVectorize(mode string) bool {
+	mode = strings.TrimSpace(strings.ToLower(mode))
+	return mode == "" || mode == "general" || mode == "logo" || mode == "colormask" || mode == "color-mask"
+}
+
+func vectorizeEngine(mode string) string {
+	if shouldUseColorMaskVectorize(mode) {
+		return "colorMask"
+	}
+	return "vtracer"
 }
 
 func vectorizeLogoImage(ctx context.Context, tempDir string, inputPath string, outputPath string) error {
