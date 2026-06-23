@@ -91,7 +91,7 @@ func Register(username string, password string) (model.AuthSession, error) {
 		Role:      model.UserRoleUser,
 		AffCode:   newAffCode(),
 		Status:    model.UserStatusActive,
-		Credits:   100,
+		Credits:   30,
 		CreatedAt: now(),
 		UpdatedAt: now(),
 	})
@@ -102,8 +102,8 @@ func Register(username string, password string) (model.AuthSession, error) {
 		ID:        newID("credit"),
 		UserID:    user.ID,
 		Type:      model.CreditLogTypeRegisterGift,
-		Amount:    100,
-		Balance:   100,
+		Amount:    30,
+		Balance:   30,
 		Remark:    "新用户注册赠送",
 		CreatedAt: now(),
 	})
@@ -193,7 +193,7 @@ func LoginWithLinuxDo(r *http.Request, code string, state string) (model.AuthSes
 			AffCode:     newAffCode(),
 			LinuxDoID:   linuxDoID,
 			Status:      model.UserStatusActive,
-			Credits:     100,
+			Credits:     30,
 			CreatedAt:   now(),
 		}
 	} else if user.Status == model.UserStatusBan {
@@ -215,8 +215,8 @@ func LoginWithLinuxDo(r *http.Request, code string, state string) (model.AuthSes
 			ID:        newID("credit"),
 			UserID:    user.ID,
 			Type:      model.CreditLogTypeRegisterGift,
-			Amount:    100,
-			Balance:   100,
+			Amount:    30,
+			Balance:   30,
 			Remark:    "新用户注册赠送",
 			CreatedAt: now(),
 		})
