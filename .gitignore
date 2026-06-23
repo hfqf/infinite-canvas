@@ -3,7 +3,11 @@ out/
 node_modules/
 .env*
 !.env.example
-data/
+data/*
+!data/wxpay/
+data/wxpay/*
+!data/wxpay/1483076642_cert/
+!data/wxpay/1483076642_cert/*.pem
 *.log
 *.tsbuildinfo
 .DS_Store
