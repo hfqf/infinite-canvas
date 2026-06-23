@@ -45,6 +45,8 @@ ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 ENV PROMPT_DATA_DIR=/app/data/prompts
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates imagemagick potrace && rm -rf /var/lib/apt/lists/*
+# Bump ImageMagick resource limits: 4096²×Q16×RGBA + morphology operations 容易撞 256MiB 缓存上限。
+RUN sed -i 's|name="memory" value="256MiB"|name="memory" value="2GiB"|; s|name="area" value="128MP"|name="area" value="256MP"|' /etc/ImageMagick-6/policy.xml
 RUN mkdir -p /app/data/prompts
 
 EXPOSE 3000
