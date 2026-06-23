@@ -12,28 +12,36 @@ func TestRechargeAmountValidation(t *testing.T) {
 			t.Fatalf("amount %d accepted, want validation error", amount)
 		}
 	}
+	for _, amountFen := range []int{0, 1, 5, 9, 11, 58, 60, 1000, 1200} {
+		if _, err := model.NewRechargeOrderByAmountFen("user_1", amountFen, "now"); err == nil {
+			t.Fatalf("amountFen %d accepted, want validation error", amountFen)
+		}
+	}
 
 	for _, item := range []struct {
-		amount      int
+		amountYuan  int
+		amountFen   int
 		credits     int
 		memberType  model.MemberType
 		memberLevel model.MemberLevel
 		productName string
 	}{
-		{amount: 59, credits: 590, memberType: model.MemberTypeMonthly, memberLevel: model.MemberLevelBasic, productName: "好图秀AI算力充值-月度-基础版"},
-		{amount: 99, credits: 1100, memberType: model.MemberTypeMonthly, memberLevel: model.MemberLevelAdvanced, productName: "好图秀AI算力充值-月度-高级版"},
-		{amount: 199, credits: 2488, memberType: model.MemberTypeMonthly, memberLevel: model.MemberLevelPremium, productName: "好图秀AI算力充值-月度-尊享版"},
-		{amount: 499, credits: 5000, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelStandard, productName: "好图秀AI算力充值-年度-普通版"},
-		{amount: 699, credits: 6996, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelBasic, productName: "好图秀AI算力充值-年度-基础版"},
-		{amount: 999, credits: 10020, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelAdvanced, productName: "好图秀AI算力充值-年度-高级版"},
-		{amount: 1999, credits: 21044, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelPremium, productName: "好图秀AI算力充值-年度-尊享版"},
+		{amountYuan: 59, amountFen: 5900, credits: 590, memberType: model.MemberTypeMonthly, memberLevel: model.MemberLevelBasic, productName: "好图秀AI算力充值-月度-基础版"},
+		{amountYuan: 99, amountFen: 9900, credits: 1100, memberType: model.MemberTypeMonthly, memberLevel: model.MemberLevelAdvanced, productName: "好图秀AI算力充值-月度-高级版"},
+		{amountYuan: 199, amountFen: 19900, credits: 2488, memberType: model.MemberTypeMonthly, memberLevel: model.MemberLevelPremium, productName: "好图秀AI算力充值-月度-尊享版"},
+		{amountYuan: 499, amountFen: 49900, credits: 5000, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelStandard, productName: "好图秀AI算力充值-年度-普通版"},
+		{amountYuan: 699, amountFen: 69900, credits: 6996, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelBasic, productName: "好图秀AI算力充值-年度-基础版"},
+		{amountYuan: 999, amountFen: 99900, credits: 10020, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelAdvanced, productName: "好图秀AI算力充值-年度-高级版"},
+		{amountYuan: 1999, amountFen: 199900, credits: 21044, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelPremium, productName: "好图秀AI算力充值-年度-尊享版"},
+		{amountYuan: 0, amountFen: 10, credits: 1, memberType: model.MemberTypeTest, memberLevel: model.MemberLevelTest, productName: "好图秀AI算力充值-测试-0.10元"},
+		{amountYuan: 0, amountFen: 50, credits: 5, memberType: model.MemberTypeTest, memberLevel: model.MemberLevelTest, productName: "好图秀AI算力充值-测试-0.50元"},
 	} {
-		order, err := model.NewRechargeOrder("user_1", item.amount, "now")
+		order, err := model.NewRechargeOrderByAmountFen("user_1", item.amountFen, "now")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if order.AmountFen != item.amount*100 || order.Credits != item.credits || order.MemberType != item.memberType || order.MemberLevel != item.memberLevel || order.ProductName != item.productName {
-			t.Fatalf("amount %d order=%#v, want amountFen=%d credits=%d memberType=%s memberLevel=%s productName=%s", item.amount, order, item.amount*100, item.credits, item.memberType, item.memberLevel, item.productName)
+		if order.AmountYuan != item.amountYuan || order.AmountFen != item.amountFen || order.Credits != item.credits || order.MemberType != item.memberType || order.MemberLevel != item.memberLevel || order.ProductName != item.productName {
+			t.Fatalf("amountFen %d order=%#v, want amountYuan=%d amountFen=%d credits=%d memberType=%s memberLevel=%s productName=%s", item.amountFen, order, item.amountYuan, item.amountFen, item.credits, item.memberType, item.memberLevel, item.productName)
 		}
 	}
 }

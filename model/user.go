@@ -20,6 +20,7 @@ type MemberType string
 const (
 	MemberTypeMonthly MemberType = "monthly"
 	MemberTypeAnnual  MemberType = "annual"
+	MemberTypeTest    MemberType = "test"
 )
 
 type MemberLevel string
@@ -29,6 +30,7 @@ const (
 	MemberLevelBasic    MemberLevel = "basic"
 	MemberLevelAdvanced MemberLevel = "advanced"
 	MemberLevelPremium  MemberLevel = "premium"
+	MemberLevelTest     MemberLevel = "test"
 )
 
 // User 系统用户。
@@ -143,6 +145,7 @@ const (
 )
 
 type RechargePlan struct {
+	AmountFen   int
 	AmountYuan  int
 	Credits     int
 	MemberType  MemberType
@@ -173,14 +176,18 @@ type RechargeOrder struct {
 }
 
 func NewRechargeOrder(userID string, amountYuan int, now string) (RechargeOrder, error) {
-	plan, ok := RechargePlanForAmount(amountYuan)
+	return NewRechargeOrderByAmountFen(userID, amountYuan*100, now)
+}
+
+func NewRechargeOrderByAmountFen(userID string, amountFen int, now string) (RechargeOrder, error) {
+	plan, ok := RechargePlanForAmountFen(amountFen)
 	if !ok {
 		return RechargeOrder{}, validationError("请选择有效充值套餐")
 	}
 	return RechargeOrder{
 		UserID:        userID,
-		AmountYuan:    amountYuan,
-		AmountFen:     amountYuan * 100,
+		AmountYuan:    plan.AmountYuan,
+		AmountFen:     plan.AmountFen,
 		Credits:       plan.Credits,
 		MemberType:    plan.MemberType,
 		MemberLevel:   plan.MemberLevel,
@@ -193,8 +200,12 @@ func NewRechargeOrder(userID string, amountYuan int, now string) (RechargeOrder,
 }
 
 func RechargePlanForAmount(amountYuan int) (RechargePlan, bool) {
+	return RechargePlanForAmountFen(amountYuan * 100)
+}
+
+func RechargePlanForAmountFen(amountFen int) (RechargePlan, bool) {
 	for _, plan := range rechargePlans() {
-		if plan.AmountYuan == amountYuan {
+		if plan.AmountFen == amountFen {
 			return plan, true
 		}
 	}
@@ -210,11 +221,17 @@ func rechargePlans() []RechargePlan {
 		newRechargePlan(699, 6996, MemberTypeAnnual, MemberLevelBasic, "年度", "基础版"),
 		newRechargePlan(999, 10020, MemberTypeAnnual, MemberLevelAdvanced, "年度", "高级版"),
 		newRechargePlan(1999, 21044, MemberTypeAnnual, MemberLevelPremium, "年度", "尊享版"),
+		newTestRechargePlan(10),
+		newTestRechargePlan(20),
+		newTestRechargePlan(30),
+		newTestRechargePlan(40),
+		newTestRechargePlan(50),
 	}
 }
 
 func newRechargePlan(amountYuan int, credits int, memberType MemberType, memberLevel MemberLevel, typeName string, levelName string) RechargePlan {
 	return RechargePlan{
+		AmountFen:   amountYuan * 100,
 		AmountYuan:  amountYuan,
 		Credits:     credits,
 		MemberType:  memberType,
@@ -223,6 +240,25 @@ func newRechargePlan(amountYuan int, credits int, memberType MemberType, memberL
 		LevelName:   levelName,
 		ProductName: "好图秀AI算力充值-" + typeName + "-" + levelName,
 	}
+}
+
+func newTestRechargePlan(amountFen int) RechargePlan {
+	return RechargePlan{
+		AmountFen:   amountFen,
+		AmountYuan:  0,
+		Credits:     amountFen / 10,
+		MemberType:  MemberTypeTest,
+		MemberLevel: MemberLevelTest,
+		TypeName:    "测试",
+		LevelName:   amountFenLabel(amountFen),
+		ProductName: "好图秀AI算力充值-测试-" + amountFenLabel(amountFen),
+	}
+}
+
+func amountFenLabel(amountFen int) string {
+	yuan := amountFen / 100
+	fen := amountFen % 100
+	return string(rune('0'+yuan)) + "." + string(rune('0'+fen/10)) + string(rune('0'+fen%10)) + "元"
 }
 
 type validationError string

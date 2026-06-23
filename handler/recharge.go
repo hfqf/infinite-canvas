@@ -11,6 +11,7 @@ import (
 
 type createRechargeOrderRequest struct {
 	AmountYuan int `json:"amountYuan"`
+	AmountFen  int `json:"amountFen"`
 }
 
 func CreateRechargeOrder(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +22,11 @@ func CreateRechargeOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	var request createRechargeOrderRequest
 	_ = json.NewDecoder(r.Body).Decode(&request)
-	order, err := service.CreateRechargeOrder(user.ID, request.AmountYuan, rechargeNotifyURL(r))
+	amountFen := request.AmountFen
+	if amountFen <= 0 {
+		amountFen = request.AmountYuan * 100
+	}
+	order, err := service.CreateRechargeOrder(user.ID, amountFen, rechargeNotifyURL(r))
 	if err != nil {
 		FailError(w, err)
 		return

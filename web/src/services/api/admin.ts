@@ -18,8 +18,8 @@ export type AdminUser = {
     avatarUrl: string;
     role: "user" | "admin";
     credits: number;
-    memberType: "" | "monthly" | "annual";
-    memberLevel: "" | "standard" | "basic" | "advanced" | "premium";
+    memberType: "" | "monthly" | "annual" | "test";
+    memberLevel: "" | "standard" | "basic" | "advanced" | "premium" | "test";
     lastRechargeAmountYuan: number;
     lastRechargedAt: string;
     affCode: string;

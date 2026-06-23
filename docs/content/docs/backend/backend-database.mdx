@@ -215,11 +215,11 @@ description: 当前后端主要数据表与字段说明
 | --- | --- | --- |
 | `id` | string | 主键 |
 | `user_id` | string | 关联用户 ID |
-| `amount_yuan` | number | 充值套餐金额，单位元，当前支持月度 `59`、`99`、`199`，年度 `499`、`699`、`999`、`1999` |
-| `amount_fen` | number | 充值金额，单位分 |
-| `credits` | number | 到账算力点，月度为 `59 元 = 590`、`99 元 = 1100`、`199 元 = 2488`，年度为 `499 元 = 5000`、`699 元 = 6996`、`999 元 = 10020`、`1999 元 = 21044` |
-| `member_type` | string | 订单购买的会员类型快照：`monthly`、`annual` |
-| `member_level` | string | 订单购买的会员级别快照：`standard`、`basic`、`advanced`、`premium` |
+| `amount_yuan` | number | 充值套餐金额，单位元，当前支持月度 `59`、`99`、`199`，年度 `499`、`699`、`999`、`1999`；测试支付订单为 `0` |
+| `amount_fen` | number | 充值金额，单位分；测试模式支持 `10`、`20`、`30`、`40`、`50` 分 |
+| `credits` | number | 到账算力点，月度为 `59 元 = 590`、`99 元 = 1100`、`199 元 = 2488`，年度为 `499 元 = 5000`、`699 元 = 6996`、`999 元 = 10020`、`1999 元 = 21044`，测试模式为 `0.10 元 = 1` 到 `0.50 元 = 5` |
+| `member_type` | string | 订单购买的会员类型快照：`monthly`、`annual`；测试支付为 `test` |
+| `member_level` | string | 订单购买的会员级别快照：`standard`、`basic`、`advanced`、`premium`；测试支付为 `test` |
 | `product_name` | string | 微信支付商品名，格式为 `好图秀AI算力充值-会员类型-会员级别` |
 | `status` | string | 订单状态：`pending`、`paid` |
 | `payment_method` | string | 支付方式，当前为 `wechat` |

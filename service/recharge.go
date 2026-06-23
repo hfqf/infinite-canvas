@@ -65,7 +65,7 @@ type wechatPayTransaction struct {
 	} `json:"amount"`
 }
 
-func CreateRechargeOrder(userID string, amountYuan int, notifyURL string) (RechargeOrderResult, error) {
+func CreateRechargeOrder(userID string, amountFen int, notifyURL string) (RechargeOrderResult, error) {
 	if !config.Cfg.WechatPayEnabled {
 		return RechargeOrderResult{}, safeMessageError{message: "微信支付暂未开启"}
 	}
@@ -76,7 +76,7 @@ func CreateRechargeOrder(userID string, amountYuan int, notifyURL string) (Recha
 	if !ok {
 		return RechargeOrderResult{}, safeMessageError{message: "用户不存在"}
 	}
-	order, err := model.NewRechargeOrder(user.ID, amountYuan, now())
+	order, err := model.NewRechargeOrderByAmountFen(user.ID, amountFen, now())
 	if err != nil {
 		return RechargeOrderResult{}, safeMessageError{message: err.Error()}
 	}

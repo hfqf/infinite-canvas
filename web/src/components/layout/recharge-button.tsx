@@ -43,6 +43,7 @@ type RechargePlan = {
 };
 
 const commonFeatures = ["4K 图片生成", "图片去除水印", "专享提示词库", "专享工作流库", "高清画质输出"];
+const testAmountFenOptions = [10, 20, 30, 40, 50];
 
 const rechargePlans: Record<RechargeMemberType, RechargePlan[]> = {
     monthly: [
@@ -219,11 +220,16 @@ export function RechargeButton({ className, style }: RechargeButtonProps) {
     const [open, setOpen] = useState(false);
     const [memberType, setMemberType] = useState<RechargeMemberType>("monthly");
     const [selectedPlanId, setSelectedPlanId] = useState<RechargePlanId>("monthly-advanced");
+    const [isTestRecharge, setIsTestRecharge] = useState(false);
     const [loading, setLoading] = useState(false);
     const [order, setOrder] = useState<RechargeOrder | null>(null);
     const plans = rechargePlans[memberType];
     const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) || plans[0];
     const title = memberType === "annual" ? "年度会员套餐对比表" : "会员套餐价目表";
+
+    useEffect(() => {
+        setIsTestRecharge(new URLSearchParams(window.location.search).get("test") === "1");
+    }, []);
 
     useEffect(() => {
         if (!open || !order || order.status !== "pending" || !token) return;
@@ -253,6 +259,21 @@ export function RechargeButton({ className, style }: RechargeButtonProps) {
             setOrder(await createRechargeOrder(token, selectedPlan.amountYuan));
         } catch (error) {
             message.error(error instanceof Error ? error.message : "创建充值订单失败");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const submitTest = async (amountFen: number) => {
+        if (!user || !token) {
+            message.info("请先登录");
+            return;
+        }
+        setLoading(true);
+        try {
+            setOrder(await createRechargeOrder(token, { amountFen }));
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "创建测试订单失败");
         } finally {
             setLoading(false);
         }
@@ -334,6 +355,18 @@ export function RechargeButton({ className, style }: RechargeButtonProps) {
                                 <Button type="primary" block loading={loading} className={`mt-4 border-0 bg-gradient-to-r ${selectedPlan.tone.button}`} onClick={() => void submit()}>
                                     {order?.status === "pending" ? `重新创建 ¥${selectedPlan.amountYuan} 订单` : `微信支付 ¥${selectedPlan.amountYuan}`}
                                 </Button>
+                                {isTestRecharge ? (
+                                    <div className="mt-4 rounded-md border border-amber-300/30 bg-amber-300/8 p-3">
+                                        <div className="mb-2 text-xs text-amber-100/80">测试支付入口</div>
+                                        <div className="grid grid-cols-5 gap-2">
+                                            {testAmountFenOptions.map((amountFen) => (
+                                                <button key={amountFen} type="button" disabled={loading} onClick={() => void submitTest(amountFen)} className="rounded border border-amber-300/35 bg-amber-300/12 px-2 py-1.5 text-xs font-medium text-amber-100 transition hover:bg-amber-300/20 disabled:cursor-not-allowed disabled:opacity-50">
+                                                    ¥{formatAmountFen(amountFen)}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : null}
                                 {order ? <OrderQrPanel order={order} fallbackPlan={selectedPlan} /> : null}
                             </div>
                         </div>
@@ -346,6 +379,7 @@ export function RechargeButton({ className, style }: RechargeButtonProps) {
 
 function OrderQrPanel({ order, fallbackPlan }: { order: RechargeOrder; fallbackPlan: RechargePlan }) {
     const codeUrl = order.codeUrl?.trim();
+    const amountLabel = formatAmountFen(order.amountFen);
     return (
         <div className="mt-4 flex flex-col items-center gap-3 rounded-md border border-sky-400/35 bg-slate-950/82 p-3 text-center shadow-[0_0_34px_rgba(56,189,248,0.16)]">
             {order.status === "paid" ? (
@@ -356,13 +390,18 @@ function OrderQrPanel({ order, fallbackPlan }: { order: RechargeOrder; fallbackP
                         {codeUrl ? <QRCodeSVG value={codeUrl} size={156} level="M" marginSize={2} bgColor="#ffffff" fgColor="#000000" title="微信支付二维码" /> : <div className="grid h-[156px] w-[156px] place-items-center text-sm text-slate-500">二维码生成中</div>}
                     </div>
                     <div className="text-sm leading-6 text-sky-50/76">
-                        <div className="font-medium text-white">微信扫码支付 ¥{order.amountYuan}</div>
+                        <div className="font-medium text-white">微信扫码支付 ¥{amountLabel}</div>
                         <div>购买 {order.productName || `${fallbackPlan.typeName}${fallbackPlan.levelName}`}，到账 {order.credits.toLocaleString()} 积分</div>
                     </div>
                 </>
             )}
         </div>
     );
+}
+
+function formatAmountFen(amountFen: number) {
+    if (amountFen % 100 === 0) return String(amountFen / 100);
+    return (amountFen / 100).toFixed(2);
 }
 
 function PlanCard({ plan, selected, onSelect }: { plan: RechargePlan; selected: boolean; onSelect: () => void }) {
