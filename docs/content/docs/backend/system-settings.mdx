@@ -89,6 +89,8 @@ description: settings 表中 public 和 private 配置结构说明
       "models": ["gpt-5.5", "gpt-image-2"],
       "weight": 1,
       "enabled": true,
+      "failureThreshold": 3,
+      "cooldownSeconds": 120,
       "remark": ""
     }
   ],
@@ -115,9 +117,11 @@ description: settings 表中 public 和 private 配置结构说明
 | `models` | string[] | 该渠道可用模型 |
 | `weight` | number | 渠道权重；同一模型有多个可用渠道时按权重随机 |
 | `enabled` | boolean | 是否启用 |
+| `failureThreshold` | number | 连续失败达到该次数后临时跳过此渠道，默认 `3` |
+| `cooldownSeconds` | number | 渠道进入冷却后跳过的秒数，默认 `120` |
 | `remark` | string | 备注 |
 
-后端调用模型时，会从已启用、已配置 `baseUrl` 和 `apiKey`、且 `models` 包含目标模型的渠道中选择一个。
+后端调用模型时，会从已启用、已配置 `baseUrl` 和 `apiKey`、且 `models` 包含目标模型的渠道中选择一个。图片生成和图片编辑请求遇到网络错误、`429` 或 `5xx` 时，会在同一次请求内尝试同模型的其他可用渠道；达到 `failureThreshold` 的渠道会按本次图片请求超时时长临时跳过，超时时长为 `参考图数量 * 60 + 基础秒数`，基础秒数非 4K 为 `120`、4K 为 `180`。`400`、`401`、`403` 等参数或权限错误不会自动切换备用渠道。
 
 `promptSync` 字段：
 

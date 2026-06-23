@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/basketikun/infinite-canvas/model"
 	"github.com/basketikun/infinite-canvas/service"
 )
 
@@ -90,32 +91,157 @@ func proxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		Fail(w, "AI 接口请求失败")
 		return
 	}
-	channel, err := service.SelectModelChannel(modelName)
-	if err != nil {
-		log.Printf("AI proxy select channel failed: model=%s err=%v", modelName, err)
-		Fail(w, "AI 接口请求失败")
-		return
-	}
-	path = resolveAIProxyPath(channel.BaseURL, modelName, path)
-	request, err := http.NewRequest(http.MethodPost, service.BuildModelChannelURL(channel, path), bytes.NewReader(body))
-	if err != nil {
-		log.Printf("AI proxy build request failed: url=%s err=%v", service.BuildModelChannelURL(channel, path), err)
-		Fail(w, "AI 接口请求失败")
-		return
-	}
-	request.Header.Set("Authorization", "Bearer "+channel.APIKey)
-	if contentType != "" {
-		request.Header.Set("Content-Type", contentType)
+	var imageChannels []model.ModelChannel
+	var request *http.Request
+	if isImageRequestPath(path) {
+		imageChannels, err = service.SelectModelChannels(modelName)
+		if err != nil {
+			log.Printf("AI proxy select channels failed: model=%s err=%v", modelName, err)
+			Fail(w, "AI 接口请求失败")
+			return
+		}
+	} else {
+		channel, err := service.SelectModelChannel(modelName)
+		if err != nil {
+			log.Printf("AI proxy select channel failed: model=%s err=%v", modelName, err)
+			Fail(w, "AI 接口请求失败")
+			return
+		}
+		request, err = buildAIProxyRequest(channel, modelName, path, body, contentType)
+		if err != nil {
+			log.Printf("AI proxy build request failed: model=%s channel=%s err=%v", modelName, channel.Name, err)
+			Fail(w, "AI 接口请求失败")
+			return
+		}
 	}
 	if err := service.ConsumeUserCredits(user.ID, modelName, credits, path); err != nil {
 		FailError(w, err)
 		return
 	}
-	copyAIResponse(w, request, func() {
+	refund := func() {
 		if err := service.RefundUserCredits(user.ID, modelName, credits, path); err != nil {
 			log.Printf("AI proxy refund credits failed: user=%s model=%s credits=%d err=%v", user.ID, modelName, credits, err)
 		}
-	})
+	}
+	if isImageRequestPath(path) {
+		copyAIImageResponseWithFallback(w, imageChannels, modelName, path, body, contentType, refund)
+		return
+	}
+	copyAIResponse(w, request, refund)
+}
+
+type aiProxyAttemptResult struct {
+	statusCode int
+	header     http.Header
+	body       []byte
+	message    string
+	retryable  bool
+}
+
+const (
+	aiImageFailureCooldownSeconds   = 120
+	aiImage4KFailureCooldownSeconds = 180
+	aiImageReferenceTimeoutSeconds  = 60
+)
+
+func copyAIImageResponseWithFallback(w http.ResponseWriter, channels []model.ModelChannel, modelName string, path string, body []byte, contentType string, onFailure func()) {
+	lastResult := aiProxyAttemptResult{message: "AI 接口请求失败"}
+	timeoutSeconds := aiImageRequestTimeoutSeconds(body, contentType)
+	for index, channel := range channels {
+		request, err := buildAIProxyRequest(channel, modelName, path, body, contentType)
+		if err != nil {
+			log.Printf("AI proxy build request failed: model=%s channel=%s err=%v", modelName, channel.Name, err)
+			service.RecordModelChannelFailureWithCooldown(channel, timeoutSeconds)
+			lastResult = aiProxyAttemptResult{message: "AI 接口请求失败", retryable: true}
+			continue
+		}
+		result := fetchAIImageResponse(request, time.Duration(timeoutSeconds)*time.Second)
+		if result.statusCode < http.StatusBadRequest && result.message == "" {
+			service.RecordModelChannelSuccess(channel)
+			writeAIProxySuccess(w, result)
+			return
+		}
+		lastResult = result
+		if result.retryable {
+			service.RecordModelChannelFailureWithCooldown(channel, timeoutSeconds)
+			log.Printf("AI proxy retryable failure: model=%s channel=%s status=%d attempt=%d/%d", modelName, channel.Name, result.statusCode, index+1, len(channels))
+			continue
+		}
+		onFailure()
+		Fail(w, result.message)
+		return
+	}
+	onFailure()
+	Fail(w, lastResult.message)
+}
+
+func aiImageRequestTimeoutSeconds(body []byte, contentType string) int {
+	seconds := readAIReferenceImageCount(body, contentType) * aiImageReferenceTimeoutSeconds
+	if is4KImageRequest(body, contentType) {
+		return seconds + aiImage4KFailureCooldownSeconds
+	}
+	return seconds + aiImageFailureCooldownSeconds
+}
+
+func buildAIProxyRequest(channel model.ModelChannel, modelName string, path string, body []byte, contentType string) (*http.Request, error) {
+	resolvedPath := resolveAIProxyPath(channel.BaseURL, modelName, path)
+	request, err := http.NewRequest(http.MethodPost, service.BuildModelChannelURL(channel, resolvedPath), bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+channel.APIKey)
+	if contentType != "" {
+		request.Header.Set("Content-Type", contentType)
+	}
+	return request, nil
+}
+
+func fetchAIImageResponse(request *http.Request, timeout time.Duration) aiProxyAttemptResult {
+	client := &http.Client{Timeout: timeout}
+	response, err := client.Do(request)
+	if err != nil {
+		log.Printf("AI proxy request failed: url=%s err=%v", request.URL.String(), err)
+		return aiProxyAttemptResult{message: "AI 接口请求失败", retryable: true}
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= http.StatusBadRequest {
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+		log.Printf("AI upstream error: url=%s status=%d", request.URL.String(), response.StatusCode)
+		return aiProxyAttemptResult{
+			statusCode: response.StatusCode,
+			message:    aiUpstreamStatusMessage(response.StatusCode, body),
+			retryable:  isRetryableAIProxyStatus(response.StatusCode),
+		}
+	}
+	body, readErr := io.ReadAll(io.LimitReader(response.Body, 16<<20))
+	if readErr != nil {
+		return aiProxyAttemptResult{message: "AI 接口请求失败", retryable: true}
+	}
+	if shouldNormalizeImagesResponse(request.URL.Path) {
+		finalBody, polled := pollAicodemeImageTaskIfNeeded(request, body, response.Header)
+		if polled {
+			body = finalBody
+		}
+		if normalized, ok := normalizeAicodemeImagesResponse(body); ok {
+			body = normalized
+		}
+	}
+	return aiProxyAttemptResult{statusCode: response.StatusCode, header: response.Header, body: body}
+}
+
+func writeAIProxySuccess(w http.ResponseWriter, result aiProxyAttemptResult) {
+	copyHeaders(w.Header(), result.header)
+	if contentType := result.header.Get("Content-Type"); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+	}
+	w.WriteHeader(result.statusCode)
+	_, _ = w.Write(result.body)
+}
+
+func isRetryableAIProxyStatus(status int) bool {
+	return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
 func copyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func()) {
@@ -229,7 +355,7 @@ func normalizeAicodemeImagesResponse(body []byte) ([]byte, bool) {
 		B64JSON string `json:"b64_json,omitempty"`
 	}
 	type openAIResp struct {
-		Created int64           `json:"created"`
+		Created int64            `json:"created"`
 		Data    []openAIDataItem `json:"data"`
 	}
 	out := openAIResp{
@@ -465,6 +591,22 @@ func readAIImageRequestSizeQuality(body []byte, contentType string) (string, str
 	}
 	_ = json.Unmarshal(body, &payload)
 	return payload.Size, payload.Quality
+}
+
+func readAIReferenceImageCount(body []byte, contentType string) int {
+	if !strings.HasPrefix(contentType, "multipart/form-data") {
+		return 0
+	}
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return 0
+	}
+	form, err := multipart.NewReader(bytes.NewReader(body), params["boundary"]).ReadForm(32 << 20)
+	if err != nil {
+		return 0
+	}
+	defer form.RemoveAll()
+	return len(form.File["image"])
 }
 
 func firstFormValue(values []string) string {

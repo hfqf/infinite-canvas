@@ -40,7 +40,7 @@ const emptySettings: AdminSettings = {
     },
     private: { channels: [], promptSync: { enabled: true, cron: "*/5 * * * *" }, auth: { linuxDo: { clientId: "", clientSecret: "" } } },
 };
-const emptyChannel: AdminModelChannel = { protocol: "openai", name: "", baseUrl: "", apiKey: "", models: [], weight: 1, enabled: true, remark: "" };
+const emptyChannel: AdminModelChannel = { protocol: "openai", name: "", baseUrl: "", apiKey: "", models: [], weight: 1, enabled: true, failureThreshold: 3, cooldownSeconds: 120, remark: "" };
 
 type SettingsTabKey = "public" | "private";
 type EditorMode = "visual" | "json";
@@ -569,6 +569,8 @@ export default function AdminSettingsPage() {
                                             ),
                                         },
                                         { title: "权重", dataIndex: "weight", width: 88 },
+                                        { title: "失败阈值", dataIndex: "failureThreshold", width: 104 },
+                                        { title: "冷却秒数", dataIndex: "cooldownSeconds", width: 104 },
                                         {
                                             title: "操作",
                                             key: "actions",
@@ -648,6 +650,16 @@ export default function AdminSettingsPage() {
                             <Col span={12}>
                                 <Form.Item name="enabled" label="启用" valuePropName="checked">
                                     <Switch />
+                                </Form.Item>
+                            </Col>
+                            <Col span={12}>
+                                <Form.Item name="failureThreshold" label="失败阈值" extra="连续失败达到该次数后临时跳过此渠道">
+                                    <InputNumber min={1} step={1} className="!w-full" />
+                                </Form.Item>
+                            </Col>
+                            <Col span={12}>
+                                <Form.Item name="cooldownSeconds" label="冷却秒数" extra="普通生图默认 120 秒；4K 生图失败时固定冷却 180 秒">
+                                    <InputNumber min={1} step={1} className="!w-full" />
                                 </Form.Item>
                             </Col>
                             <Col span={24}>
@@ -878,6 +890,8 @@ function normalizeChannel(item: Partial<AdminModelChannel> = {}): AdminModelChan
         models: item.models || [],
         weight: Math.max(1, Number(item.weight) || 1),
         enabled: item.enabled !== false,
+        failureThreshold: Math.max(1, Number(item.failureThreshold) || 3),
+        cooldownSeconds: Math.max(1, Number(item.cooldownSeconds) || 120),
         remark: item.remark || "",
     };
 }

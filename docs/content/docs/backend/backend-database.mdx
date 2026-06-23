@@ -157,6 +157,8 @@ description: 当前后端主要数据表与字段说明
 | `models` | string[] | 渠道可用模型列表 |
 | `weight` | number | 渠道权重，同一模型命中多个渠道时按权重随机 |
 | `enabled` | bool | 是否启用 |
+| `failureThreshold` | number | 连续失败熔断阈值，默认 `3` |
+| `cooldownSeconds` | number | 熔断后临时跳过秒数，默认 `120` |
 | `remark` | string | 备注 |
 
 `promptSync` 字段：
@@ -173,7 +175,7 @@ description: 当前后端主要数据表与字段说明
 | `clientId` | string | Linux.do OAuth App Client ID |
 | `clientSecret` | string | Linux.do OAuth App Client Secret，后台返回时隐藏 |
 
-后端请求模型时，先按模型名筛选启用且包含该模型的渠道，再按 `weight` 加权随机选择一个渠道。
+后端请求模型时，先按模型名筛选启用且包含该模型的渠道，再按 `weight` 加权随机选择一个渠道。图片生成和图片编辑请求遇到网络错误、`429` 或 `5xx` 时，会在同一次请求内尝试同模型的其他可用渠道；达到连续失败阈值的渠道会按本次图片请求超时时长临时跳过，超时时长为 `参考图数量 * 60 + 基础秒数`，基础秒数非 4K 为 `120`、4K 为 `180`。
 
 ### credit_logs
 

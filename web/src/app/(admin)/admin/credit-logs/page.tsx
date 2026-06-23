@@ -2,11 +2,13 @@
 
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Button, Card, Col, Form, Input, InputNumber, Modal, Row, Space, Tag, Tooltip, Typography } from "antd";
+import { useQuery } from "@tanstack/react-query";
+import { Button, Card, Col, Form, Input, InputNumber, Modal, Row, Select, Space, Tag, Tooltip, Typography } from "antd";
 import dayjs from "dayjs";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import type { AdminCreditLog } from "@/services/api/admin";
+import { fetchAdminUsers, type AdminCreditLog, type AdminUser } from "@/services/api/admin";
+import { useUserStore } from "@/stores/use-user-store";
 import { useAdminCreditLogs } from "./use-admin-credit-logs";
 
 type CreditLogFormValues = Partial<AdminCreditLog>;
@@ -19,10 +21,19 @@ const creditLogTypeLabels: Record<string, string> = {
 
 export default function AdminCreditLogsPage() {
     const { logs, keyword, page, pageSize, total, isLoading, searchLogs, changePage, changePageSize, resetFilters, refreshLogs, saveLog: saveAdminLog, deleteLog } = useAdminCreditLogs();
+    const token = useUserStore((state) => state.token);
     const [form] = Form.useForm<CreditLogFormValues>();
     const [keywordText, setKeywordText] = useState(keyword);
+    const [userKeyword, setUserKeyword] = useState("");
     const [editingLog, setEditingLog] = useState<Partial<AdminCreditLog> | null>(null);
     const [deletingLog, setDeletingLog] = useState<AdminCreditLog | null>(null);
+    const usersQuery = useQuery({
+        queryKey: ["admin", "credit-log-users", token, userKeyword],
+        queryFn: () => fetchAdminUsers(token, { keyword: userKeyword, page: 1, pageSize: 30 }),
+        enabled: Boolean(token && editingLog),
+        retry: false,
+    });
+    const userOptions = useMemo(() => buildUserOptions(usersQuery.data?.items || [], editingLog?.userId), [editingLog?.userId, usersQuery.data?.items]);
 
     useEffect(() => setKeywordText(keyword), [keyword]);
 
@@ -158,8 +169,8 @@ export default function AdminCreditLogsPage() {
                 <Form form={form} layout="vertical" requiredMark={false}>
                     <Row gutter={14}>
                         <Col span={12}>
-                            <Form.Item name="userId" label="用户 ID" rules={[{ required: true, message: "请输入用户 ID" }]}>
-                                <Input />
+                            <Form.Item name="userId" label="用户" rules={[{ required: true, message: "请选择用户" }]}>
+                                <Select showSearch={{ filterOption: false, onSearch: setUserKeyword }} allowClear placeholder="搜索用户名、昵称、邮箱或用户 ID" options={userOptions} loading={usersQuery.isFetching} onOpenChange={(open) => open && setUserKeyword("")} />
                             </Form.Item>
                         </Col>
                         <Col span={12}>
@@ -218,4 +229,21 @@ export default function AdminCreditLogsPage() {
             </Modal>
         </main>
     );
+}
+
+function buildUserOptions(users: AdminUser[], currentUserId?: string) {
+    const options = users.map((user) => ({
+        label: userOptionLabel(user),
+        value: user.id,
+    }));
+    if (currentUserId && !options.some((option) => option.value === currentUserId)) {
+        options.unshift({ label: currentUserId, value: currentUserId });
+    }
+    return options;
+}
+
+function userOptionLabel(user: AdminUser) {
+    const name = user.displayName || user.username || user.email || user.id;
+    const meta = [user.username && user.username !== name ? user.username : "", user.email, user.id].filter(Boolean).join(" / ");
+    return meta ? `${name} (${meta})` : name;
 }

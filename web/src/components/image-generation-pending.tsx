@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 
 import { formatDuration } from "@/lib/image-utils";
+import { imageWaitDetailText, type ImageWaitInfo } from "@/lib/image-wait-time";
 import { cn } from "@/lib/utils";
 
 const pendingMessages = ["正在创建图片", "马上就好了", "再等等", "正在整理细节"];
 
-export function ImageGenerationPending({ className, label, compact = false }: { className?: string; label?: string; compact?: boolean }) {
+export function ImageGenerationPending({ className, label, compact = false, waitInfo }: { className?: string; label?: string; compact?: boolean; waitInfo?: ImageWaitInfo }) {
     const [tick, setTick] = useState(0);
 
     useEffect(() => {
@@ -33,6 +34,12 @@ export function ImageGenerationPending({ className, label, compact = false }: { 
                 <LoaderCircle className="size-4 animate-spin" />
                 <span>{label || pendingMessages[index]}</span>
             </div>
+            {waitInfo ? (
+                <div className="absolute inset-x-4 top-14 rounded-md bg-white/70 px-3 py-2 text-xs leading-5 text-stone-500 shadow-sm backdrop-blur dark:bg-stone-950/45 dark:text-stone-300">
+                    <div className="font-medium text-stone-700 dark:text-stone-100">预计 {formatDuration(waitInfo.seconds * 1000)} 左右</div>
+                    <div>{imageWaitDetailText(waitInfo)}</div>
+                </div>
+            ) : null}
             <div className="absolute bottom-4 left-4 right-4">
                 <div className="mb-2 flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
                     <span>{formatDuration(tick * 1000)}</span>

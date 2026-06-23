@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, ImagePlus, LoaderCircle, PenLine, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, ImagePlus, PenLine, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { App, Button, Checkbox, Drawer, Empty, Image, Input, Modal, Tag, Tooltip, Typography } from "antd";
 import localforage from "localforage";
@@ -10,8 +10,10 @@ import { ImageSettingsPanel } from "@/components/image-settings-panel";
 import { ModelPicker } from "@/components/model-picker";
 import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
 import { AssetPickerModal, type InsertAssetPayload } from "@/app/(user)/canvas/components/asset-picker-modal";
+import { ImageGenerationPending } from "@/components/image-generation-pending";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { imageReferenceLabel } from "@/lib/image-reference-prompt";
+import { imageGenerationWaitInfo, type ImageWaitInfo } from "@/lib/image-wait-time";
 import { useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { nanoid } from "nanoid";
@@ -87,6 +89,7 @@ export default function ImagePage() {
     const [assetPickerOpen, setAssetPickerOpen] = useState(false);
     const [startedAt, setStartedAt] = useState(0);
     const [elapsedMs, setElapsedMs] = useState(0);
+    const [pendingWaitInfo, setPendingWaitInfo] = useState<ImageWaitInfo | undefined>();
     const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
     const [previewLog, setPreviewLog] = useState<GenerationLog | null>(null);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -155,6 +158,7 @@ export default function ImagePage() {
         setElapsedMs(0);
         setRunning(true);
         setPreviewLog(null);
+        setPendingWaitInfo(imageGenerationWaitInfo({ size: snapshot.config.size, quality: snapshot.config.quality, referenceCount: snapshot.references.length }));
         setResults(Array.from({ length: generationCount }, () => ({ id: nanoid(), status: "pending" })));
         const batchStartedAt = performance.now();
         setStartedAt(batchStartedAt);
@@ -265,6 +269,7 @@ export default function ImagePage() {
         if (log.config.quality) updateConfig("quality", log.config.quality);
         if (log.config.size) updateConfig("size", log.config.size);
         if (log.config.count) updateConfig("count", log.config.count);
+        setPendingWaitInfo(undefined);
         setResults(log.images.map((image) => ({ id: image.id, status: "success", image })));
     };
 
@@ -302,6 +307,7 @@ export default function ImagePage() {
         const snapshot = buildRequestSnapshot();
         if (!snapshot) return;
         setPreviewLog(null);
+        setPendingWaitInfo(imageGenerationWaitInfo({ size: snapshot.config.size, quality: snapshot.config.quality, referenceCount: snapshot.references.length }));
         setResults((value) => updateResultAt(value, index, { status: "pending", error: undefined, image: undefined }));
         void runGenerationSlot(index, snapshot).catch(() => {});
     };
@@ -430,7 +436,7 @@ export default function ImagePage() {
                                     ) : result.status === "failed" ? (
                                         <FailedImageCard key={result.id} error={result.error || "生成失败"} onRetry={() => retryResult(index)} />
                                     ) : (
-                                        <PendingImageCard key={result.id} />
+                                        <PendingImageCard key={result.id} waitInfo={pendingWaitInfo} />
                                     ),
                                 )}
                             </div>
@@ -541,22 +547,8 @@ function ResultImageCard({
     );
 }
 
-function PendingImageCard() {
-    return (
-        <div className="relative aspect-square overflow-hidden rounded-lg border border-dashed border-stone-300 bg-stone-50 dark:border-stone-700 dark:bg-stone-900">
-            <div
-                className="absolute inset-0 opacity-60"
-                style={{
-                    backgroundImage: "radial-gradient(circle, rgba(120,113,108,0.35) 1.4px, transparent 1.6px)",
-                    backgroundSize: "16px 16px",
-                }}
-            />
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-stone-500 dark:text-stone-400">
-                <LoaderCircle className="size-6 animate-spin" />
-                <span>生成中</span>
-            </div>
-        </div>
-    );
+function PendingImageCard({ waitInfo }: { waitInfo?: ImageWaitInfo }) {
+    return <ImageGenerationPending className="aspect-square rounded-lg border border-dashed border-stone-300 dark:border-stone-700" label="生成中" waitInfo={waitInfo} />;
 }
 
 function FailedImageCard({ error, onRetry }: { error: string; onRetry: () => void }) {

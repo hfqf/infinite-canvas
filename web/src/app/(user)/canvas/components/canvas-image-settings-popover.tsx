@@ -89,9 +89,9 @@ function ImageSettingsPortal({
     config: AiConfig;
     onConfigChange: (key: keyof AiConfig, value: string) => void;
 }) {
-    const width = 356;
     const gap = 8;
     const margin = 12;
+    const width = Math.min(456, window.innerWidth - margin * 2);
     const alignRight = placement?.endsWith("Right");
     const alignCenter = placement === "top" || placement === "bottom";
     const left = alignCenter ? buttonRect.left + buttonRect.width / 2 - width / 2 : alignRight ? buttonRect.right - width : buttonRect.left;
@@ -103,9 +103,9 @@ function ImageSettingsPortal({
         left: Math.max(margin, Math.min(window.innerWidth - width - margin, left)),
         ...(topPlacement ? { bottom: window.innerHeight - buttonRect.top + gap, maxHeight: Math.max(260, buttonRect.top - margin * 2) } : { top: buttonRect.bottom + gap, maxHeight: Math.max(260, window.innerHeight - buttonRect.bottom - margin * 2) }),
         background: theme.toolbar.panel,
-        borderRadius: 18,
+        borderRadius: 10,
         boxShadow: "0 18px 54px rgba(28, 25, 23, 0.16)",
-        padding: 18,
+        padding: 20,
         overflowY: "auto",
         color: theme.node.text,
     } as const;
@@ -119,7 +119,7 @@ function ImageSettingsPortal({
             onMouseDown={(event) => event.stopPropagation()}
             onClick={(event) => event.stopPropagation()}
         >
-            <ImageSettingsPanel config={config} onConfigChange={(key, value) => onConfigChange(key, value)} theme={theme} className="space-y-4" />
+            <ImageSettingsPanel config={config} onConfigChange={(key, value) => onConfigChange(key, value)} theme={theme} className="space-y-5" variant="canvas" />
         </div>,
         document.body,
     );

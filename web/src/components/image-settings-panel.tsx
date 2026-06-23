@@ -14,7 +14,9 @@ const qualityOptions = [
 ];
 const DIMENSION_STEP = 16;
 
-const aspectOptions = [
+type AspectOption = { value: string; label: string; width: number; height: number; icon: string; size?: string };
+
+const aspectOptions: AspectOption[] = [
     { value: "1:1", label: "1:1", width: 1024, height: 1024, icon: "square" },
     { value: "3:2", label: "3:2", width: 1536, height: 1024, icon: "landscape" },
     { value: "2:3", label: "2:3", width: 1024, height: 1536, icon: "portrait" },
@@ -29,6 +31,29 @@ const aspectOptions = [
     { value: "9:16-4k", label: "9:16(4k)", size: "2160x3840", width: 2160, height: 3840, icon: "portrait" },
     { value: "auto", label: "auto", width: 0, height: 0, icon: "auto" },
 ];
+const canvasAspectOptions: AspectOption[] = [
+    { value: "custom", label: "自定义", width: 0, height: 0, icon: "custom" },
+    { value: "1:1", label: "1:1", width: 1, height: 1, icon: "square" },
+    { value: "1:2", label: "1:2", width: 1, height: 2, icon: "portrait" },
+    { value: "2:1", label: "2:1", width: 2, height: 1, icon: "landscape" },
+    { value: "9:16", label: "9:16", width: 9, height: 16, icon: "portrait" },
+    { value: "16:9", label: "16:9", width: 16, height: 9, icon: "landscape" },
+    { value: "3:4", label: "3:4", width: 3, height: 4, icon: "portrait" },
+    { value: "4:3", label: "4:3", width: 4, height: 3, icon: "landscape" },
+    { value: "3:2", label: "3:2", width: 3, height: 2, icon: "landscape" },
+    { value: "2:3", label: "2:3", width: 2, height: 3, icon: "portrait" },
+    { value: "5:4", label: "5:4", width: 5, height: 4, icon: "landscape" },
+    { value: "4:5", label: "4:5", width: 4, height: 5, icon: "portrait" },
+    { value: "21:9", label: "21:9", width: 21, height: 9, icon: "landscape" },
+    { value: "9:21", label: "9:21", width: 9, height: 21, icon: "portrait" },
+    { value: "3:1", label: "3:1", width: 3, height: 1, icon: "landscape" },
+    { value: "1:3", label: "1:3", width: 1, height: 3, icon: "portrait" },
+];
+const resolutionOptions = [
+    { value: "1k", label: "1K" },
+    { value: "2k", label: "2K" },
+    { value: "4k", label: "4K" },
+];
 
 type ImageSettingsPanelProps = {
     config: AiConfig;
@@ -38,18 +63,27 @@ type ImageSettingsPanelProps = {
     className?: string;
     maxCount?: number;
     quickCount?: number;
+    variant?: "default" | "canvas";
 };
 
-export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10 }: ImageSettingsPanelProps) {
+export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10, variant = "default" }: ImageSettingsPanelProps) {
     const [snapDimensionToStep, setSnapDimensionToStep] = useState(true);
+    const isCanvas = variant === "canvas";
     const quality = config.quality || "auto";
     const count = Math.max(1, Math.min(maxCount, Math.floor(Math.abs(Number(config.count)) || 1)));
     const activeSize = config.size || "auto";
-    const selectedAspect = aspectOptions.find((item) => (item.size || item.value) === activeSize || item.value === activeSize);
+    const selectedAspect = findAspectOption(activeSize, isCanvas);
     const dimensions = readSizeDimensions(activeSize, selectedAspect || aspectOptions[0]);
+    const activeResolution = readResolution(activeSize, selectedAspect, dimensions);
+    const displayedAspectOptions = isCanvas ? canvasAspectOptions : aspectOptions;
     const selectAspect = (value: string) => {
-        const option = aspectOptions.find((item) => item.value === value);
-        onConfigChange("size", option?.size || option?.value || "auto");
+        if (value === "custom") return;
+        const option = displayedAspectOptions.find((item) => item.value === value);
+        onConfigChange("size", isCanvas && option ? dimensionsForRatio(option.width, option.height, activeResolution) : option?.size || option?.value || "auto");
+    };
+    const selectResolution = (value: string) => {
+        const ratio = selectedAspect?.value === "custom" ? dimensions : selectedAspect;
+        onConfigChange("size", dimensionsForRatio(ratio?.width || dimensions.width || 1, ratio?.height || dimensions.height || 1, value));
     };
     const updateDimension = (key: "width" | "height", value: number | null) => {
         const next = Math.max(1, Math.floor(value || dimensions[key] || 1024));
@@ -69,12 +103,12 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                     if (document.activeElement instanceof HTMLInputElement && event.currentTarget.contains(document.activeElement)) document.activeElement.blur();
                 }}
             >
-                {showTitle ? <div className="text-lg font-semibold">图像设置</div> : null}
+                {showTitle ? <div className={isCanvas ? "text-[22px] font-semibold leading-7" : "text-lg font-semibold"}>图像设置</div> : null}
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>质量</SettingTitle>
                     <div className="grid grid-cols-4 gap-2.5">
                         {qualityOptions.map((item) => (
-                            <OptionPill key={item.value} selected={quality === item.value} theme={theme} onClick={() => onConfigChange("quality", item.value)}>
+                            <OptionPill key={item.value} selected={quality === item.value} theme={theme} variant={variant} onClick={() => onConfigChange("quality", item.value)}>
                                 {item.label}
                             </OptionPill>
                         ))}
@@ -93,24 +127,43 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                         </div>
                     </div>
                     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2.5">
-                        <DimensionInput prefix="W" value={dimensions.width} disabled={activeSize === "auto"} theme={theme} alignToStep={snapDimensionToStep} onChange={(value) => updateDimension("width", value)} />
+                        <DimensionInput prefix="W" value={dimensions.width} disabled={activeSize === "auto"} theme={theme} alignToStep={snapDimensionToStep} variant={variant} onChange={(value) => updateDimension("width", value)} />
                         <span className="text-lg opacity-45">↔</span>
-                        <DimensionInput prefix="H" value={dimensions.height} disabled={activeSize === "auto"} theme={theme} alignToStep={snapDimensionToStep} onChange={(value) => updateDimension("height", value)} />
+                        <DimensionInput prefix="H" value={dimensions.height} disabled={activeSize === "auto"} theme={theme} alignToStep={snapDimensionToStep} variant={variant} onChange={(value) => updateDimension("height", value)} />
                     </div>
                 </div>
+                {isCanvas ? (
+                    <div className="space-y-2.5">
+                        <SettingTitle color={theme.node.muted}>清晰度</SettingTitle>
+                        <div className="grid grid-cols-3 overflow-hidden rounded-[14px] p-1" style={{ background: theme.node.fill }}>
+                            {resolutionOptions.map((item) => (
+                                <button
+                                    key={item.value}
+                                    type="button"
+                                    className="h-11 cursor-pointer rounded-[11px] text-base font-semibold transition hover:opacity-85"
+                                    style={{ background: activeResolution === item.value ? theme.node.placeholder : "transparent", color: activeResolution === item.value ? theme.node.panel : theme.node.text }}
+                                    onMouseDown={(event) => event.stopPropagation()}
+                                    onClick={() => selectResolution(item.value)}
+                                >
+                                    {item.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                ) : null}
                 <div className="space-y-2.5">
-                    <SettingTitle color={theme.node.muted}>宽高比</SettingTitle>
-                    <div className="grid grid-cols-4 gap-2.5">
-                        {aspectOptions.map((item) => (
+                    <SettingTitle color={theme.node.muted}>{isCanvas ? "比例" : "宽高比"}</SettingTitle>
+                    <div className="grid grid-cols-4 gap-2">
+                        {displayedAspectOptions.map((item) => (
                             <button
                                 key={item.value}
                                 type="button"
-                                className="flex h-[72px] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border bg-transparent text-sm transition hover:opacity-80"
-                                style={{ borderColor: selectedAspect?.value === item.value ? theme.node.text : theme.node.stroke, background: "transparent", color: theme.node.text }}
+                                className={`${isCanvas ? "h-[72px] rounded-[10px] text-[13px] font-semibold" : "h-[72px] rounded-xl text-sm"} flex cursor-pointer flex-col items-center justify-center gap-1.5 border bg-transparent transition hover:opacity-80`}
+                                style={{ borderColor: selectedAspect?.value === item.value ? theme.node.placeholder : theme.node.stroke, background: selectedAspect?.value === item.value ? theme.node.stroke : "transparent", color: selectedAspect?.value === item.value ? theme.node.text : theme.node.muted }}
                                 onMouseDown={(event) => event.stopPropagation()}
                                 onClick={() => selectAspect(item.value)}
                             >
-                                <AspectIcon type={item.icon} width={item.width} height={item.height} color={theme.node.text} />
+                                <AspectIcon type={item.icon} width={item.width} height={item.height} color={selectedAspect?.value === item.value ? theme.node.text : theme.node.muted} />
                                 <span>{item.label}</span>
                             </button>
                         ))}
@@ -120,7 +173,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                     <SettingTitle color={theme.node.muted}>生成张数</SettingTitle>
                     <div className="grid grid-cols-4 gap-2.5">
                         {Array.from({ length: quickCount }, (_, index) => index + 1).map((value) => (
-                            <OptionPill key={value} selected={count === value} theme={theme} onClick={() => onConfigChange("count", String(value))}>
+                            <OptionPill key={value} selected={count === value} theme={theme} variant={variant} onClick={() => onConfigChange("count", String(value))}>
                                 {value} 张
                             </OptionPill>
                         ))}
@@ -150,14 +203,14 @@ export function imageQualityLabel(value: string) {
 }
 
 export function imageSizeLabel(size: string) {
-    return aspectOptions.find((item) => (item.size || item.value) === size || item.value === size)?.label || size;
+    return [...aspectOptions, ...canvasAspectOptions].find((item) => (item.size || item.value) === size || item.value === size)?.label || size;
 }
 
-function OptionPill({ selected, theme, onClick, children }: { selected: boolean; theme: CanvasTheme; onClick: () => void; children: ReactNode }) {
+function OptionPill({ selected, theme, variant = "default", onClick, children }: { selected: boolean; theme: CanvasTheme; variant?: "default" | "canvas"; onClick: () => void; children: ReactNode }) {
     return (
         <button
             type="button"
-            className="h-9 cursor-pointer rounded-full border px-2 text-sm transition hover:opacity-80"
+            className={`${variant === "canvas" ? "h-12 text-base font-semibold" : "h-9 text-sm"} cursor-pointer rounded-full border px-2 transition hover:opacity-80`}
             style={{ background: "transparent", borderColor: selected ? theme.node.text : theme.node.stroke, color: theme.node.text }}
             onMouseDown={(event) => event.stopPropagation()}
             onClick={onClick}
@@ -167,7 +220,7 @@ function OptionPill({ selected, theme, onClick, children }: { selected: boolean;
     );
 }
 
-function DimensionInput({ prefix, value, disabled, theme, alignToStep, onChange }: { prefix: string; value: number; disabled: boolean; theme: CanvasTheme; alignToStep: boolean; onChange: (value: number | null) => void }) {
+function DimensionInput({ prefix, value, disabled, theme, alignToStep, variant = "default", onChange }: { prefix: string; value: number; disabled: boolean; theme: CanvasTheme; alignToStep: boolean; variant?: "default" | "canvas"; onChange: (value: number | null) => void }) {
     const commit = (input: HTMLInputElement) => {
         const next = alignDimension(Math.max(1, Math.floor(Number(input.value) || value || 1024)), alignToStep);
         input.value = String(next);
@@ -175,8 +228,8 @@ function DimensionInput({ prefix, value, disabled, theme, alignToStep, onChange 
     };
 
     return (
-        <label className="flex h-9 overflow-hidden rounded-xl text-sm" style={{ background: theme.node.fill, color: theme.node.text, opacity: disabled ? 0.55 : 1 }}>
-            <span className="grid w-9 place-items-center" style={{ color: theme.node.muted }}>
+        <label className={`flex ${variant === "canvas" ? "h-12 rounded-[14px] text-base font-semibold" : "h-9 rounded-xl text-sm"} overflow-hidden`} style={{ background: theme.node.fill, color: theme.node.text, opacity: disabled ? 0.55 : 1 }}>
+            <span className={`${variant === "canvas" ? "w-11" : "w-9"} grid place-items-center`} style={{ color: theme.node.muted }}>
                 {prefix}
             </span>
             <input
@@ -215,6 +268,13 @@ function CountInput({ value, max, theme, onChange }: { value: number; max: numbe
 
 function AspectIcon({ type, width, height, color }: { type: string; width: number; height: number; color: string }) {
     if (type === "auto") return null;
+    if (type === "custom") {
+        return (
+            <span className="grid h-7 w-9 place-items-center">
+                <span className="size-5 rounded-md border-2 border-dashed" style={{ borderColor: color }} />
+            </span>
+        );
+    }
     const ratio = width / Math.max(1, height);
     const boxWidth = ratio >= 1 ? 24 : Math.max(10, 24 * ratio);
     const boxHeight = ratio >= 1 ? Math.max(10, 24 / ratio) : 24;
@@ -243,4 +303,55 @@ function readSizeDimensions(size: string, fallback: { width: number; height: num
 
 function alignDimension(value: number, enabled: boolean) {
     return enabled ? Math.ceil(value / DIMENSION_STEP) * DIMENSION_STEP : value;
+}
+
+function findAspectOption(size: string, canvas: boolean) {
+    const options = canvas ? canvasAspectOptions : aspectOptions;
+    const direct = options.find((item) => (item.size || item.value) === size || item.value === size);
+    if (direct) return direct;
+    if (!canvas) return undefined;
+    const dimensions = readSizeDimensions(size, { width: 0, height: 0 });
+    if (!dimensions.width || !dimensions.height) return canvasAspectOptions[0];
+    const reduced = reduceRatio(dimensions.width, dimensions.height);
+    return canvasAspectOptions.find((item) => item.width === reduced.width && item.height === reduced.height) || canvasAspectOptions[0];
+}
+
+function readResolution(size: string, selectedAspect: { value: string; width: number; height: number } | undefined, dimensions: { width: number; height: number }) {
+    const legacyOption = aspectOptions.find((item) => item.size === size);
+    if (legacyOption?.value.includes("4k")) return "4k";
+    if (legacyOption?.value.includes("2k")) return "2k";
+    if (size.toLowerCase().includes("4k") || Math.max(dimensions.width, dimensions.height) >= 3600) return "4k";
+    if (size.toLowerCase().includes("2k")) return "2k";
+    const ratio = selectedAspect?.value === "custom" ? dimensions : selectedAspect;
+    if (ratio && size === dimensionsForRatio(ratio.width, ratio.height, "2k")) return "2k";
+    return "1k";
+}
+
+function dimensionsForRatio(width: number, height: number, resolution: string) {
+    const ratioWidth = Math.max(1, width);
+    const ratioHeight = Math.max(1, height);
+    if (resolution === "1k") {
+        const scale = 1024 / Math.min(ratioWidth, ratioHeight);
+        return `${alignDimension(Math.round(ratioWidth * scale), true)}x${alignDimension(Math.round(ratioHeight * scale), true)}`;
+    }
+    const maxPixels = 8294400;
+    const targetPixels = resolution === "4k" ? maxPixels : 2048 * 2048;
+    let scale = Math.sqrt(targetPixels / (ratioWidth * ratioHeight));
+    let nextWidth = alignDimension(Math.round(ratioWidth * scale), true);
+    let nextHeight = alignDimension(Math.round(ratioHeight * scale), true);
+    if (nextWidth * nextHeight > maxPixels) {
+        scale = Math.sqrt(maxPixels / (ratioWidth * ratioHeight));
+        nextWidth = alignDimension(Math.floor((ratioWidth * scale) / DIMENSION_STEP) * DIMENSION_STEP, false);
+        nextHeight = alignDimension(Math.floor((ratioHeight * scale) / DIMENSION_STEP) * DIMENSION_STEP, false);
+    }
+    return `${nextWidth}x${nextHeight}`;
+}
+
+function reduceRatio(width: number, height: number) {
+    const divisor = gcd(width, height);
+    return { width: width / divisor, height: height / divisor };
+}
+
+function gcd(a: number, b: number): number {
+    return b ? gcd(b, a % b) : Math.max(1, Math.abs(a));
 }

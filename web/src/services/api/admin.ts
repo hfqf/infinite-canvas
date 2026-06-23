@@ -164,6 +164,8 @@ export type AdminModelChannel = {
     models: string[];
     weight: number;
     enabled: boolean;
+    failureThreshold: number;
+    cooldownSeconds: number;
     remark: string;
 };
 

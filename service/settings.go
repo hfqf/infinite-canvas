@@ -126,15 +126,7 @@ func normalizePrivateSetting(setting model.PrivateSetting) model.PrivateSetting 
 	}
 	setting.PromptSync = normalizePromptSyncSetting(setting.PromptSync)
 	for i := range setting.Channels {
-		if setting.Channels[i].Protocol == "" {
-			setting.Channels[i].Protocol = "openai"
-		}
-		if setting.Channels[i].Models == nil {
-			setting.Channels[i].Models = []string{}
-		}
-		if setting.Channels[i].Weight <= 0 {
-			setting.Channels[i].Weight = 1
-		}
+		setting.Channels[i] = normalizeModelChannel(setting.Channels[i])
 	}
 	return setting
 }
@@ -177,26 +169,49 @@ func findSavedChannel(channel model.ModelChannel, saved []model.ModelChannel, in
 }
 
 func SelectModelChannel(modelName string) (model.ModelChannel, error) {
-	settings, err := repository.GetSettings()
+	channels, err := SelectModelChannels(modelName)
 	if err != nil {
 		return model.ModelChannel{}, err
 	}
-	channels := modelChannelsForModel(normalizePrivateSetting(settings.Private).Channels, modelName)
-	if len(channels) == 0 {
-		return model.ModelChannel{}, errors.New("没有可用模型渠道")
+	return channels[0], nil
+}
+
+func SelectModelChannels(modelName string) ([]model.ModelChannel, error) {
+	settings, err := repository.GetSettings()
+	if err != nil {
+		return nil, err
 	}
+	channels := availableModelChannels(normalizePrivateSetting(settings.Private).Channels, modelName, time.Now())
+	if len(channels) == 0 {
+		return nil, errors.New("没有可用模型渠道")
+	}
+	return weightedModelChannels(channels), nil
+}
+
+func weightedModelChannels(channels []model.ModelChannel) []model.ModelChannel {
+	remaining := append([]model.ModelChannel{}, channels...)
+	result := make([]model.ModelChannel, 0, len(remaining))
+	for len(remaining) > 0 {
+		index := weightedModelChannelIndex(remaining)
+		result = append(result, remaining[index])
+		remaining = append(remaining[:index], remaining[index+1:]...)
+	}
+	return result
+}
+
+func weightedModelChannelIndex(channels []model.ModelChannel) int {
 	total := 0
 	for _, channel := range channels {
 		total += channel.Weight
 	}
 	hit := rand.Intn(total)
-	for _, channel := range channels {
+	for index, channel := range channels {
 		hit -= channel.Weight
 		if hit < 0 {
-			return channel, nil
+			return index
 		}
 	}
-	return channels[0], nil
+	return 0
 }
 
 func BuildModelChannelURL(channel model.ModelChannel, path string) string {
@@ -304,6 +319,12 @@ func normalizeModelChannel(channel model.ModelChannel) model.ModelChannel {
 	}
 	if channel.Weight <= 0 {
 		channel.Weight = 1
+	}
+	if channel.FailureThreshold <= 0 {
+		channel.FailureThreshold = defaultChannelFailureThreshold
+	}
+	if channel.CooldownSeconds <= 0 {
+		channel.CooldownSeconds = defaultChannelCooldownSeconds
 	}
 	return channel
 }
