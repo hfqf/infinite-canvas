@@ -18,6 +18,10 @@ export type AdminUser = {
     avatarUrl: string;
     role: "user" | "admin";
     credits: number;
+    memberType: "" | "monthly" | "annual";
+    memberLevel: "" | "standard" | "basic" | "advanced" | "premium";
+    lastRechargeAmountYuan: number;
+    lastRechargedAt: string;
     affCode: string;
     affCount: number;
     inviterId: string;

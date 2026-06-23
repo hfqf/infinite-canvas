@@ -334,9 +334,8 @@ function dimensionsForRatio(width: number, height: number, resolution: string) {
         const scale = 1024 / Math.min(ratioWidth, ratioHeight);
         return `${alignDimension(Math.round(ratioWidth * scale), true)}x${alignDimension(Math.round(ratioHeight * scale), true)}`;
     }
-    const maxPixels = 8294400;
-    const targetPixels = resolution === "4k" ? maxPixels : 2048 * 2048;
-    let scale = Math.sqrt(targetPixels / (ratioWidth * ratioHeight));
+    const maxPixels = 3840 * 3840;
+    let scale = resolution === "4k" ? 3840 / Math.max(ratioWidth, ratioHeight) : Math.sqrt((2048 * 2048) / (ratioWidth * ratioHeight));
     let nextWidth = alignDimension(Math.round(ratioWidth * scale), true);
     let nextHeight = alignDimension(Math.round(ratioHeight * scale), true);
     if (nextWidth * nextHeight > maxPixels) {

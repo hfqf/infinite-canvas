@@ -3,6 +3,8 @@ import { apiGet, apiPost } from "@/services/api/request";
 export const AUTH_TOKEN_KEY = "infinite-canvas-auth-token-v1";
 
 export type UserRole = "guest" | "user" | "admin";
+export type MemberType = "" | "monthly" | "annual";
+export type MemberLevel = "" | "standard" | "basic" | "advanced" | "premium";
 
 export type AuthUser = {
     id: string;
@@ -11,6 +13,10 @@ export type AuthUser = {
     avatarUrl: string;
     role: UserRole;
     credits: number;
+    memberType: MemberType;
+    memberLevel: MemberLevel;
+    lastRechargeAmountYuan: number;
+    lastRechargedAt: string;
     createdAt: string;
     updatedAt: string;
 };

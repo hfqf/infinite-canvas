@@ -128,6 +128,87 @@ func SaveCreditLog(log model.CreditLog) (model.CreditLog, error) {
 	return log, db.Save(&log).Error
 }
 
+func SaveRechargeOrder(order model.RechargeOrder) (model.RechargeOrder, error) {
+	db, err := DB()
+	if err != nil {
+		return order, err
+	}
+	return order, db.Save(&order).Error
+}
+
+func GetRechargeOrderByID(id string) (model.RechargeOrder, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.RechargeOrder{}, false, err
+	}
+	return findRechargeOrder(db, "id = ?", id)
+}
+
+func GetRechargeOrderByOutTradeNo(outTradeNo string) (model.RechargeOrder, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.RechargeOrder{}, false, err
+	}
+	return findRechargeOrder(db, "out_trade_no = ?", outTradeNo)
+}
+
+func CompleteRechargeOrderPaid(outTradeNo string, amountFen int, transactionID string, now string) (bool, error) {
+	db, err := DB()
+	if err != nil {
+		return false, err
+	}
+	paid := false
+	err = db.Transaction(func(tx *gorm.DB) error {
+		var order model.RechargeOrder
+		if err := tx.Where("out_trade_no = ?", outTradeNo).First(&order).Error; err != nil {
+			return err
+		}
+		if order.AmountFen != amountFen {
+			return errors.New("订单金额不匹配")
+		}
+		if order.Status == model.RechargeOrderStatusPaid {
+			return nil
+		}
+		if err := tx.Model(&model.User{}).Where("id = ?", order.UserID).Updates(map[string]any{
+			"credits":                   gorm.Expr("credits + ?", order.Credits),
+			"member_type":               order.MemberType,
+			"member_level":              order.MemberLevel,
+			"last_recharge_amount_yuan": order.AmountYuan,
+			"last_recharged_at":         now,
+			"updated_at":                now,
+		}).Error; err != nil {
+			return err
+		}
+		var user model.User
+		if err := tx.Where("id = ?", order.UserID).First(&user).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.RechargeOrder{}).Where("id = ?", order.ID).Updates(map[string]any{
+			"status":         model.RechargeOrderStatusPaid,
+			"transaction_id": transactionID,
+			"paid_at":        now,
+			"updated_at":     now,
+		}).Error; err != nil {
+			return err
+		}
+		if err := tx.Save(&model.CreditLog{
+			ID:        "credit_" + order.ID,
+			UserID:    order.UserID,
+			Type:      model.CreditLogTypeRecharge,
+			Amount:    order.Credits,
+			Balance:   user.Credits,
+			RelatedID: order.ID,
+			Remark:    "微信充值",
+			CreatedAt: now,
+		}).Error; err != nil {
+			return err
+		}
+		paid = true
+		return nil
+	})
+	return paid, err
+}
+
 func ListCreditLogs(q model.Query) ([]model.CreditLog, int64, error) {
 	db, err := DB()
 	if err != nil {
@@ -182,4 +263,13 @@ func findUser(db *gorm.DB, query string, args ...any) (model.User, bool, error) 
 		return model.User{}, false, nil
 	}
 	return user, err == nil, err
+}
+
+func findRechargeOrder(db *gorm.DB, query string, args ...any) (model.RechargeOrder, bool, error) {
+	order := model.RechargeOrder{}
+	err := db.Where(query, args...).First(&order).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return model.RechargeOrder{}, false, nil
+	}
+	return order, err == nil, err
 }

@@ -21,6 +21,7 @@ description: 当前后端主要数据表与字段说明
 
 - `users`
 - `credit_logs`
+- `recharge_orders`
 - `prompts`
 - `assets`
 - `settings`
@@ -41,6 +42,10 @@ description: 当前后端主要数据表与字段说明
 | `avatar_url` | string | 头像地址 |
 | `role` | string | 角色：`user`、`admin` |
 | `credits` | number | 算力点余额 |
+| `member_type` | string | 最近一次购买的会员类型：`monthly`、`annual` |
+| `member_level` | string | 最近一次购买的会员级别：`standard`、`basic`、`advanced`、`premium` |
+| `last_recharge_amount_yuan` | number | 最近一次支付成功的充值金额，单位元 |
+| `last_recharged_at` | string | 最近一次充值成功时间 |
 | `aff_code` | string | 用户自己的邀请码，唯一索引 |
 | `aff_count` | number | 已邀请用户数量，冗余统计字段 |
 | `inviter_id` | string | 邀请人用户 ID |
@@ -179,13 +184,13 @@ description: 当前后端主要数据表与字段说明
 
 ### credit_logs
 
-用户算力点变更流水表。当前记录后台手动调整、模型调用预扣和模型调用失败返还。
+用户算力点变更流水表。当前记录后台手动调整、模型调用预扣、模型调用失败返还和微信充值到账。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | string | 主键 |
 | `user_id` | string | 关联用户 ID |
-| `type` | string | 类型：`admin_adjust`、`ai_consume`、`ai_refund` |
+| `type` | string | 类型：`admin_adjust`、`ai_consume`、`ai_refund`、`recharge` |
 | `amount` | number | 本次变动数量，增加为正，扣减为负 |
 | `balance` | number | 变动后的用户算力点余额 |
 | `related_id` | string | 关联业务 ID，可为空 |
@@ -200,3 +205,27 @@ description: 当前后端主要数据表与字段说明
 | `admin_adjust` | 后台手动调整 |
 | `ai_consume` | 调用后端模型接口消费 |
 | `ai_refund` | 后端模型接口调用失败返还 |
+| `recharge` | 微信充值到账 |
+
+### recharge_orders
+
+用户微信充值订单表。网页端充值会先创建待支付订单，微信支付回调确认成功后将订单标记为已支付并给用户增加算力点。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | 主键 |
+| `user_id` | string | 关联用户 ID |
+| `amount_yuan` | number | 充值套餐金额，单位元，当前支持月度 `59`、`99`、`199`，年度 `499`、`699`、`999`、`1999` |
+| `amount_fen` | number | 充值金额，单位分 |
+| `credits` | number | 到账算力点，月度为 `59 元 = 590`、`99 元 = 1100`、`199 元 = 2488`，年度为 `499 元 = 5000`、`699 元 = 6996`、`999 元 = 10020`、`1999 元 = 21044` |
+| `member_type` | string | 订单购买的会员类型快照：`monthly`、`annual` |
+| `member_level` | string | 订单购买的会员级别快照：`standard`、`basic`、`advanced`、`premium` |
+| `product_name` | string | 微信支付商品名，格式为 `好图秀AI算力充值-会员类型-会员级别` |
+| `status` | string | 订单状态：`pending`、`paid` |
+| `payment_method` | string | 支付方式，当前为 `wechat` |
+| `out_trade_no` | string | 微信支付商户订单号，唯一索引 |
+| `transaction_id` | string | 微信支付订单号 |
+| `code_url` | text | 微信 Native 支付二维码内容 |
+| `paid_at` | string | 支付成功时间 |
+| `created_at` | string | 创建时间 |
+| `updated_at` | string | 更新时间 |

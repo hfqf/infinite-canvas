@@ -12,21 +12,31 @@ import (
 )
 
 type Config struct {
-	Port                string `env:"PORT" envDefault:"8080"`
-	AdminUsername       string `env:"ADMIN_USERNAME" envDefault:"admin"`
-	AdminPassword       string `env:"ADMIN_PASSWORD" envDefault:"infinite-canvas"`
-	JWTSecret           string `env:"JWT_SECRET" envDefault:"infinite-canvas"`
-	JWTExpireHours      int    `env:"JWT_EXPIRE_HOURS" envDefault:"168"`
-	StorageDriver       string `env:"STORAGE_DRIVER" envDefault:"sqlite"`
-	DatabaseDSN         string `env:"DATABASE_DSN" envDefault:"data/infinite-canvas.db"`
-	PublicBaseURL       string `env:"PUBLIC_BASE_URL"`
-	VTracerPath         string `env:"VTRACER_PATH" envDefault:"vtracer"`
-	VTracerTimeoutSec   int    `env:"VTRACER_TIMEOUT_SEC" envDefault:"90"`
-	LogoVectorizeColors int    `env:"LOGO_VECTORIZE_COLORS" envDefault:"12"`
-	ImageMagickPath     string `env:"IMAGE_MAGICK_PATH"`
-	LinuxDoAuthorizeURL string `env:"LINUX_DO_AUTHORIZE_URL" envDefault:"https://connect.linux.do/oauth2/authorize"`
-	LinuxDoTokenURL     string `env:"LINUX_DO_TOKEN_URL" envDefault:"https://connect.linux.do/oauth2/token"`
-	LinuxDoUserInfoURL  string `env:"LINUX_DO_USERINFO_URL" envDefault:"https://connect.linux.do/api/user"`
+	Port                         string `env:"PORT" envDefault:"8080"`
+	AdminUsername                string `env:"ADMIN_USERNAME" envDefault:"admin"`
+	AdminPassword                string `env:"ADMIN_PASSWORD" envDefault:"infinite-canvas"`
+	JWTSecret                    string `env:"JWT_SECRET" envDefault:"infinite-canvas"`
+	JWTExpireHours               int    `env:"JWT_EXPIRE_HOURS" envDefault:"168"`
+	StorageDriver                string `env:"STORAGE_DRIVER" envDefault:"sqlite"`
+	DatabaseDSN                  string `env:"DATABASE_DSN" envDefault:"data/infinite-canvas.db"`
+	PublicBaseURL                string `env:"PUBLIC_BASE_URL"`
+	VTracerPath                  string `env:"VTRACER_PATH" envDefault:"vtracer"`
+	VTracerTimeoutSec            int    `env:"VTRACER_TIMEOUT_SEC" envDefault:"90"`
+	LogoVectorizeColors          int    `env:"LOGO_VECTORIZE_COLORS" envDefault:"12"`
+	ImageMagickPath              string `env:"IMAGE_MAGICK_PATH"`
+	LinuxDoAuthorizeURL          string `env:"LINUX_DO_AUTHORIZE_URL" envDefault:"https://connect.linux.do/oauth2/authorize"`
+	LinuxDoTokenURL              string `env:"LINUX_DO_TOKEN_URL" envDefault:"https://connect.linux.do/oauth2/token"`
+	LinuxDoUserInfoURL           string `env:"LINUX_DO_USERINFO_URL" envDefault:"https://connect.linux.do/api/user"`
+	WechatPayEnabled             bool   `env:"WECHAT_PAY_ENABLED" envDefault:"false"`
+	WechatPayAppID               string `env:"WECHAT_PAY_APP_ID"`
+	WechatPayMchID               string `env:"WECHAT_PAY_MCH_ID"`
+	WechatPayAPIv3Secret         string `env:"WECHAT_PAY_API_V3_SECRET"`
+	WechatPayKeyPath             string `env:"WECHAT_PAY_KEY_PATH"`
+	WechatPayCertificateSerialNo string `env:"WECHAT_PAY_CERTIFICATE_SERIAL_NO"`
+	WechatPayPublicKeyID         string `env:"WECHAT_PAY_PUBLIC_KEY_ID"`
+	WechatPayPublicKeyPath       string `env:"WECHAT_PAY_PUBLIC_KEY_PATH"`
+	WechatPaySkipNotifyVerify    bool   `env:"WECHAT_PAY_SKIP_NOTIFY_VERIFY" envDefault:"false"`
+	WechatPayNotifyURL           string `env:"WECHAT_PAY_NOTIFY_URL"`
 }
 
 var Cfg Config
