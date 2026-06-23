@@ -15,6 +15,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -65,6 +66,11 @@ type wechatPayTransaction struct {
 	} `json:"amount"`
 }
 
+var (
+	wechatPayAPIBaseURL = "https://api.mch.weixin.qq.com"
+	wechatPayHTTPClient = &http.Client{Timeout: 15 * time.Second}
+)
+
 func CreateRechargeOrder(userID string, amountFen int, notifyURL string) (RechargeOrderResult, error) {
 	if !config.Cfg.WechatPayEnabled {
 		return RechargeOrderResult{}, safeMessageError{message: "微信支付暂未开启"}
@@ -106,6 +112,11 @@ func GetRechargeOrder(userID string, id string) (RechargeOrderResult, error) {
 	}
 	if !ok || order.UserID != userID {
 		return RechargeOrderResult{}, safeMessageError{message: "订单不存在"}
+	}
+	if order.Status == model.RechargeOrderStatusPending {
+		if refreshed, refreshErr := refreshWechatRechargeOrder(order); refreshErr == nil {
+			order = refreshed
+		}
 	}
 	return rechargeOrderResult(order), nil
 }
@@ -168,7 +179,7 @@ func createWechatNativeOrder(order model.RechargeOrder, notifyURL string) (strin
 	if err := signWechatPayRequest(request, body); err != nil {
 		return "", err
 	}
-	response, err := (&http.Client{Timeout: 15 * time.Second}).Do(request)
+	response, err := wechatPayHTTPClient.Do(request)
 	if err != nil {
 		return "", err
 	}
@@ -187,6 +198,60 @@ func createWechatNativeOrder(order model.RechargeOrder, notifyURL string) (strin
 		return "", safeMessageError{message: message}
 	}
 	return result.CodeURL, nil
+}
+
+func refreshWechatRechargeOrder(order model.RechargeOrder) (model.RechargeOrder, error) {
+	if order.Status != model.RechargeOrderStatusPending || strings.TrimSpace(order.OutTradeNo) == "" {
+		return order, nil
+	}
+	transaction, err := queryWechatPayTransaction(order.OutTradeNo)
+	if err != nil {
+		return order, err
+	}
+	if transaction.TradeState != "SUCCESS" {
+		return order, nil
+	}
+	if _, err := repository.CompleteRechargeOrderPaid(transaction.OutTradeNo, transaction.Amount.Total, transaction.TransactionID, firstNonEmpty(transaction.SuccessTime, now())); err != nil {
+		return order, err
+	}
+	refreshed, ok, err := repository.GetRechargeOrderByID(order.ID)
+	if err != nil || !ok {
+		return order, err
+	}
+	return refreshed, nil
+}
+
+func queryWechatPayTransaction(outTradeNo string) (wechatPayTransaction, error) {
+	if strings.TrimSpace(config.Cfg.WechatPayMchID) == "" || strings.TrimSpace(config.Cfg.WechatPayCertificateSerialNo) == "" || strings.TrimSpace(config.Cfg.WechatPayKeyPath) == "" {
+		return wechatPayTransaction{}, safeMessageError{message: "微信支付配置不完整"}
+	}
+	requestURL := strings.TrimRight(wechatPayAPIBaseURL, "/") + "/v3/pay/transactions/out-trade-no/" + url.PathEscape(outTradeNo) + "?mchid=" + url.QueryEscape(config.Cfg.WechatPayMchID)
+	request, err := http.NewRequest(http.MethodGet, requestURL, nil)
+	if err != nil {
+		return wechatPayTransaction{}, err
+	}
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("User-Agent", "Infinite-Canvas/1.0")
+	if err := signWechatPayRequest(request, nil); err != nil {
+		return wechatPayTransaction{}, err
+	}
+	response, err := wechatPayHTTPClient.Do(request)
+	if err != nil {
+		return wechatPayTransaction{}, err
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		return wechatPayTransaction{}, err
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return wechatPayTransaction{}, safeMessageError{message: "微信支付查单失败"}
+	}
+	var transaction wechatPayTransaction
+	if err := json.Unmarshal(responseBody, &transaction); err != nil {
+		return wechatPayTransaction{}, err
+	}
+	return transaction, nil
 }
 
 func signWechatPayRequest(request *http.Request, body []byte) error {
