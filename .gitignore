@@ -6,6 +6,7 @@ node_modules/
 data/*
 !data/wxpay/
 data/wxpay/*
+!data/wxpay/pub_key.pem
 !data/wxpay/1483076642_cert/
 !data/wxpay/1483076642_cert/*.pem
 *.log
