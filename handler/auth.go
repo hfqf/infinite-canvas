@@ -171,6 +171,20 @@ func AdminAIDeductionLogs(w http.ResponseWriter, r *http.Request) {
 	OK(w, logs)
 }
 
+func UserAIDeductionLogs(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok || user.ID == "" {
+		Fail(w, "请先登录")
+		return
+	}
+	logs, err := service.ListUserAIDeductionLogs(user.ID, parseQuery(r))
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, logs)
+}
+
 func AdminSaveCreditLog(w http.ResponseWriter, r *http.Request) {
 	var log model.CreditLog
 	_ = json.NewDecoder(r.Body).Decode(&log)

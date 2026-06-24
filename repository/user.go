@@ -523,12 +523,23 @@ func ListCreditLogsByType(logType model.CreditLogType, q model.Query) ([]model.C
 }
 
 func ListCreditLogsByTypes(logTypes []model.CreditLogType, q model.Query) ([]model.CreditLog, int64, error) {
+	return listCreditLogsByTypes("", logTypes, q)
+}
+
+func ListUserCreditLogsByTypes(userID string, logTypes []model.CreditLogType, q model.Query) ([]model.CreditLog, int64, error) {
+	return listCreditLogsByTypes(userID, logTypes, q)
+}
+
+func listCreditLogsByTypes(userID string, logTypes []model.CreditLogType, q model.Query) ([]model.CreditLog, int64, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, 0, err
 	}
 	q.Normalize()
 	tx := db.Model(&model.CreditLog{}).Where("type IN ?", logTypes)
+	if userID != "" {
+		tx = tx.Where("user_id = ?", userID)
+	}
 	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
 		like := "%" + keyword + "%"
 		tx = tx.Where("user_id LIKE ? OR remark LIKE ? OR related_id LIKE ? OR extra LIKE ?", like, like, like, like)

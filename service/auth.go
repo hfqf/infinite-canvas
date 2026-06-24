@@ -571,6 +571,14 @@ func ListAIDeductionLogs(q model.Query) (model.CreditLogList, error) {
 	return model.CreditLogList{Items: logs, Total: int(total)}, nil
 }
 
+func ListUserAIDeductionLogs(userID string, q model.Query) (model.CreditLogList, error) {
+	logs, total, err := repository.ListUserCreditLogsByTypes(userID, []model.CreditLogType{model.CreditLogTypeAIFreeze, model.CreditLogTypeAIConsume, model.CreditLogTypeAIFreezeRelease}, q)
+	if err != nil {
+		return model.CreditLogList{}, err
+	}
+	return model.CreditLogList{Items: logs, Total: int(total)}, nil
+}
+
 func SaveCreditLog(log model.CreditLog) (model.CreditLog, error) {
 	if log.ID == "" {
 		log.ID = newID("credit")
