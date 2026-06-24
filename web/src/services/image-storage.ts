@@ -4,6 +4,7 @@ import localforage from "localforage";
 
 import { nanoid } from "nanoid";
 import { readImageMeta } from "@/lib/image-utils";
+import { useUserStore } from "@/stores/use-user-store";
 
 export type UploadedImage = {
     url: string;
@@ -19,6 +20,11 @@ const objectUrls = new Map<string, string>();
 
 export async function uploadImage(input: string | Blob): Promise<UploadedImage> {
     const blob = typeof input === "string" ? await fetchImageBlob(input) : input;
+    const remote = await uploadImageToOSS(blob);
+    if (remote) {
+        const meta = await readImageMeta(remote.url);
+        return { ...remote, width: meta.width, height: meta.height, bytes: remote.bytes || blob.size, mimeType: remote.mimeType || blob.type || meta.mimeType };
+    }
     const storageKey = `image:${nanoid()}`;
     await store.setItem(storageKey, blob);
     const url = URL.createObjectURL(blob);
@@ -95,6 +101,40 @@ async function fetchImageBlob(url: string) {
     const response = await fetch(proxiedImageUrl(url));
     if (!response.ok) throw new Error("读取图片失败");
     return response.blob();
+}
+
+async function uploadImageToOSS(blob: Blob): Promise<Omit<UploadedImage, "width" | "height"> | null> {
+    const token = useUserStore.getState().token;
+    if (!token) return null;
+    const formData = new FormData();
+    const ext = imageFileExtension(blob.type);
+    formData.set("file", new File([blob], `canvas-image.${ext}`, { type: blob.type || "image/png" }));
+    const response = await fetch("/api/v1/images/uploads", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+    });
+    const payload = (await response.json().catch(() => null)) as { code?: number; data?: Omit<UploadedImage, "width" | "height">; msg?: string } | null;
+    if (!response.ok || !payload || payload.code !== 0 || !payload.data?.url) {
+        throw new Error(payload?.msg || "图片上传 OSS 失败");
+    }
+    return payload.data;
+}
+
+function imageFileExtension(mimeType: string) {
+    switch (mimeType.toLowerCase()) {
+        case "image/jpeg":
+        case "image/jpg":
+            return "jpg";
+        case "image/webp":
+            return "webp";
+        case "image/gif":
+            return "gif";
+        case "image/bmp":
+            return "bmp";
+        default:
+            return "png";
+    }
 }
 
 function proxiedImageUrl(url: string) {

@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/caarlos0/env/v11 v11.3.1
+	github.com/aliyun/aliyun-oss-go-sdk v2.2.10+incompatible
 	github.com/gin-gonic/gin v1.11.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -12,6 +13,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/robfig/cron/v3 v3.0.1
 	golang.org/x/crypto v0.48.0
+	golang.org/x/time v0.10.0
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1

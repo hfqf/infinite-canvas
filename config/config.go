@@ -20,6 +20,12 @@ type Config struct {
 	DatabaseDriver               string `env:"DATABASE_DRIVER"`
 	StorageDriver                string `env:"STORAGE_DRIVER" envDefault:"sqlite"`
 	DatabaseDSN                  string `env:"DATABASE_DSN" envDefault:"data/infinite-canvas.db"`
+	ImageStorageDriver           string `env:"FIGO_STORAGE_DRIVER" envDefault:"oss"`
+	AliyunOSSEndpoint            string `env:"ALIYUN_OSS_ENDPOINT"`
+	AliyunOSSBucket              string `env:"ALIYUN_OSS_BUCKET"`
+	AliyunOSSAccessKeyID         string `env:"ALIYUN_OSS_ACCESS_KEY_ID"`
+	AliyunOSSAccessKeySecret     string `env:"ALIYUN_OSS_ACCESS_KEY_SECRET"`
+	AliyunOSSPublicBaseURL       string `env:"ALIYUN_OSS_PUBLIC_BASE_URL"`
 	PublicBaseURL                string `env:"PUBLIC_BASE_URL"`
 	VTracerPath                  string `env:"VTRACER_PATH" envDefault:"vtracer"`
 	VTracerTimeoutSec            int    `env:"VTRACER_TIMEOUT_SEC" envDefault:"90"`
