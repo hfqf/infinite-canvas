@@ -11,6 +11,7 @@ import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audi
 import { requestVideoGeneration, storeGeneratedVideo } from "@/services/api/video";
 import { defaultConfig, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { imageToDataUrl, resolveImageUrl, uploadImage, type UploadedImage } from "@/services/image-storage";
+import { saveImageGenerationLog } from "@/services/image-generation-logs";
 import { resolveMediaUrl, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { nanoid } from "nanoid";
 import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
@@ -1665,8 +1666,10 @@ function InfiniteCanvasPage() {
             setSelectedConnectionId(null);
             setDialogNodeId(childId);
             try {
+                const startedAt = performance.now();
                 const image = await requestEdit(generationConfig, prompt, [source], { id: `${node.id}-mask`, name: "mask.png", type: "image/png", dataUrl: payload.maskDataUrl }).then((items) => items[0]);
                 const uploaded = await uploadImage(image.dataUrl);
+                recordCanvasImageGeneration({ prompt, config: generationConfig, references: [source], images: [uploaded], durationMs: performance.now() - startedAt });
                 const size = fitNodeSize(uploaded.width, uploaded.height, node.width, node.height);
                 setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt, ...generationMetadata } } : item)));
             } catch (error) {
@@ -1738,10 +1741,12 @@ function InfiniteCanvasPage() {
             setSelectedNodeIds(new Set([childId]));
             setDialogNodeId(childId);
             try {
+                const startedAt = performance.now();
                 const image = await requestEdit(generationConfig, prompt, [{ id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey }]).then(
                     (items) => items[0],
                 );
                 const uploaded = await uploadImage(image.dataUrl);
+                recordCanvasImageGeneration({ prompt, config: generationConfig, references: [{ id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey }], images: [uploaded], durationMs: performance.now() - startedAt });
                 const size = fitNodeSize(uploaded.width, uploaded.height, imageConfig.width, imageConfig.height);
                 setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt, ...generationMetadata } } : item)));
             } catch (error) {
@@ -1834,8 +1839,10 @@ function InfiniteCanvasPage() {
             setDialogNodeId(childId);
             setContextMenu(null);
             try {
+                const startedAt = performance.now();
                 const image = await requestEdit(generationConfig, presetConfig.prompt, [source]).then((items) => items[0]);
                 const uploaded = await uploadImage(image.dataUrl);
+                recordCanvasImageGeneration({ prompt: presetConfig.prompt, config: generationConfig, references: [source], images: [uploaded], durationMs: performance.now() - startedAt });
                 const size = fitNodeSize(uploaded.width, uploaded.height, node.width, node.height);
                 setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt: presetConfig.prompt, ...generationMetadata } } : item)));
             } catch (error) {
@@ -2099,13 +2106,16 @@ function InfiniteCanvasPage() {
 
                     let hasSuccess = false;
                     let hasFailure = false;
+                    const batchStartedAt = performance.now();
+                    const generatedImages: UploadedImage[] = [];
                     await Promise.all(
-                        targetIds.map(async (targetId) => {
+                        targetIds.map(async (targetId, index) => {
                             try {
                                 const image = referenceImages.length
                                     ? await requestEdit({ ...generationConfig, count: "1" }, effectivePrompt, referenceImages).then((items) => items[0])
                                     : await requestGeneration({ ...generationConfig, count: "1" }, effectivePrompt).then((items) => items[0]);
                                 const uploaded = await uploadImage(image.dataUrl);
+                                generatedImages[index] = uploaded;
                                 const imageSize = fitNodeSize(uploaded.width, uploaded.height, imageConfig.width, imageConfig.height);
                                 setNodes((prev) => {
                                     const root = prev.find((node) => node.id === rootId);
@@ -2142,6 +2152,17 @@ function InfiniteCanvasPage() {
                             }
                         }),
                     );
+                    if (generatedImages.length) {
+                        const successfulImages = generatedImages.filter((image): image is UploadedImage => Boolean(image));
+                        recordCanvasImageGeneration({
+                            prompt: effectivePrompt,
+                            config: { ...generationConfig, count: String(targetIds.length) },
+                            references: referenceImages,
+                            images: successfulImages,
+                            durationMs: performance.now() - batchStartedAt,
+                            failCount: targetIds.length - successfulImages.length,
+                        });
+                    }
                     if (hasFailure) message.error(hasSuccess ? "部分图片生成失败" : "全部图片生成失败");
                     setNodes((prev) =>
                         prev.map((node) =>
@@ -2330,8 +2351,10 @@ function InfiniteCanvasPage() {
                     return;
                 }
 
+                const startedAt = performance.now();
                 const image = useReferenceImages ? await requestEdit(generationConfig, prompt, retryImages).then((items) => items[0]) : await requestGeneration(generationConfig, prompt).then((items) => items[0]);
                 const uploadedImage = await uploadImage(image.dataUrl);
+                recordCanvasImageGeneration({ prompt, config: generationConfig, references: retryImages, images: [uploadedImage], durationMs: performance.now() - startedAt });
                 const imageConfig = NODE_DEFAULT_SIZE[CanvasNodeType.Image];
                 const imageSize = fitNodeSize(uploadedImage.width, uploadedImage.height, imageConfig.width, imageConfig.height);
                 const generationMetadata = savedImageMetadata?.generationType
@@ -3028,6 +3051,24 @@ function buildImageGenerationMetadata(type: CanvasImageGenerationType, config: A
         count,
         references: references.map(referenceUrl).filter((url): url is string => Boolean(url)),
     };
+}
+
+function recordCanvasImageGeneration({ prompt, config, references, images, durationMs, failCount = 0 }: { prompt: string; config: AiConfig; references: ReferenceImage[]; images: UploadedImage[]; durationMs: number; failCount?: number }) {
+    void saveImageGenerationLog({
+        prompt,
+        model: config.model,
+        config: {
+            model: config.model,
+            imageModel: config.imageModel || config.model,
+            quality: config.quality,
+            size: config.size,
+            count: String(images.length + failCount || config.count || 1),
+        },
+        references,
+        durationMs,
+        images,
+        failCount,
+    }).catch((error) => console.warn("save canvas image generation log failed", error));
 }
 
 function buildAudioGenerationMetadata(config: AiConfig): CanvasNodeMetadata {

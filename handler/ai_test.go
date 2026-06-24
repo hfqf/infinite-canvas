@@ -77,6 +77,58 @@ func TestImageRequestCreditsAddsReferenceImageSurchargeAfterFirstReference(t *te
 	}
 }
 
+func TestEnsureAsyncTrueOnImagesForcesURLResponseFormat(t *testing.T) {
+	body, contentType := ensureAsyncTrueOnImages("/images/generations", []byte(`{"model":"gpt-image-2","prompt":"hi","response_format":"b64_json"}`), "application/json")
+	if contentType != "application/json" {
+		t.Fatalf("contentType = %q, want application/json", contentType)
+	}
+	if !strings.Contains(string(body), `"async":true`) {
+		t.Fatalf("body missing async=true: %s", body)
+	}
+	if !strings.Contains(string(body), `"response_format":"url"`) {
+		t.Fatalf("body missing response_format=url: %s", body)
+	}
+}
+
+func TestAIImageResponseLimitsAre30MB(t *testing.T) {
+	if aiImageResponseMaxBytes != 30<<20 {
+		t.Fatalf("aiImageResponseMaxBytes = %d, want 30MiB", aiImageResponseMaxBytes)
+	}
+	if aiImageTaskPollResponseMaxBytes != 30<<20 {
+		t.Fatalf("aiImageTaskPollResponseMaxBytes = %d, want 30MiB", aiImageTaskPollResponseMaxBytes)
+	}
+}
+
+func TestFetchAIImageResponseRejectsOversizeSuccessBody(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(strings.Repeat("x", aiImageResponseMaxBytes+1)))
+	}))
+	defer upstream.Close()
+	request, err := http.NewRequest(http.MethodGet, upstream.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result := fetchAIImageResponse(request, 0)
+
+	if result.statusCode != http.StatusOK || result.message == "" || result.retryable {
+		t.Fatalf("result=%#v, want explicit non-retryable oversize failure", result)
+	}
+}
+
+func TestImageBillingOutcomeRequiresImageURLBeforeCharge(t *testing.T) {
+	if got := imageBillingOutcome("succeeded", ""); got != imageBillingRelease {
+		t.Fatalf("succeeded without image outcome = %s, want release", got)
+	}
+	if got := imageBillingOutcome("succeeded", "https://cdn.example.com/image.png"); got != imageBillingCharge {
+		t.Fatalf("succeeded with image outcome = %s, want charge", got)
+	}
+	if got := imageBillingOutcome("running", ""); got != imageBillingPending {
+		t.Fatalf("running outcome = %s, want pending", got)
+	}
+}
+
 func TestCopyAIImageResponseWithFallbackRetriesBackupOnServerError(t *testing.T) {
 	primaryHits := 0
 	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

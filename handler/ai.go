@@ -148,6 +148,8 @@ const (
 	aiImageFailureCooldownSeconds   = 120
 	aiImage4KFailureCooldownSeconds = 180
 	aiImageReferenceTimeoutSeconds  = 60
+	aiImageResponseMaxBytes         = 30 << 20
+	aiImageTaskPollResponseMaxBytes = 30 << 20
 )
 
 func copyAIImageResponseWithFallback(w http.ResponseWriter, channels []model.ModelChannel, imageTask model.AIImageTask, modelName string, path string, body []byte, contentType string) {
@@ -224,11 +226,26 @@ func fetchAIImageResponse(request *http.Request, timeout time.Duration) aiProxyA
 			retryable:  isRetryableAIProxyStatus(response.StatusCode),
 		}
 	}
-	body, readErr := io.ReadAll(io.LimitReader(response.Body, 16<<20))
+	body, tooLarge, readErr := readLimitedBody(response.Body, aiImageResponseMaxBytes)
 	if readErr != nil {
-		return aiProxyAttemptResult{message: "AI 接口请求失败", retryable: true}
+		return aiProxyAttemptResult{statusCode: response.StatusCode, message: "AI 接口请求失败", retryable: true}
+	}
+	if tooLarge {
+		log.Printf("AI upstream response too large: url=%s limit=%d", request.URL.String(), aiImageResponseMaxBytes)
+		return aiProxyAttemptResult{statusCode: response.StatusCode, message: "图片生成结果过大，请改用 URL 返回或稍后重试"}
 	}
 	return aiProxyAttemptResult{statusCode: response.StatusCode, header: response.Header, body: body}
+}
+
+func readLimitedBody(reader io.Reader, maxBytes int64) ([]byte, bool, error) {
+	body, err := io.ReadAll(io.LimitReader(reader, maxBytes+1))
+	if err != nil {
+		return nil, false, err
+	}
+	if int64(len(body)) > maxBytes {
+		return nil, true, nil
+	}
+	return body, false, nil
 }
 
 func writeAIProxySuccess(w http.ResponseWriter, result aiProxyAttemptResult) {
@@ -275,6 +292,9 @@ func proxyAIImageTaskGetRequest(w http.ResponseWriter, r *http.Request, path str
 	request.Header.Set("Authorization", "Bearer "+channel.APIKey)
 	result := fetchAIImageResponse(request, time.Duration(aiImageRequestTimeoutSeconds(nil, ""))*time.Second)
 	if result.statusCode >= http.StatusBadRequest || result.message != "" {
+		if ok && result.statusCode >= http.StatusOK && result.statusCode < http.StatusBadRequest {
+			releaseAIImageTaskOnFailure(task, "response_unrecognized")
+		}
 		Fail(w, result.message)
 		return
 	}
@@ -301,16 +321,54 @@ func handleAIImageBilling(imageTask model.AIImageTask, channel model.ModelChanne
 		}
 		imageTask = attached
 	}
-	if isPendingImageStatus(status) {
+	switch imageBillingOutcome(status, imageURL) {
+	case imageBillingPending:
 		return nil
-	}
-	if isFailedImageStatus(status) {
-		return service.ReleaseAIImageTask(imageTask.TaskID, imageTask.UserID, firstNonEmpty(status, "failed"))
-	}
-	if isSuccessfulImageStatus(status) || imageURL != "" {
+	case imageBillingRelease:
+		if err := service.ReleaseAIImageTask(imageTask.TaskID, imageTask.UserID, firstNonEmpty(status, "response_unrecognized")); err != nil {
+			return err
+		}
+		if !isFailedImageStatus(status) {
+			return safeHandlerError{message: "图片生成结果解析失败，已释放冻结算力"}
+		}
+		return nil
+	case imageBillingCharge:
 		return service.CompleteAIImageTaskSuccess(imageTask.TaskID, imageTask.UserID, firstNonEmpty(status, "succeeded"), imageURL)
 	}
 	return nil
+}
+
+type imageBillingState string
+
+const (
+	imageBillingPending imageBillingState = "pending"
+	imageBillingRelease imageBillingState = "release"
+	imageBillingCharge  imageBillingState = "charge"
+)
+
+func imageBillingOutcome(status string, imageURL string) imageBillingState {
+	if isPendingImageStatus(status) {
+		return imageBillingPending
+	}
+	if isFailedImageStatus(status) {
+		return imageBillingRelease
+	}
+	if strings.TrimSpace(imageURL) != "" {
+		return imageBillingCharge
+	}
+	return imageBillingRelease
+}
+
+type safeHandlerError struct {
+	message string
+}
+
+func (err safeHandlerError) Error() string {
+	return err.message
+}
+
+func (err safeHandlerError) SafeMessage() string {
+	return err.message
 }
 
 func releaseAIImageTaskOnFailure(imageTask model.AIImageTask, status string) {
@@ -419,8 +477,13 @@ func copyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func
 	// {id, task_id, status, result: {data: [{url, ...}]}}，而非 OpenAI 的
 	// {created, data: [{b64_json|url}]}）。在写响应前探测一次，是就转。
 	if shouldNormalizeImagesResponse(request.URL.Path) {
-		body, readErr := io.ReadAll(io.LimitReader(response.Body, 16<<20))
+		body, tooLarge, readErr := readLimitedBody(response.Body, aiImageResponseMaxBytes)
 		if readErr == nil {
+			if tooLarge {
+				log.Printf("AI upstream images response too large: url=%s limit=%d", request.URL.String(), aiImageResponseMaxBytes)
+				Fail(w, "图片生成结果过大，请改用 URL 返回或稍后重试")
+				return
+			}
 			// aicodeme 返的是异步 task（如 {status:"queued", task_id:"..."}）。
 			// 后端代理轮询 task 直到 succeeded/failed/超时，再转 OpenAI 标准。
 			// 轮询后的 body 走 normalizeAicodemeImagesResponse → OpenAI 标准。
@@ -603,8 +666,12 @@ func pollAicodemeImageTaskIfNeeded(req *http.Request, body []byte, upstreamHeade
 			log.Printf("AI task poll failed: url=%s err=%v", pollURL.String(), err)
 			continue
 		}
-		raw, readErr := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+		raw, tooLarge, readErr := readLimitedBody(resp.Body, aiImageTaskPollResponseMaxBytes)
 		resp.Body.Close()
+		if tooLarge {
+			log.Printf("AI task poll response too large: task=%s limit=%d", probe.TaskID, aiImageTaskPollResponseMaxBytes)
+			return body, true
+		}
 		if readErr != nil {
 			continue
 		}
@@ -655,6 +722,8 @@ func ensureAsyncTrueOnImages(path string, body []byte, contentType string) ([]by
 		asyncTrue, _ := json.Marshal(true)
 		payload["async"] = asyncTrue
 	}
+	responseFormat, _ := json.Marshal("url")
+	payload["response_format"] = responseFormat
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return body, contentType

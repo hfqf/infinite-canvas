@@ -55,6 +55,7 @@ const IMAGE_MAX_PIXELS = 3840 * 3840;
 const IMAGE_MAX_EDGE = 3840;
 const IMAGE_MAX_RATIO = 3;
 const IMAGE_OUTPUT_FORMAT = "png";
+const IMAGE_RESPONSE_FORMAT = "url";
 const IMAGE_TASK_MAX_POLLS = 90;
 const IMAGE_TASK_DEFAULT_DELAY = 2000;
 const IMAGE_TASK_MAX_DELAY = 10000;
@@ -129,7 +130,7 @@ function resolveRequestSize(quality: string | undefined, size: string) {
 
 function resolveImageDataUrl(item: Record<string, unknown>) {
     if (typeof item.b64_json === "string" && item.b64_json) {
-        return `data:image/png;base64,${item.b64_json}`;
+        return item.b64_json.startsWith("data:") ? item.b64_json : `data:image/png;base64,${item.b64_json}`;
     }
     if (typeof item.url === "string" && item.url) {
         return normalizeImageUrl(item.url);
@@ -312,7 +313,7 @@ export async function requestGeneration(config: AiConfig, prompt: string) {
                 n,
                 ...(quality ? { quality } : {}),
                 ...(requestSize ? { size: requestSize } : {}),
-                response_format: "b64_json",
+                response_format: IMAGE_RESPONSE_FORMAT,
                 output_format: IMAGE_OUTPUT_FORMAT,
                 async: true,
             },
@@ -337,7 +338,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     formData.set("model", config.model);
     formData.set("prompt", withSystemPrompt(config, requestPrompt));
     formData.set("n", String(n));
-    formData.set("response_format", "b64_json");
+    formData.set("response_format", IMAGE_RESPONSE_FORMAT);
     formData.set("output_format", IMAGE_OUTPUT_FORMAT);
     formData.set("async", "true");
     if (quality) {
