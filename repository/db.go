@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,16 +64,7 @@ func DB() (*gorm.DB, error) {
 		if dbErr != nil {
 			return
 		}
-		dbErr = db.AutoMigrate(
-			&model.User{},
-			&model.EmailVerificationCode{},
-			&model.CreditLog{},
-			&model.AIImageTask{},
-			&model.RechargeOrder{},
-			&model.Prompt{},
-			&model.Asset{},
-			&model.Setting{},
-		)
+		dbErr = migrateSchema(db, driver)
 	})
 	return db, dbErr
 }
@@ -80,7 +72,10 @@ func DB() (*gorm.DB, error) {
 func dialector(driver string, dsn string) gorm.Dialector {
 	switch driver {
 	case "mysql":
-		return gormmysql.Open(dsn)
+		// DefaultStringSize=191 让带 uniqueIndex 的 string 字段默认建成 VARCHAR(191)，
+		// 避免 GORM 默认 longtext 建唯一索引报 "BLOB/TEXT column used in key specification without a key length"。
+		// 超过 191 字符的列（如 prompts.prompt、settings.value）由 autoMigrateLongTextColumns 单独改成 LONGTEXT。
+		return gormmysql.New(gormmysql.Config{DSN: dsn, DefaultStringSize: 191})
 	case "postgres", "postgresql":
 		return postgres.Open(dsn)
 	default:
@@ -90,6 +85,61 @@ func dialector(driver string, dsn string) gorm.Dialector {
 
 func isPostgresDriver(driver string) bool {
 	return driver == "postgres" || driver == "postgresql"
+}
+
+// migrateSchema 处理启动时表结构同步。MySQL 上为了避免 DefaultStringSize=191 与 LONGTEXT 互相 ALTER，遵循：
+//   - 表不存在 → AutoMigrate 一次性建表（包含被 promoteLongTextColumns 提升过的 LONGTEXT 列）。
+//   - 表已存在 → 只跳过 AutoMigrate；如某些长文本列在建表后被手动加了 gorm:"type:text"，由 promoteLongTextColumns 单独修正。
+func migrateSchema(db *gorm.DB, driver string) error {
+	models := []any{
+		&model.User{},
+		&model.EmailVerificationCode{},
+		&model.CreditLog{},
+		&model.AIImageTask{},
+		&model.RechargeOrder{},
+		&model.Prompt{},
+		&model.Asset{},
+		&model.Setting{},
+	}
+	for _, m := range models {
+		if db.Migrator().HasTable(m) {
+			continue
+		}
+		if err := db.AutoMigrate(m); err != nil {
+			return err
+		}
+	}
+	if driver == "mysql" {
+		if err := autoMigrateLongTextColumns(db); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// autoMigrateLongTextColumns 把 MySQL 上默认 VARCHAR(191) 但实际存储超过 191 字符的列改成 LONGTEXT。
+// 配合 DefaultStringSize=191，避免提示词 / 设置 JSON 等长文本写不进去。
+func autoMigrateLongTextColumns(db *gorm.DB) error {
+	columns := []struct {
+		table  string
+		column string
+	}{
+		{"prompts", "prompt"},
+		{"prompts", "title"},
+		{"prompts", "preview"},
+		{"prompts", "tags"},
+		{"prompts", "cover_url"},
+		{"settings", "value"},
+		{"credit_logs", "remark"},
+		{"ai_image_tasks", "prompt"},
+	}
+	for _, c := range columns {
+		stmt := fmt.Sprintf("ALTER TABLE `%s` MODIFY `%s` LONGTEXT", c.table, c.column)
+		if err := db.Exec(stmt).Error; err != nil {
+			return fmt.Errorf("%s: %w", stmt, err)
+		}
+	}
+	return nil
 }
 
 func ensureMySQLDatabase(dsn string) error {

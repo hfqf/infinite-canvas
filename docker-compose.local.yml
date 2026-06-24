@@ -8,6 +8,8 @@ services:
       - .env
     volumes:
       - ./data:/app/data
-    ports:
-      - "3001:3000"
+    # 用 host 网络，让容器能直接通过 127.0.0.1:3306 访问宿主上的 haotushow-mysql。
+    network_mode: host
+    # 用 command override 把 Next.js 端口从镜像默认的 3000 改到 3001（nginx 反代 canvas.haotushow.com 的目标端口）。
+    command: ["sh", "-c", "PORT=8080 /app/server & cd /app/web && PORT=3001 HOSTNAME=0.0.0.0 node server.js"]
     restart: unless-stopped
