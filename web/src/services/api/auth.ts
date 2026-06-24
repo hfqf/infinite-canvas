@@ -14,6 +14,7 @@ export type AuthUser = {
     avatarUrl: string;
     role: UserRole;
     credits: number;
+    frozenCredits: number;
     memberType: MemberType;
     memberLevel: MemberLevel;
     lastRechargeAmountYuan: number;

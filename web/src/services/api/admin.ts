@@ -18,6 +18,7 @@ export type AdminUser = {
     avatarUrl: string;
     role: "user" | "admin";
     credits: number;
+    frozenCredits: number;
     memberType: "" | "monthly" | "annual" | "test";
     memberLevel: "" | "standard" | "basic" | "advanced" | "premium" | "test";
     lastRechargeAmountYuan: number;
@@ -78,6 +79,10 @@ export async function deleteAdminUser(token: string, id: string) {
 
 export async function fetchAdminCreditLogs(token: string, query: AdminUserQuery = {}) {
     return apiGet<AdminCreditLogListResponse>("/api/admin/credit-logs", compactApiParams(query), token);
+}
+
+export async function fetchAdminDeductionLogs(token: string, query: AdminUserQuery = {}) {
+    return apiGet<AdminCreditLogListResponse>("/api/admin/deduction-logs", compactApiParams(query), token);
 }
 
 export async function saveAdminCreditLog(token: string, log: Partial<AdminCreditLog>) {

@@ -25,11 +25,11 @@ func AIImagesEdits(w http.ResponseWriter, r *http.Request) {
 }
 
 func AIImageTask(w http.ResponseWriter, r *http.Request, id string) {
-	proxyAIGetRequest(w, r, "/image-tasks/"+id)
+	proxyAIImageTaskGetRequest(w, r, "/image-tasks/"+id, id)
 }
 
 func AIImagesGenerationTask(w http.ResponseWriter, r *http.Request, id string) {
-	proxyAIGetRequest(w, r, "/images/generations/"+id)
+	proxyAIImageTaskGetRequest(w, r, "/images/generations/"+id, id)
 }
 
 func AIChatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -92,12 +92,18 @@ func proxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		return
 	}
 	var imageChannels []model.ModelChannel
+	var imageTask model.AIImageTask
 	var request *http.Request
 	if isImageRequestPath(path) {
 		imageChannels, err = service.SelectModelChannels(modelName)
 		if err != nil {
 			log.Printf("AI proxy select channels failed: model=%s err=%v", modelName, err)
 			Fail(w, "AI 接口请求失败")
+			return
+		}
+		imageTask, err = service.FreezeAIImageCredits(user.ID, modelName, credits, path, readAIRequestPrompt(body, contentType))
+		if err != nil {
+			FailError(w, err)
 			return
 		}
 	} else {
@@ -114,6 +120,10 @@ func proxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 			return
 		}
 	}
+	if isImageRequestPath(path) {
+		copyAIImageResponseWithFallback(w, imageChannels, imageTask, modelName, path, body, contentType)
+		return
+	}
 	if err := service.ConsumeUserCredits(user.ID, modelName, credits, path); err != nil {
 		FailError(w, err)
 		return
@@ -122,10 +132,6 @@ func proxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		if err := service.RefundUserCredits(user.ID, modelName, credits, path); err != nil {
 			log.Printf("AI proxy refund credits failed: user=%s model=%s credits=%d err=%v", user.ID, modelName, credits, err)
 		}
-	}
-	if isImageRequestPath(path) {
-		copyAIImageResponseWithFallback(w, imageChannels, modelName, path, body, contentType, refund)
-		return
 	}
 	copyAIResponse(w, request, refund)
 }
@@ -144,7 +150,7 @@ const (
 	aiImageReferenceTimeoutSeconds  = 60
 )
 
-func copyAIImageResponseWithFallback(w http.ResponseWriter, channels []model.ModelChannel, modelName string, path string, body []byte, contentType string, onFailure func()) {
+func copyAIImageResponseWithFallback(w http.ResponseWriter, channels []model.ModelChannel, imageTask model.AIImageTask, modelName string, path string, body []byte, contentType string) {
 	lastResult := aiProxyAttemptResult{message: "AI 接口请求失败"}
 	timeoutSeconds := aiImageRequestTimeoutSeconds(body, contentType)
 	for index, channel := range channels {
@@ -157,6 +163,10 @@ func copyAIImageResponseWithFallback(w http.ResponseWriter, channels []model.Mod
 		}
 		result := fetchAIImageResponse(request, time.Duration(timeoutSeconds)*time.Second)
 		if result.statusCode < http.StatusBadRequest && result.message == "" {
+			if err := handleAIImageBilling(imageTask, channel, result.body); err != nil {
+				FailError(w, err)
+				return
+			}
 			service.RecordModelChannelSuccess(channel)
 			writeAIProxySuccess(w, result)
 			return
@@ -167,11 +177,11 @@ func copyAIImageResponseWithFallback(w http.ResponseWriter, channels []model.Mod
 			log.Printf("AI proxy retryable failure: model=%s channel=%s status=%d attempt=%d/%d", modelName, channel.Name, result.statusCode, index+1, len(channels))
 			continue
 		}
-		onFailure()
+		releaseAIImageTaskOnFailure(imageTask, "failed")
 		Fail(w, result.message)
 		return
 	}
-	onFailure()
+	releaseAIImageTaskOnFailure(imageTask, "failed")
 	Fail(w, lastResult.message)
 }
 
@@ -185,6 +195,7 @@ func aiImageRequestTimeoutSeconds(body []byte, contentType string) int {
 
 func buildAIProxyRequest(channel model.ModelChannel, modelName string, path string, body []byte, contentType string) (*http.Request, error) {
 	resolvedPath := resolveAIProxyPath(channel.BaseURL, modelName, path)
+	body, contentType = ensureAsyncTrueOnImages(path, body, contentType)
 	request, err := http.NewRequest(http.MethodPost, service.BuildModelChannelURL(channel, resolvedPath), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -217,15 +228,6 @@ func fetchAIImageResponse(request *http.Request, timeout time.Duration) aiProxyA
 	if readErr != nil {
 		return aiProxyAttemptResult{message: "AI 接口请求失败", retryable: true}
 	}
-	if shouldNormalizeImagesResponse(request.URL.Path) {
-		finalBody, polled := pollAicodemeImageTaskIfNeeded(request, body, response.Header)
-		if polled {
-			body = finalBody
-		}
-		if normalized, ok := normalizeAicodemeImagesResponse(body); ok {
-			body = normalized
-		}
-	}
 	return aiProxyAttemptResult{statusCode: response.StatusCode, header: response.Header, body: body}
 }
 
@@ -238,6 +240,153 @@ func writeAIProxySuccess(w http.ResponseWriter, result aiProxyAttemptResult) {
 	}
 	w.WriteHeader(result.statusCode)
 	_, _ = w.Write(result.body)
+}
+
+func proxyAIImageTaskGetRequest(w http.ResponseWriter, r *http.Request, path string, taskID string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	task, ok, err := service.GetAIImageTask(taskID, user.ID)
+	if err != nil {
+		log.Printf("AI task load failed: task=%s err=%v", taskID, err)
+		Fail(w, "AI 接口请求失败")
+		return
+	}
+	modelName := strings.TrimSpace(r.URL.Query().Get("model"))
+	var channel model.ModelChannel
+	if ok {
+		modelName = firstNonEmpty(modelName, task.Model)
+		channel, err = service.FindModelChannel(modelName, task.ChannelName, task.ChannelURL)
+	} else {
+		channel, err = service.SelectModelChannel(modelName)
+	}
+	if err != nil {
+		log.Printf("AI task select channel failed: task=%s model=%s err=%v", taskID, modelName, err)
+		Fail(w, "AI 接口请求失败")
+		return
+	}
+	request, err := http.NewRequest(http.MethodGet, service.BuildModelChannelURL(channel, path), nil)
+	if err != nil {
+		Fail(w, "AI 接口请求失败")
+		return
+	}
+	request.Header.Set("Authorization", "Bearer "+channel.APIKey)
+	result := fetchAIImageResponse(request, time.Duration(aiImageRequestTimeoutSeconds(nil, ""))*time.Second)
+	if result.statusCode >= http.StatusBadRequest || result.message != "" {
+		Fail(w, result.message)
+		return
+	}
+	if ok {
+		if err := handleAIImageBilling(task, channel, result.body); err != nil {
+			FailError(w, err)
+			return
+		}
+	}
+	writeAIProxySuccess(w, result)
+}
+
+func handleAIImageBilling(imageTask model.AIImageTask, channel model.ModelChannel, body []byte) error {
+	if imageTask.Credits <= 0 {
+		return nil
+	}
+	status := imagePayloadStatus(body)
+	taskID := imagePayloadTaskID(body)
+	imageURL := imagePayloadImageURL(body)
+	if taskID != "" {
+		attached, err := service.AttachAIImageTask(imageTask.TaskID, taskID, status, imageURL, channel)
+		if err != nil {
+			return err
+		}
+		imageTask = attached
+	}
+	if isPendingImageStatus(status) {
+		return nil
+	}
+	if isFailedImageStatus(status) {
+		return service.ReleaseAIImageTask(imageTask.TaskID, imageTask.UserID, firstNonEmpty(status, "failed"))
+	}
+	if isSuccessfulImageStatus(status) || imageURL != "" {
+		return service.CompleteAIImageTaskSuccess(imageTask.TaskID, imageTask.UserID, firstNonEmpty(status, "succeeded"), imageURL)
+	}
+	return nil
+}
+
+func releaseAIImageTaskOnFailure(imageTask model.AIImageTask, status string) {
+	if imageTask.TaskID == "" {
+		return
+	}
+	if err := service.ReleaseAIImageTask(imageTask.TaskID, imageTask.UserID, status); err != nil {
+		log.Printf("AI image release frozen credits failed: task=%s user=%s err=%v", imageTask.TaskID, imageTask.UserID, err)
+	}
+}
+
+func imagePayloadTaskID(body []byte) string {
+	var payload struct {
+		ID     string `json:"id"`
+		TaskID string `json:"task_id"`
+	}
+	_ = json.Unmarshal(body, &payload)
+	return firstNonEmpty(payload.TaskID, payload.ID)
+}
+
+func imagePayloadStatus(body []byte) string {
+	var payload struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(body, &payload)
+	return strings.ToLower(strings.TrimSpace(payload.Status))
+}
+
+func imagePayloadImageURL(body []byte) string {
+	var payload struct {
+		Data   []map[string]any `json:"data"`
+		Result struct {
+			Data []map[string]any `json:"data"`
+		} `json:"result"`
+	}
+	_ = json.Unmarshal(body, &payload)
+	items := payload.Data
+	if len(items) == 0 {
+		items = payload.Result.Data
+	}
+	for _, item := range items {
+		if value, ok := item["url"].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+		if value, ok := item["b64_json"].(string); ok && strings.TrimSpace(value) != "" {
+			return "[b64_json]"
+		}
+	}
+	return ""
+}
+
+func isPendingImageStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "queued", "running", "in_progress", "processing", "pending":
+		return true
+	default:
+		return false
+	}
+}
+
+func isSuccessfulImageStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "succeeded", "success":
+		return true
+	default:
+		return false
+	}
+}
+
+func isFailedImageStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "failed", "error", "canceled":
+		return true
+	default:
+		return false
+	}
 }
 
 func isRetryableAIProxyStatus(status int) bool {
@@ -535,6 +684,26 @@ func readAIRequest(r *http.Request) ([]byte, string, string, error) {
 	return body, contentType, modelName, nil
 }
 
+func readAIRequestPrompt(body []byte, contentType string) string {
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		_, params, err := mime.ParseMediaType(contentType)
+		if err != nil {
+			return ""
+		}
+		form, err := multipart.NewReader(bytes.NewReader(body), params["boundary"]).ReadForm(32 << 20)
+		if err != nil {
+			return ""
+		}
+		defer form.RemoveAll()
+		return firstNonEmpty(form.Value["prompt"]...)
+	}
+	var payload struct {
+		Prompt string `json:"prompt"`
+	}
+	_ = json.Unmarshal(body, &payload)
+	return payload.Prompt
+}
+
 func readMultipartModel(body []byte, contentType string) string {
 	_, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
@@ -770,6 +939,15 @@ func safeUpstreamText(text string) string {
 		return string(runes[:300]) + "..."
 	}
 	return text
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 type aiError struct {

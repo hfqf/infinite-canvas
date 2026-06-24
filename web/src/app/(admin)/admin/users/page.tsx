@@ -80,8 +80,13 @@ export default function AdminUsersPage() {
         {
             title: "算力点",
             dataIndex: "credits",
-            width: 100,
-            render: (_, item) => <Typography.Text>{item.credits}</Typography.Text>,
+            width: 150,
+            render: (_, item) => (
+                <Space direction="vertical" size={0}>
+                    <Typography.Text>{item.credits}</Typography.Text>
+                    {item.frozenCredits ? <Typography.Text type="secondary">冻结 {item.frozenCredits} / 可用 {item.credits - item.frozenCredits}</Typography.Text> : null}
+                </Space>
+            ),
         },
         {
             title: "Linux.do",

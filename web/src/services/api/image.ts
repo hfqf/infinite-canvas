@@ -142,10 +142,10 @@ function parseImagePayload(payload: ImageApiResponse) {
         throw new Error(payload.msg || "请求失败");
     }
     const status = payload.status?.toLowerCase();
-    if (status === "failed" || status === "error") {
+    if (status === "failed" || status === "error" || status === "canceled") {
         throw new Error(readApiError(payload) || "图片生成失败");
     }
-    if (status === "queued" || status === "running") {
+    if (isPendingImageStatus(status)) {
         throw new Error("图片任务仍在处理中，请稍后重试");
     }
     const items = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.result?.data) ? payload.result.data : [];
@@ -186,8 +186,11 @@ function imageTaskApiUrl(config: AiConfig, taskId: string) {
 }
 
 function isPendingImagePayload(payload: ImageApiResponse) {
-    const status = payload.status?.toLowerCase();
-    return status === "queued" || status === "running";
+    return isPendingImageStatus(payload.status?.toLowerCase());
+}
+
+function isPendingImageStatus(status: string | undefined) {
+    return status === "queued" || status === "running" || status === "pending" || status === "processing" || status === "in_progress";
 }
 
 function imageTaskId(payload: ImageApiResponse) {
@@ -311,6 +314,7 @@ export async function requestGeneration(config: AiConfig, prompt: string) {
                 ...(requestSize ? { size: requestSize } : {}),
                 response_format: "b64_json",
                 output_format: IMAGE_OUTPUT_FORMAT,
+                async: true,
             },
             {
                 headers: aiHeaders(config, "application/json"),
@@ -335,6 +339,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     formData.set("n", String(n));
     formData.set("response_format", "b64_json");
     formData.set("output_format", IMAGE_OUTPUT_FORMAT);
+    formData.set("async", "true");
     if (quality) {
         formData.set("quality", quality);
     }

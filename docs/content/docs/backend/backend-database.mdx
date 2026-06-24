@@ -22,6 +22,7 @@ description: 当前后端主要数据表与字段说明
 - `users`
 - `email_verification_codes`
 - `credit_logs`
+- `ai_image_tasks`
 - `recharge_orders`
 - `prompts`
 - `assets`
@@ -43,6 +44,7 @@ description: 当前后端主要数据表与字段说明
 | `avatar_url` | string | 头像地址 |
 | `role` | string | 角色：`user`、`admin` |
 | `credits` | number | 算力点余额 |
+| `frozen_credits` | number | 已冻结算力点；异步生图任务创建前冻结，任务成功后转为扣款，任务失败后释放 |
 | `member_type` | string | 最近一次购买的会员类型：`monthly`、`annual` |
 | `member_level` | string | 最近一次购买的会员级别：`standard`、`basic`、`advanced`、`premium` |
 | `last_recharge_amount_yuan` | number | 最近一次支付成功的充值金额，单位元 |
@@ -152,7 +154,7 @@ description: 当前后端主要数据表与字段说明
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `model` | string | 模型名称 |
-| `credits` | number | 模型非 4K 基础单价；图片请求预扣公式为 `(基础单价 + 额外参考图数 * 非 4K 基础单价) * 生成张数`，其中 4K 基础单价固定为 `6`，第一张参考图免费 |
+| `credits` | number | 模型非 4K 基础单价；图片请求扣费公式为 `(基础单价 + 额外参考图数 * 非 4K 基础单价) * 生成张数`，其中 4K 基础单价固定为 `6`，第一张参考图免费；远程异步生图会在任务成功返回后扣费 |
 
 `auth.linuxDo` 当前字段：
 
@@ -201,13 +203,13 @@ description: 当前后端主要数据表与字段说明
 
 ### credit_logs
 
-用户算力点变更流水表。当前记录后台手动调整、模型调用预扣、模型调用失败返还和微信充值到账。
+用户算力点变更流水表。当前记录后台手动调整、异步生图冻结、异步生图冻结释放、模型调用消费、模型调用失败返还和微信充值到账。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | string | 主键 |
 | `user_id` | string | 关联用户 ID |
-| `type` | string | 类型：`admin_adjust`、`ai_consume`、`ai_refund`、`recharge` |
+| `type` | string | 类型：`admin_adjust`、`ai_freeze`、`ai_freeze_release`、`ai_consume`、`ai_refund`、`recharge` |
 | `amount` | number | 本次变动数量，增加为正，扣减为负 |
 | `balance` | number | 变动后的用户算力点余额 |
 | `related_id` | string | 关联业务 ID，可为空 |
@@ -220,9 +222,34 @@ description: 当前后端主要数据表与字段说明
 | 值 | 说明 |
 | --- | --- |
 | `admin_adjust` | 后台手动调整 |
-| `ai_consume` | 调用后端模型接口消费 |
+| `ai_freeze` | 异步生图任务创建前冻结算力点 |
+| `ai_freeze_release` | 异步生图任务失败或取消后释放冻结算力点 |
+| `ai_consume` | 调用后端模型接口消费；异步生图会在上游成功后从冻结额度转为真实扣款 |
 | `ai_refund` | 后端模型接口调用失败返还 |
 | `recharge` | 微信充值到账 |
+
+### ai_image_tasks
+
+异步生图任务计费上下文表。请求上游前先冻结用户可用算力点并写入任务占位记录；创建远程异步生图任务后绑定上游任务 ID、渠道、提示词和预计扣费点数；轮询到上游 `succeeded` / `success` 且拿到结果图后，再按任务表中的上下文扣减用户算力点、释放冻结并写入 `credit_logs`，重复轮询不会重复扣费；任务失败或取消会释放冻结额度。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | 主键 |
+| `task_id` | string | 上游任务 ID，唯一索引 |
+| `user_id` | string | 关联用户 ID |
+| `model` | string | 生图模型 |
+| `path` | string | 创建任务路径，如 `/images/generations` 或 `/images/edits` |
+| `prompt` | text | 本次生图提示词 |
+| `credits` | number | 成功后需要扣除的算力点 |
+| `status` | string | 上游任务状态 |
+| `image_url` | text | 成功结果图 URL；仅返回 base64 时记录为 `[b64_json]` |
+| `channel_name` | string | 创建任务时使用的渠道名称 |
+| `channel_url` | string | 创建任务时使用的渠道 Base URL |
+| `frozen_at` | string | 冻结算力点时间 |
+| `charged_at` | string | 实际扣款时间，非空表示已扣款 |
+| `released_at` | string | 释放冻结时间，任务失败或取消时写入 |
+| `created_at` | string | 创建时间 |
+| `updated_at` | string | 更新时间 |
 
 ### recharge_orders
 

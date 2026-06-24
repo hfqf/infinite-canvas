@@ -188,6 +188,30 @@ func SelectModelChannels(modelName string) ([]model.ModelChannel, error) {
 	return weightedModelChannels(channels), nil
 }
 
+func FindModelChannel(modelName string, channelName string, channelURL string) (model.ModelChannel, error) {
+	settings, err := repository.GetSettings()
+	if err != nil {
+		return model.ModelChannel{}, err
+	}
+	modelName = strings.TrimSpace(modelName)
+	channelName = strings.TrimSpace(channelName)
+	channelURL = strings.TrimRight(strings.TrimSpace(channelURL), "/")
+	for _, channel := range normalizePrivateSetting(settings.Private).Channels {
+		if channelName != "" && channel.Name != channelName {
+			continue
+		}
+		if channelURL != "" && strings.TrimRight(strings.TrimSpace(channel.BaseURL), "/") != channelURL {
+			continue
+		}
+		for _, item := range channel.Models {
+			if strings.TrimSpace(item) == modelName {
+				return channel, nil
+			}
+		}
+	}
+	return model.ModelChannel{}, errors.New("没有可用模型渠道")
+}
+
 func weightedModelChannels(channels []model.ModelChannel) []model.ModelChannel {
 	remaining := append([]model.ModelChannel{}, channels...)
 	result := make([]model.ModelChannel, 0, len(remaining))

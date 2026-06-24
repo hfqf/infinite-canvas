@@ -162,6 +162,15 @@ func AdminCreditLogs(w http.ResponseWriter, r *http.Request) {
 	OK(w, logs)
 }
 
+func AdminAIDeductionLogs(w http.ResponseWriter, r *http.Request) {
+	logs, err := service.ListAIDeductionLogs(parseQuery(r))
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, logs)
+}
+
 func AdminSaveCreditLog(w http.ResponseWriter, r *http.Request) {
 	var log model.CreditLog
 	_ = json.NewDecoder(r.Body).Decode(&log)

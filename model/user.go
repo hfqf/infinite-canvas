@@ -45,6 +45,7 @@ type User struct {
 	AvatarURL              string      `json:"avatarUrl"`
 	Role                   UserRole    `json:"role"`
 	Credits                int         `json:"credits"`
+	FrozenCredits          int         `json:"frozenCredits"`
 	MemberType             MemberType  `json:"memberType"`
 	MemberLevel            MemberLevel `json:"memberLevel"`
 	LastRechargeAmountYuan int         `json:"lastRechargeAmountYuan"`
@@ -77,6 +78,7 @@ type AuthUser struct {
 	AvatarURL              string      `json:"avatarUrl"`
 	Role                   UserRole    `json:"role"`
 	Credits                int         `json:"credits"`
+	FrozenCredits          int         `json:"frozenCredits"`
 	MemberType             MemberType  `json:"memberType"`
 	MemberLevel            MemberLevel `json:"memberLevel"`
 	LastRechargeAmountYuan int         `json:"lastRechargeAmountYuan"`
@@ -100,6 +102,7 @@ func PublicUser(user User) AuthUser {
 		AvatarURL:              user.AvatarURL,
 		Role:                   user.Role,
 		Credits:                user.Credits,
+		FrozenCredits:          user.FrozenCredits,
 		MemberType:             user.MemberType,
 		MemberLevel:            user.MemberLevel,
 		LastRechargeAmountYuan: user.LastRechargeAmountYuan,
@@ -125,11 +128,13 @@ type EmailVerificationCode struct {
 type CreditLogType string
 
 const (
-	CreditLogTypeAdminAdjust  CreditLogType = "admin_adjust"
-	CreditLogTypeAIConsume    CreditLogType = "ai_consume"
-	CreditLogTypeAIRefund     CreditLogType = "ai_refund"
-	CreditLogTypeRegisterGift CreditLogType = "register_gift"
-	CreditLogTypeRecharge     CreditLogType = "recharge"
+	CreditLogTypeAdminAdjust     CreditLogType = "admin_adjust"
+	CreditLogTypeAIFreeze        CreditLogType = "ai_freeze"
+	CreditLogTypeAIFreezeRelease CreditLogType = "ai_freeze_release"
+	CreditLogTypeAIConsume       CreditLogType = "ai_consume"
+	CreditLogTypeAIRefund        CreditLogType = "ai_refund"
+	CreditLogTypeRegisterGift    CreditLogType = "register_gift"
+	CreditLogTypeRecharge        CreditLogType = "recharge"
 )
 
 // CreditLog 用户算力点变更流水。
@@ -148,6 +153,26 @@ type CreditLog struct {
 type CreditLogList struct {
 	Items []CreditLog `json:"items"`
 	Total int         `json:"total"`
+}
+
+// AIImageTask 保存异步生图任务的计费上下文。
+type AIImageTask struct {
+	ID          string `json:"id" gorm:"primaryKey"`
+	TaskID      string `json:"taskId" gorm:"uniqueIndex"`
+	UserID      string `json:"userId" gorm:"index"`
+	Model       string `json:"model"`
+	Path        string `json:"path"`
+	Prompt      string `json:"prompt" gorm:"type:text"`
+	Credits     int    `json:"credits"`
+	Status      string `json:"status" gorm:"index"`
+	ImageURL    string `json:"imageUrl" gorm:"type:text"`
+	ChannelName string `json:"channelName"`
+	ChannelURL  string `json:"channelUrl"`
+	FrozenAt    string `json:"frozenAt"`
+	ChargedAt   string `json:"chargedAt"`
+	ReleasedAt  string `json:"releasedAt"`
+	CreatedAt   string `json:"createdAt"`
+	UpdatedAt   string `json:"updatedAt"`
 }
 
 type RechargeOrderStatus string

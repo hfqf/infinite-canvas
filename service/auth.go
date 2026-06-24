@@ -404,6 +404,132 @@ func ConsumeUserCredits(userID string, modelName string, credits int, path strin
 	return err
 }
 
+func EnsureUserCredits(userID string, credits int) error {
+	if credits <= 0 {
+		return nil
+	}
+	user, ok, err := repository.GetUserByID(userID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return safeMessageError{message: "用户不存在"}
+	}
+	if user.Credits-user.FrozenCredits < credits {
+		return safeMessageError{message: "算力点不足"}
+	}
+	return nil
+}
+
+func FreezeAIImageCredits(userID string, modelName string, credits int, path string, prompt string) (model.AIImageTask, error) {
+	current := now()
+	task := model.AIImageTask{
+		ID:        newID("ai_image_task"),
+		UserID:    userID,
+		Model:     modelName,
+		Path:      path,
+		Prompt:    prompt,
+		Credits:   credits,
+		Status:    "reserved",
+		CreatedAt: current,
+		UpdatedAt: current,
+	}
+	task.TaskID = task.ID
+	task, ok, err := repository.FreezeAIImageTask(task, current)
+	if err != nil {
+		return task, err
+	}
+	if !ok {
+		return task, safeMessageError{message: "算力点不足"}
+	}
+	return task, nil
+}
+
+func ConsumeAIImageCredits(userID string, modelName string, credits int, path string, prompt string, imageURL string, taskID string) error {
+	if credits <= 0 {
+		return nil
+	}
+	user, ok, err := repository.ConsumeUserCredits(userID, credits, now())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return safeMessageError{message: "算力点不足"}
+	}
+	if strings.TrimSpace(taskID) == "" {
+		taskID = newID("sync_image")
+	}
+	extra, _ := json.Marshal(map[string]string{"model": modelName, "path": path, "prompt": prompt, "imageUrl": imageURL, "taskId": taskID})
+	_, err = repository.SaveCreditLog(model.CreditLog{
+		ID:        newID("credit"),
+		UserID:    userID,
+		Type:      model.CreditLogTypeAIConsume,
+		Amount:    -credits,
+		Balance:   user.Credits,
+		RelatedID: taskID,
+		Remark:    "图片生成 " + modelName,
+		Extra:     string(extra),
+		CreatedAt: now(),
+	})
+	return err
+}
+
+func RecordAIImageTask(userID string, taskID string, modelName string, path string, prompt string, credits int, status string, channel model.ModelChannel) error {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return nil
+	}
+	if saved, ok, err := repository.GetAIImageTaskByTaskID(taskID); err != nil {
+		return err
+	} else if ok {
+		saved.Status = firstNonEmpty(status, saved.Status)
+		saved.UpdatedAt = now()
+		_, err = repository.SaveAIImageTask(saved)
+		return err
+	}
+	current := now()
+	_, err := repository.SaveAIImageTask(model.AIImageTask{
+		ID:          newID("ai_image_task"),
+		TaskID:      taskID,
+		UserID:      userID,
+		Model:       modelName,
+		Path:        path,
+		Prompt:      prompt,
+		Credits:     credits,
+		Status:      status,
+		ChannelName: channel.Name,
+		ChannelURL:  strings.TrimRight(strings.TrimSpace(channel.BaseURL), "/"),
+		CreatedAt:   current,
+		UpdatedAt:   current,
+	})
+	return err
+}
+
+func AttachAIImageTask(reservedTaskID string, upstreamTaskID string, status string, imageURL string, channel model.ModelChannel) (model.AIImageTask, error) {
+	return repository.AttachAIImageTask(reservedTaskID, upstreamTaskID, status, imageURL, channel, now())
+}
+
+func GetAIImageTask(taskID string, userID string) (model.AIImageTask, bool, error) {
+	task, ok, err := repository.GetAIImageTaskByTaskID(taskID)
+	if err != nil || !ok {
+		return task, ok, err
+	}
+	return task, task.UserID == userID, nil
+}
+
+func CompleteAIImageTaskSuccess(taskID string, userID string, status string, imageURL string) error {
+	_, _, err := repository.CompleteAIImageTaskSuccess(taskID, userID, status, imageURL, now())
+	if err != nil && err.Error() == "算力点不足" {
+		return safeMessageError{message: "算力点不足"}
+	}
+	return err
+}
+
+func ReleaseAIImageTask(taskID string, userID string, status string) error {
+	_, _, err := repository.ReleaseAIImageTask(taskID, userID, status, now())
+	return err
+}
+
 func RefundUserCredits(userID string, modelName string, credits int, path string) error {
 	if credits <= 0 {
 		return nil
@@ -431,6 +557,14 @@ func RefundUserCredits(userID string, modelName string, credits int, path string
 
 func ListCreditLogs(q model.Query) (model.CreditLogList, error) {
 	logs, total, err := repository.ListCreditLogs(q)
+	if err != nil {
+		return model.CreditLogList{}, err
+	}
+	return model.CreditLogList{Items: logs, Total: int(total)}, nil
+}
+
+func ListAIDeductionLogs(q model.Query) (model.CreditLogList, error) {
+	logs, total, err := repository.ListCreditLogsByTypes([]model.CreditLogType{model.CreditLogTypeAIFreeze, model.CreditLogTypeAIConsume, model.CreditLogTypeAIFreezeRelease}, q)
 	if err != nil {
 		return model.CreditLogList{}, err
 	}

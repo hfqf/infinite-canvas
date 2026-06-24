@@ -99,11 +99,11 @@ func TestCopyAIImageResponseWithFallbackRetriesBackupOnServerError(t *testing.T)
 			{Name: "primary-test", BaseURL: primary.URL, APIKey: "primary-key"},
 			{Name: "backup-test", BaseURL: backup.URL, APIKey: "backup-key"},
 		},
+		model.AIImageTask{ID: "task_test", TaskID: "task_test", UserID: "user_test"},
 		"gpt-image-2",
 		"/images/generations",
 		[]byte(`{"model":"gpt-image-2","prompt":"hi"}`),
 		"application/json",
-		func() { t.Fatal("should not refund when backup succeeds") },
 	)
 
 	if recorder.Code != http.StatusOK {

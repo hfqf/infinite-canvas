@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -137,6 +138,256 @@ func SaveCreditLog(log model.CreditLog) (model.CreditLog, error) {
 	return log, db.Save(&log).Error
 }
 
+func SaveAIImageTask(task model.AIImageTask) (model.AIImageTask, error) {
+	db, err := DB()
+	if err != nil {
+		return task, err
+	}
+	return task, db.Save(&task).Error
+}
+
+func GetAIImageTaskByTaskID(taskID string) (model.AIImageTask, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.AIImageTask{}, false, err
+	}
+	task := model.AIImageTask{}
+	if err := db.Where("task_id = ?", taskID).First(&task).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return model.AIImageTask{}, false, nil
+		}
+		return model.AIImageTask{}, false, err
+	}
+	return task, true, nil
+}
+
+func AttachAIImageTask(reservedTaskID string, upstreamTaskID string, status string, imageURL string, channel model.ModelChannel, now string) (model.AIImageTask, error) {
+	db, err := DB()
+	if err != nil {
+		return model.AIImageTask{}, err
+	}
+	task := model.AIImageTask{}
+	err = db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("task_id = ?", reservedTaskID).First(&task).Error; err != nil {
+			return err
+		}
+		if strings.TrimSpace(upstreamTaskID) != "" {
+			task.TaskID = strings.TrimSpace(upstreamTaskID)
+		}
+		if strings.TrimSpace(status) != "" {
+			task.Status = status
+		}
+		if strings.TrimSpace(imageURL) != "" {
+			task.ImageURL = imageURL
+		}
+		task.ChannelName = channel.Name
+		task.ChannelURL = strings.TrimRight(strings.TrimSpace(channel.BaseURL), "/")
+		task.UpdatedAt = now
+		return tx.Save(&task).Error
+	})
+	return task, err
+}
+
+func UpdateAIImageTaskStatus(taskID string, userID string, status string, imageURL string, now string) (model.AIImageTask, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.AIImageTask{}, false, err
+	}
+	task := model.AIImageTask{}
+	if err := db.Where("task_id = ? AND user_id = ?", taskID, userID).First(&task).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return model.AIImageTask{}, false, nil
+		}
+		return model.AIImageTask{}, false, err
+	}
+	if strings.TrimSpace(status) != "" {
+		task.Status = status
+	}
+	if strings.TrimSpace(imageURL) != "" {
+		task.ImageURL = imageURL
+	}
+	task.UpdatedAt = now
+	return task, true, db.Save(&task).Error
+}
+
+func FreezeAIImageTask(task model.AIImageTask, now string) (model.AIImageTask, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return task, false, err
+	}
+	if task.Credits <= 0 {
+		task.FrozenAt = now
+		task.CreatedAt = now
+		task.UpdatedAt = now
+		saved, err := SaveAIImageTask(task)
+		return saved, true, err
+	}
+	frozen := false
+	err = db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&model.User{}).Where("id = ? AND credits - frozen_credits >= ?", task.UserID, task.Credits).Updates(map[string]any{
+			"frozen_credits": gorm.Expr("frozen_credits + ?", task.Credits),
+			"updated_at":     now,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return nil
+		}
+		var user model.User
+		if err := tx.Where("id = ?", task.UserID).First(&user).Error; err != nil {
+			return err
+		}
+		task.FrozenAt = now
+		task.CreatedAt = now
+		task.UpdatedAt = now
+		if task.Status == "" {
+			task.Status = "reserved"
+		}
+		if err := tx.Save(&task).Error; err != nil {
+			return err
+		}
+		if err := tx.Save(&model.CreditLog{
+			ID:        "credit_freeze_" + task.ID,
+			UserID:    task.UserID,
+			Type:      model.CreditLogTypeAIFreeze,
+			Amount:    0,
+			Balance:   user.Credits - user.FrozenCredits,
+			RelatedID: task.TaskID,
+			Remark:    "冻结图片生成算力",
+			Extra:     aiImageCreditLogExtra(task, ""),
+			CreatedAt: now,
+		}).Error; err != nil {
+			return err
+		}
+		frozen = true
+		return nil
+	})
+	return task, frozen, err
+}
+
+func CompleteAIImageTaskSuccess(taskID string, userID string, status string, imageURL string, now string) (model.AIImageTask, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.AIImageTask{}, false, err
+	}
+	charged := false
+	task := model.AIImageTask{}
+	err = db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("task_id = ? AND user_id = ?", taskID, userID).First(&task).Error; err != nil {
+			return err
+		}
+		task.Status = status
+		task.ImageURL = imageURL
+		task.UpdatedAt = now
+		if task.ChargedAt != "" || task.Credits <= 0 {
+			return tx.Save(&task).Error
+		}
+		updates := map[string]any{"credits": gorm.Expr("credits - ?", task.Credits), "updated_at": now}
+		query := tx.Model(&model.User{}).Where("id = ? AND credits >= ?", userID, task.Credits)
+		if task.FrozenAt != "" {
+			query = query.Where("frozen_credits >= ?", task.Credits)
+			updates["frozen_credits"] = gorm.Expr("frozen_credits - ?", task.Credits)
+		}
+		result := query.Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return errors.New("算力点不足")
+		}
+		var user model.User
+		if err := tx.Where("id = ?", userID).First(&user).Error; err != nil {
+			return err
+		}
+		task.ChargedAt = now
+		if err := tx.Save(&task).Error; err != nil {
+			return err
+		}
+		if err := tx.Save(&model.CreditLog{
+			ID:        "credit_" + task.ID,
+			UserID:    userID,
+			Type:      model.CreditLogTypeAIConsume,
+			Amount:    -task.Credits,
+			Balance:   user.Credits - user.FrozenCredits,
+			RelatedID: task.TaskID,
+			Remark:    "图片生成 " + task.Model,
+			Extra:     aiImageCreditLogExtra(task, task.ImageURL),
+			CreatedAt: now,
+		}).Error; err != nil {
+			return err
+		}
+		charged = true
+		return nil
+	})
+	return task, charged, err
+}
+
+func ReleaseAIImageTask(taskID string, userID string, status string, now string) (model.AIImageTask, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.AIImageTask{}, false, err
+	}
+	released := false
+	task := model.AIImageTask{}
+	err = db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("task_id = ? AND user_id = ?", taskID, userID).First(&task).Error; err != nil {
+			return err
+		}
+		task.Status = status
+		task.UpdatedAt = now
+		if task.ReleasedAt != "" || task.ChargedAt != "" || task.FrozenAt == "" || task.Credits <= 0 {
+			return tx.Save(&task).Error
+		}
+		result := tx.Model(&model.User{}).Where("id = ? AND frozen_credits >= ?", userID, task.Credits).Updates(map[string]any{
+			"frozen_credits": gorm.Expr("frozen_credits - ?", task.Credits),
+			"updated_at":     now,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return errors.New("冻结算力点不足")
+		}
+		var user model.User
+		if err := tx.Where("id = ?", userID).First(&user).Error; err != nil {
+			return err
+		}
+		task.ReleasedAt = now
+		if err := tx.Save(&task).Error; err != nil {
+			return err
+		}
+		if err := tx.Save(&model.CreditLog{
+			ID:        "credit_release_" + task.ID,
+			UserID:    userID,
+			Type:      model.CreditLogTypeAIFreezeRelease,
+			Amount:    0,
+			Balance:   user.Credits - user.FrozenCredits,
+			RelatedID: task.TaskID,
+			Remark:    "释放图片生成冻结算力",
+			Extra:     aiImageCreditLogExtra(task, task.ImageURL),
+			CreatedAt: now,
+		}).Error; err != nil {
+			return err
+		}
+		released = true
+		return nil
+	})
+	return task, released, err
+}
+
+func aiImageCreditLogExtra(task model.AIImageTask, imageURL string) string {
+	extra, _ := json.Marshal(map[string]any{
+		"model":         task.Model,
+		"path":          task.Path,
+		"prompt":        task.Prompt,
+		"imageUrl":      imageURL,
+		"taskId":        task.TaskID,
+		"frozenCredits": task.Credits,
+	})
+	return string(extra)
+}
+
 func SaveRechargeOrder(order model.RechargeOrder) (model.RechargeOrder, error) {
 	db, err := DB()
 	if err != nil {
@@ -228,6 +479,30 @@ func ListCreditLogs(q model.Query) ([]model.CreditLog, int64, error) {
 	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
 		like := "%" + keyword + "%"
 		tx = tx.Where("user_id LIKE ? OR type LIKE ? OR remark LIKE ? OR related_id LIKE ?", like, like, like, like)
+	}
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var logs []model.CreditLog
+	err = tx.Order("created_at desc").Offset(q.Offset()).Limit(q.PageSize).Find(&logs).Error
+	return logs, total, err
+}
+
+func ListCreditLogsByType(logType model.CreditLogType, q model.Query) ([]model.CreditLog, int64, error) {
+	return ListCreditLogsByTypes([]model.CreditLogType{logType}, q)
+}
+
+func ListCreditLogsByTypes(logTypes []model.CreditLogType, q model.Query) ([]model.CreditLog, int64, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, 0, err
+	}
+	q.Normalize()
+	tx := db.Model(&model.CreditLog{}).Where("type IN ?", logTypes)
+	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
+		like := "%" + keyword + "%"
+		tx = tx.Where("user_id LIKE ? OR remark LIKE ? OR related_id LIKE ? OR extra LIKE ?", like, like, like, like)
 	}
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
