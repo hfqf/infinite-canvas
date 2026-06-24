@@ -848,19 +848,59 @@ func readAIImageRequestSizeQuality(body []byte, contentType string) (string, str
 }
 
 func readAIReferenceImageCount(body []byte, contentType string) int {
-	if !strings.HasPrefix(contentType, "multipart/form-data") {
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		_, params, err := mime.ParseMediaType(contentType)
+		if err != nil {
+			return 0
+		}
+		form, err := multipart.NewReader(bytes.NewReader(body), params["boundary"]).ReadForm(32 << 20)
+		if err != nil {
+			return 0
+		}
+		defer form.RemoveAll()
+		return len(form.File["image"])
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
 		return 0
 	}
-	_, params, err := mime.ParseMediaType(contentType)
-	if err != nil {
+	count := 0
+	for _, key := range []string{"image", "images", "ref_assets"} {
+		if value, ok := payload[key]; ok {
+			if current := countAIReferenceJSONValue(value); current > count {
+				count = current
+			}
+		}
+	}
+	return count
+}
+
+func countAIReferenceJSONValue(value json.RawMessage) int {
+	var text string
+	if err := json.Unmarshal(value, &text); err == nil {
+		if strings.TrimSpace(text) == "" {
+			return 0
+		}
+		return 1
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(value, &items); err == nil {
+		count := 0
+		for _, item := range items {
+			count += countAIReferenceJSONValue(item)
+		}
+		return count
+	}
+	var item map[string]json.RawMessage
+	if err := json.Unmarshal(value, &item); err != nil {
 		return 0
 	}
-	form, err := multipart.NewReader(bytes.NewReader(body), params["boundary"]).ReadForm(32 << 20)
-	if err != nil {
-		return 0
+	for _, key := range []string{"image_url", "url", "data", "b64_json", "base64"} {
+		if raw, ok := item[key]; ok && countAIReferenceJSONValue(raw) > 0 {
+			return 1
+		}
 	}
-	defer form.RemoveAll()
-	return len(form.File["image"])
+	return 0
 }
 
 func firstFormValue(values []string) string {

@@ -530,6 +530,132 @@ func ReleaseAIImageTask(taskID string, userID string, status string) error {
 	return err
 }
 
+func CheckFrozenAIImageTasks() {
+	tasks, err := repository.ListFrozenAIImageTasks(100)
+	if err != nil {
+		log.Printf("list frozen AI image tasks failed err=%v", err)
+		return
+	}
+	for _, task := range tasks {
+		if err := checkFrozenAIImageTask(task); err != nil {
+			log.Printf("check frozen AI image task failed task=%s user=%s err=%v", task.TaskID, task.UserID, err)
+		}
+	}
+}
+
+func checkFrozenAIImageTask(task model.AIImageTask) error {
+	channel, err := FindModelChannel(task.Model, task.ChannelName, task.ChannelURL)
+	if err != nil {
+		return err
+	}
+	status, imageURL, err := fetchAIImageTaskState(channel, task)
+	if err != nil {
+		return err
+	}
+	if isPendingAIImageTaskStatus(status) {
+		return nil
+	}
+	if isFailedAIImageTaskStatus(status) {
+		return ReleaseAIImageTask(task.TaskID, task.UserID, firstNonEmpty(status, "failed"))
+	}
+	if strings.TrimSpace(imageURL) != "" {
+		return CompleteAIImageTaskSuccess(task.TaskID, task.UserID, firstNonEmpty(status, "succeeded"), imageURL)
+	}
+	if status != "" {
+		return ReleaseAIImageTask(task.TaskID, task.UserID, "response_unrecognized")
+	}
+	return nil
+}
+
+func fetchAIImageTaskState(channel model.ModelChannel, task model.AIImageTask) (string, string, error) {
+	path := task.Path
+	if strings.TrimSpace(path) == "" {
+		path = "/image-tasks/" + task.TaskID
+	} else if strings.HasSuffix(path, "/images/generations") {
+		path = "/images/generations/" + task.TaskID
+	} else if strings.HasSuffix(path, "/images/edits") {
+		path = "/image-tasks/" + task.TaskID
+	} else if !strings.Contains(path, task.TaskID) {
+		path = strings.TrimRight(path, "/") + "/" + url.PathEscape(task.TaskID)
+	}
+	request, err := http.NewRequest(http.MethodGet, BuildModelChannelURL(channel, path), nil)
+	if err != nil {
+		return "", "", err
+	}
+	request.Header.Set("Authorization", "Bearer "+channel.APIKey)
+	client := &http.Client{Timeout: 30 * time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		return "", "", err
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 30<<20))
+	if err != nil {
+		return "", "", err
+	}
+	if response.StatusCode >= http.StatusBadRequest {
+		return "", "", fmt.Errorf("upstream task status=%d body=%s", response.StatusCode, safeUpstreamTaskText(body))
+	}
+	return parseAIImageTaskState(body), parseAIImageTaskImageURL(body), nil
+}
+
+func parseAIImageTaskState(body []byte) string {
+	var payload struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(body, &payload)
+	return strings.ToLower(strings.TrimSpace(payload.Status))
+}
+
+func parseAIImageTaskImageURL(body []byte) string {
+	var payload struct {
+		Data   []map[string]any `json:"data"`
+		Result struct {
+			Data []map[string]any `json:"data"`
+		} `json:"result"`
+	}
+	_ = json.Unmarshal(body, &payload)
+	items := payload.Data
+	if len(items) == 0 {
+		items = payload.Result.Data
+	}
+	for _, item := range items {
+		if value, ok := item["url"].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+		if value, ok := item["b64_json"].(string); ok && strings.TrimSpace(value) != "" {
+			return "[b64_json]"
+		}
+	}
+	return ""
+}
+
+func isPendingAIImageTaskStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "queued", "running", "in_progress", "processing", "pending":
+		return true
+	default:
+		return false
+	}
+}
+
+func isFailedAIImageTaskStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "failed", "error", "canceled":
+		return true
+	default:
+		return false
+	}
+}
+
+func safeUpstreamTaskText(body []byte) string {
+	text := strings.TrimSpace(string(body))
+	if len([]rune(text)) <= 300 {
+		return text
+	}
+	return string([]rune(text)[:300]) + "..."
+}
+
 func RefundUserCredits(userID string, modelName string, credits int, path string) error {
 	if credits <= 0 {
 		return nil

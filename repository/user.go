@@ -161,6 +161,19 @@ func GetAIImageTaskByTaskID(taskID string) (model.AIImageTask, bool, error) {
 	return task, true, nil
 }
 
+func ListFrozenAIImageTasks(limit int) ([]model.AIImageTask, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	var tasks []model.AIImageTask
+	err = db.Where("frozen_at <> ? AND charged_at = ? AND released_at = ?", "", "", "").Order("frozen_at asc").Limit(limit).Find(&tasks).Error
+	return tasks, err
+}
+
 func AttachAIImageTask(reservedTaskID string, upstreamTaskID string, status string, imageURL string, channel model.ModelChannel, now string) (model.AIImageTask, error) {
 	db, err := DB()
 	if err != nil {

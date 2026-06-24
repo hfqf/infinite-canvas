@@ -161,6 +161,32 @@ func TestFreezeAIImageTaskPreventsOverspendingAndCanRelease(t *testing.T) {
 	}
 }
 
+func TestListFrozenAIImageTasks(t *testing.T) {
+	resetDBForTest(t)
+	user := model.User{ID: "user_frozen_tasks_001", Username: "frozen-task-user", Role: model.UserRoleUser, Status: model.UserStatusActive, Credits: 20}
+	if _, err := SaveUser(user); err != nil {
+		t.Fatal(err)
+	}
+	frozen := model.AIImageTask{ID: "task_frozen_001", TaskID: "task_frozen_001", UserID: user.ID, Model: "gpt-image-2", Path: "/images/edits", Prompt: "frozen", Credits: 6}
+	if _, ok, err := FreezeAIImageTask(frozen, "freeze-time"); err != nil || !ok {
+		t.Fatalf("freeze task ok=%v err=%v", ok, err)
+	}
+	if _, err := SaveAIImageTask(model.AIImageTask{ID: "task_done_001", TaskID: "task_done_001", UserID: user.ID, Model: "gpt-image-2", FrozenAt: "freeze-time", ChargedAt: "charged-time"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SaveAIImageTask(model.AIImageTask{ID: "task_released_001", TaskID: "task_released_001", UserID: user.ID, Model: "gpt-image-2", FrozenAt: "freeze-time", ReleasedAt: "released-time"}); err != nil {
+		t.Fatal(err)
+	}
+
+	tasks, err := ListFrozenAIImageTasks(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 || tasks[0].TaskID != frozen.TaskID {
+		t.Fatalf("tasks=%#v, want only frozen task", tasks)
+	}
+}
+
 func TestConsumeUserCreditsUsesAvailableCredits(t *testing.T) {
 	resetDBForTest(t)
 	user, err := SaveUser(model.User{ID: "user_available_credits_001", Username: "available-user", Role: model.UserRoleUser, Status: model.UserStatusActive, Credits: 10, FrozenCredits: 6})

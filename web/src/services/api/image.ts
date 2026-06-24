@@ -54,7 +54,6 @@ const IMAGE_MIN_PIXELS = 655360;
 const IMAGE_MAX_PIXELS = 3840 * 3840;
 const IMAGE_MAX_EDGE = 3840;
 const IMAGE_MAX_RATIO = 3;
-const IMAGE_OUTPUT_FORMAT = "png";
 const IMAGE_RESPONSE_FORMAT = "url";
 const IMAGE_TASK_MAX_POLLS = 90;
 const IMAGE_TASK_DEFAULT_DELAY = 2000;
@@ -283,6 +282,12 @@ function refreshRemoteUser(config: AiConfig) {
     if (config.channelMode === "remote") void useUserStore.getState().hydrateUser();
 }
 
+async function referenceImageToApiInput(image: ReferenceImage) {
+    const directUrl = image.url || image.dataUrl;
+    if (/^https?:\/\//i.test(directUrl) || directUrl.startsWith("data:")) return directUrl;
+    return imageToDataUrl(image);
+}
+
 export async function requestVectorizeImage(image: string, mode: "general" | "logo" | "colorMask" = "colorMask") {
     const token = useUserStore.getState().token;
     const value = image.trim();
@@ -314,7 +319,6 @@ export async function requestGeneration(config: AiConfig, prompt: string) {
                 ...(quality ? { quality } : {}),
                 ...(requestSize ? { size: requestSize } : {}),
                 response_format: IMAGE_RESPONSE_FORMAT,
-                output_format: IMAGE_OUTPUT_FORMAT,
                 async: true,
             },
             {
@@ -330,16 +334,37 @@ export async function requestGeneration(config: AiConfig, prompt: string) {
 }
 
 export async function requestEdit(config: AiConfig, prompt: string, references: ReferenceImage[], mask?: ReferenceImage) {
-    const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
     const quality = normalizeQuality(config.quality);
     const requestSize = resolveRequestSize(quality, config.size);
     const requestPrompt = buildImageReferencePromptText(prompt, references);
+    if (!mask) {
+        try {
+            const images = await Promise.all(references.map(referenceImageToApiInput));
+            const response = await axios.post<ImageApiResponse>(
+                aiApiUrl(config, "/images/edits"),
+                {
+                    model: config.model,
+                    prompt: withSystemPrompt(config, requestPrompt),
+                    image: images.length === 1 ? images[0] : images,
+                    response_format: IMAGE_RESPONSE_FORMAT,
+                    async: true,
+                    ...(quality ? { quality } : {}),
+                    ...(requestSize ? { size: requestSize } : {}),
+                },
+                { headers: aiHeaders(config, "application/json") },
+            );
+            const result = await resolveImagePayload(config, response.data, retryAfterHeader(response.headers["retry-after"]));
+            refreshRemoteUser(config);
+            return result;
+        } catch (error) {
+            throw new Error(readAxiosError(error, "请求失败"));
+        }
+    }
+
     const formData = new FormData();
     formData.set("model", config.model);
     formData.set("prompt", withSystemPrompt(config, requestPrompt));
-    formData.set("n", String(n));
     formData.set("response_format", IMAGE_RESPONSE_FORMAT);
-    formData.set("output_format", IMAGE_OUTPUT_FORMAT);
     formData.set("async", "true");
     if (quality) {
         formData.set("quality", quality);

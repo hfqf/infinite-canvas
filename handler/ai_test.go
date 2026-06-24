@@ -65,6 +65,33 @@ func TestAIImageRequestTimeoutSecondsAddsReferenceImageDuration(t *testing.T) {
 	}
 }
 
+func TestAIImageRequestTimeoutSecondsAddsJSONReferenceImageDuration(t *testing.T) {
+	body := []byte(`{"size":"1024x1024","image":["https://cdn.example.com/a.png","data:image/png;base64,abc"]}`)
+	if got := aiImageRequestTimeoutSeconds(body, "application/json"); got != 240 {
+		t.Fatalf("json reference timeout = %d, want 240", got)
+	}
+}
+
+func TestReadAIReferenceImageCountFromJSONAliases(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want int
+	}{
+		{name: "image string", body: `{"image":"https://cdn.example.com/a.png"}`, want: 1},
+		{name: "image array", body: `{"image":["a","b"]}`, want: 2},
+		{name: "images array", body: `{"images":["a","b","c"]}`, want: 3},
+		{name: "ref assets object array", body: `{"ref_assets":[{"url":"a"},{"image_url":"b"}]}`, want: 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := readAIReferenceImageCount([]byte(tc.body), "application/json"); got != tc.want {
+				t.Fatalf("count = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestImageRequestCreditsAddsReferenceImageSurchargeAfterFirstReference(t *testing.T) {
 	if got := imageRequestCredits(2, false, 2, 3); got != 12 {
 		t.Fatalf("non-4k credits = %d, want (2 + 2*2) * 2 = 12", got)
