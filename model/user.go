@@ -15,6 +15,8 @@ const (
 	UserStatusBan    UserStatus = "ban"
 )
 
+const VerificationPurposeRegister = "register"
+
 type MemberType string
 
 const (
@@ -70,6 +72,7 @@ type UserList struct {
 type AuthUser struct {
 	ID                     string      `json:"id"`
 	Username               string      `json:"username"`
+	Email                  string      `json:"email"`
 	DisplayName            string      `json:"displayName"`
 	AvatarURL              string      `json:"avatarUrl"`
 	Role                   UserRole    `json:"role"`
@@ -92,6 +95,7 @@ func PublicUser(user User) AuthUser {
 	return AuthUser{
 		ID:                     user.ID,
 		Username:               user.Username,
+		Email:                  user.Email,
 		DisplayName:            user.DisplayName,
 		AvatarURL:              user.AvatarURL,
 		Role:                   user.Role,
@@ -103,6 +107,19 @@ func PublicUser(user User) AuthUser {
 		CreatedAt:              user.CreatedAt,
 		UpdatedAt:              user.UpdatedAt,
 	}
+}
+
+// EmailVerificationCode 邮箱验证码记录。
+type EmailVerificationCode struct {
+	ID         string `json:"id" gorm:"primaryKey"`
+	Email      string `json:"email" gorm:"index"`
+	Purpose    string `json:"purpose" gorm:"index"`
+	CodeHash   string `json:"codeHash"`
+	CodeSalt   string `json:"codeSalt"`
+	ExpiresAt  string `json:"expiresAt"`
+	ConsumedAt string `json:"consumedAt"`
+	Attempts   int    `json:"attempts"`
+	CreatedAt  string `json:"createdAt"`
 }
 
 type CreditLogType string

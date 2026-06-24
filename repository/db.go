@@ -65,6 +65,7 @@ func DB() (*gorm.DB, error) {
 		}
 		dbErr = db.AutoMigrate(
 			&model.User{},
+			&model.EmailVerificationCode{},
 			&model.CreditLog{},
 			&model.RechargeOrder{},
 			&model.Prompt{},

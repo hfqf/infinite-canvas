@@ -58,7 +58,7 @@ func EnsureDefaultAdmin() error {
 	return err
 }
 
-func Register(username string, password string) (model.AuthSession, error) {
+func Register(username string, password string, email string, verificationCode string) (model.AuthSession, error) {
 	settings, err := repository.GetSettings()
 	if err != nil {
 		return model.AuthSession{}, err
@@ -74,11 +74,24 @@ func Register(username string, password string) (model.AuthSession, error) {
 	if username == "" || password == "" {
 		return model.AuthSession{}, safeMessageError{message: "用户名和密码不能为空"}
 	}
+	email, err = normalizeVerificationEmail(email)
+	if err != nil {
+		return model.AuthSession{}, err
+	}
 	if _, ok, err := repository.GetUserByUsername(username); err != nil || ok {
 		if err != nil {
 			return model.AuthSession{}, err
 		}
 		return model.AuthSession{}, safeMessageError{message: "用户名已存在"}
+	}
+	if _, ok, err := repository.GetUserByEmail(email); err != nil || ok {
+		if err != nil {
+			return model.AuthSession{}, err
+		}
+		return model.AuthSession{}, safeMessageError{message: "邮箱已注册"}
+	}
+	if err := consumeVerificationCode(email, model.VerificationPurposeRegister, verificationCode); err != nil {
+		return model.AuthSession{}, err
 	}
 	hash, err := hashPassword(password)
 	if err != nil {
@@ -88,6 +101,7 @@ func Register(username string, password string) (model.AuthSession, error) {
 		ID:        newID("user"),
 		Username:  username,
 		Password:  hash,
+		Email:     email,
 		Role:      model.UserRoleUser,
 		AffCode:   newAffCode(),
 		Status:    model.UserStatusActive,
@@ -274,6 +288,12 @@ func SaveUser(user model.User, password string) (model.User, error) {
 	if user.Username == "" {
 		return user, safeMessageError{message: "用户名不能为空"}
 	}
+	user.Email = strings.ToLower(strings.TrimSpace(user.Email))
+	if user.Email != "" {
+		if _, err := normalizeVerificationEmail(user.Email); err != nil {
+			return user, err
+		}
+	}
 	if user.Role == "" || user.Role == model.UserRoleGuest {
 		user.Role = model.UserRoleUser
 	}
@@ -284,6 +304,13 @@ func SaveUser(user model.User, password string) (model.User, error) {
 		return user, err
 	} else if ok && saved.ID != user.ID {
 		return user, safeMessageError{message: "用户名已存在"}
+	}
+	if user.Email != "" {
+		if saved, ok, err := repository.GetUserByEmail(user.Email); err != nil {
+			return user, err
+		} else if ok && saved.ID != user.ID {
+			return user, safeMessageError{message: "邮箱已注册"}
+		}
 	}
 	isCreate := user.ID == ""
 	if isCreate {

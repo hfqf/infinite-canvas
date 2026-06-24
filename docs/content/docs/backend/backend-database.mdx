@@ -20,6 +20,7 @@ description: 当前后端主要数据表与字段说明
 当前启动时执行 `AutoMigrate`，自动维护以下表：
 
 - `users`
+- `email_verification_codes`
 - `credit_logs`
 - `recharge_orders`
 - `prompts`
@@ -57,6 +58,22 @@ description: 当前后端主要数据表与字段说明
 | `extra` | json | 扩展信息，第三方资料按平台命名空间保存，如 `linuxDo` |
 | `created_at` | string | 创建时间 |
 | `updated_at` | string | 更新时间 |
+
+### email_verification_codes
+
+邮箱验证码表。当前用于注册邮箱校验，只保存验证码哈希，不保存明文验证码。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | 主键 |
+| `email` | string | 邮箱，统一转小写 |
+| `purpose` | string | 用途，当前为 `register` |
+| `code_hash` | string | 验证码哈希 |
+| `code_salt` | string | 验证码盐值 |
+| `expires_at` | string | 过期时间，默认 10 分钟 |
+| `consumed_at` | string | 消费时间，成功注册后写入 |
+| `attempts` | number | 校验尝试次数，最多 5 次 |
+| `created_at` | string | 创建时间 |
 
 ### prompts
 

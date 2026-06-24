@@ -37,6 +37,12 @@ type Config struct {
 	WechatPayPublicKeyPath       string `env:"WECHAT_PAY_PUBLIC_KEY_PATH"`
 	WechatPaySkipNotifyVerify    bool   `env:"WECHAT_PAY_SKIP_NOTIFY_VERIFY" envDefault:"false"`
 	WechatPayNotifyURL           string `env:"WECHAT_PAY_NOTIFY_URL"`
+	VerificationProvider         string `env:"FIGO_VERIFICATION_PROVIDER" envDefault:"noop"`
+	SMTPHost                     string `env:"FIGO_SMTP_HOST"`
+	SMTPPort                     string `env:"FIGO_SMTP_PORT"`
+	SMTPUsername                 string `env:"FIGO_SMTP_USERNAME"`
+	SMTPPassword                 string `env:"FIGO_SMTP_PASSWORD"`
+	SMTPFrom                     string `env:"FIGO_SMTP_FROM"`
 }
 
 var Cfg Config
@@ -45,6 +51,10 @@ func Load() error {
 	_ = godotenv.Load()
 	if err := env.Parse(&Cfg); err != nil {
 		return err
+	}
+	Cfg.VerificationProvider = strings.ToLower(strings.TrimSpace(Cfg.VerificationProvider))
+	if Cfg.VerificationProvider == "" {
+		Cfg.VerificationProvider = "noop"
 	}
 	normalizeDockerSQLiteDSN("/app/data")
 	if strings.TrimSpace(Cfg.JWTSecret) == "" || Cfg.JWTSecret == "infinite-canvas" {

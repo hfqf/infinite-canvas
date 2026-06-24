@@ -9,6 +9,7 @@ export type MemberLevel = "" | "standard" | "basic" | "advanced" | "premium" | "
 export type AuthUser = {
     id: string;
     username: string;
+    email: string;
     displayName: string;
     avatarUrl: string;
     role: UserRole;
@@ -29,6 +30,13 @@ export type AuthSession = {
 export type AuthPayload = {
     username: string;
     password: string;
+    email?: string;
+    verificationCode?: string;
+};
+
+export type VerificationCodeResult = {
+    expiresInSeconds: number;
+    debugCode?: string;
 };
 
 export async function login(payload: AuthPayload) {
@@ -37,6 +45,10 @@ export async function login(payload: AuthPayload) {
 
 export async function register(payload: AuthPayload) {
     return apiPost<AuthSession>("/api/auth/register", payload);
+}
+
+export async function requestVerificationCode(email: string, purpose = "register") {
+    return apiPost<VerificationCodeResult>("/api/auth/verification-code", { email, purpose });
 }
 
 export async function fetchCurrentUser(token?: string) {

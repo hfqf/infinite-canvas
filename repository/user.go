@@ -70,6 +70,15 @@ func GetUserByUsername(username string) (model.User, bool, error) {
 	return findUser(db, "username = ?", username)
 }
 
+// GetUserByEmail 根据邮箱查询用户。
+func GetUserByEmail(email string) (model.User, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.User{}, false, err
+	}
+	return findUser(db, "email = ?", email)
+}
+
 // SaveUser 保存用户信息。
 func SaveUser(user model.User) (model.User, error) {
 	db, err := DB()
@@ -235,6 +244,35 @@ func DeleteCreditLog(id string) error {
 		return err
 	}
 	return db.Delete(&model.CreditLog{}, "id = ?", id).Error
+}
+
+func SaveEmailVerificationCode(code model.EmailVerificationCode) (model.EmailVerificationCode, error) {
+	db, err := DB()
+	if err != nil {
+		return code, err
+	}
+	return code, db.Save(&code).Error
+}
+
+func LatestEmailVerificationCode(email string, purpose string) (model.EmailVerificationCode, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.EmailVerificationCode{}, false, err
+	}
+	code := model.EmailVerificationCode{}
+	err = db.Where("email = ? AND purpose = ? AND consumed_at = ?", email, purpose, "").Order("created_at desc").First(&code).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return model.EmailVerificationCode{}, false, nil
+	}
+	return code, err == nil, err
+}
+
+func DeleteEmailVerificationCode(id string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return db.Delete(&model.EmailVerificationCode{}, "id = ?", id).Error
 }
 
 // DeleteUser 删除指定用户。

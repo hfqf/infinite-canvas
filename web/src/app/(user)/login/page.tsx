@@ -1,17 +1,19 @@
 "use client";
 
-import { LockOutlined, UserOutlined } from "@ant-design/icons";
+import { LockOutlined, MailOutlined, SafetyCertificateOutlined, UserOutlined } from "@ant-design/icons";
 import { App, Button, Form, Input, Segmented, Space } from "antd";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
-import { fetchCurrentUser } from "@/services/api/auth";
+import { fetchCurrentUser, requestVerificationCode } from "@/services/api/auth";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 
 type LoginFormValues = {
     username: string;
     password: string;
+    email?: string;
+    verificationCode?: string;
     confirmPassword?: string;
 };
 
@@ -35,6 +37,7 @@ export default function LoginPage() {
 
 function LoginContent() {
     const { message } = App.useApp();
+    const [form] = Form.useForm<LoginFormValues>();
     const router = useRouter();
     const searchParams = useSearchParams();
     const login = useUserStore((state) => state.login);
@@ -44,6 +47,8 @@ function LoginContent() {
     const linuxDoEnabled = useConfigStore((state) => state.publicSettings?.auth?.linuxDo?.enabled === true);
     const allowRegister = useConfigStore((state) => state.publicSettings?.auth?.allowRegister !== false);
     const [mode, setMode] = useState<"login" | "register">("login");
+    const [codeLoading, setCodeLoading] = useState(false);
+    const [codeCooldown, setCodeCooldown] = useState(0);
     const redirect = safeRedirect(searchParams.get("redirect"));
 
     useEffect(() => {
@@ -63,6 +68,27 @@ function LoginContent() {
         if (!allowRegister && mode === "register") setMode("login");
     }, [allowRegister, mode]);
 
+    useEffect(() => {
+        if (codeCooldown <= 0) return;
+        const timer = window.setInterval(() => setCodeCooldown((value) => Math.max(0, value - 1)), 1000);
+        return () => window.clearInterval(timer);
+    }, [codeCooldown]);
+
+    const sendVerificationCode = async () => {
+        try {
+            await form.validateFields(["email"]);
+            const email = form.getFieldValue("email") || "";
+            setCodeLoading(true);
+            const result = await requestVerificationCode(email, "register");
+            setCodeCooldown(60);
+            message.success(result.debugCode ? `验证码已生成：${result.debugCode}` : "验证码已发送，请查收邮箱");
+        } catch (error) {
+            if (error instanceof Error) message.error(error.message);
+        } finally {
+            setCodeLoading(false);
+        }
+    };
+
     const submit = async (values: LoginFormValues) => {
         try {
             if (mode === "register" && !allowRegister) {
@@ -73,8 +99,10 @@ function LoginContent() {
                 message.error("两次输入的密码不一致");
                 return;
             }
-            const action = mode === "register" ? register : login;
-            const user = await action({ username: values.username, password: values.password });
+            const user =
+                mode === "register"
+                    ? await register({ username: values.username, password: values.password, email: values.email, verificationCode: values.verificationCode })
+                    : await login({ username: values.username, password: values.password });
             message.success(mode === "register" ? "注册成功" : "登录成功");
             router.replace(redirect);
             router.refresh();
@@ -100,7 +128,7 @@ function LoginContent() {
                     <p className="mt-3 text-base leading-7 text-stone-500 dark:text-stone-400">支持账号密码和 Linux.do 登录。</p>
                 </div>
 
-                <Form<LoginFormValues> layout="vertical" size="large" requiredMark={false} onFinish={submit}>
+                <Form<LoginFormValues> form={form} layout="vertical" size="large" requiredMark={false} onFinish={submit}>
                     <Form.Item>
                         <Segmented
                             block
@@ -112,8 +140,32 @@ function LoginContent() {
                     <Form.Item name="username" label={<span className="font-medium text-stone-800 dark:text-stone-200">用户名</span>} rules={[{ required: true, message: "请输入用户名" }]}>
                         <Input prefix={<UserOutlined />} autoComplete="username" />
                     </Form.Item>
+                    {mode === "register" ? (
+                        <>
+                            <Form.Item
+                                name="email"
+                                label={<span className="font-medium text-stone-800 dark:text-stone-200">邮箱</span>}
+                                rules={[
+                                    { required: true, message: "请输入邮箱" },
+                                    { type: "email", message: "邮箱格式不正确" },
+                                ]}
+                            >
+                                <Input prefix={<MailOutlined />} autoComplete="email" />
+                            </Form.Item>
+                            <Form.Item label={<span className="font-medium text-stone-800 dark:text-stone-200">邮箱验证码</span>} required>
+                                <Space.Compact block>
+                                    <Form.Item name="verificationCode" noStyle rules={[{ required: true, message: "请输入邮箱验证码" }]}>
+                                        <Input prefix={<SafetyCertificateOutlined />} inputMode="numeric" autoComplete="one-time-code" />
+                                    </Form.Item>
+                                    <Button type="default" loading={codeLoading} disabled={codeCooldown > 0} onClick={sendVerificationCode}>
+                                        {codeCooldown > 0 ? `${codeCooldown}s` : "获取验证码"}
+                                    </Button>
+                                </Space.Compact>
+                            </Form.Item>
+                        </>
+                    ) : null}
                     <Form.Item name="password" label={<span className="font-medium text-stone-800 dark:text-stone-200">密码</span>} rules={[{ required: true, message: "请输入密码" }]}>
-                        <Input.Password prefix={<LockOutlined />} autoComplete="current-password" />
+                        <Input.Password prefix={<LockOutlined />} autoComplete={mode === "register" ? "new-password" : "current-password"} />
                     </Form.Item>
                     {mode === "register" ? (
                         <Form.Item name="confirmPassword" label={<span className="font-medium text-stone-800 dark:text-stone-200">确认密码</span>} rules={[{ required: true, message: "请再次输入密码" }]}>
