@@ -42,7 +42,8 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
     const initialPrompt = hasImageContent || !isEditingExistingContent ? node.metadata?.prompt || "" : "";
     const [prompt, setPrompt] = useState(initialPrompt);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const credits = requestCreditCost({ channelMode: config.channelMode, modelCosts, model: config.model, count: mode === "image" ? config.count : 1, size: mode === "image" ? config.size : "", quality: mode === "image" ? config.quality : "" });
+    const referenceCount = hasImageContent ? 1 : mentionReferences.filter((item) => item.kind === "image").length;
+    const credits = requestCreditCost({ channelMode: config.channelMode, modelCosts, model: config.model, count: mode === "image" ? config.count : 1, size: mode === "image" ? config.size : "", quality: mode === "image" ? config.quality : "", referenceCount: mode === "image" ? referenceCount : 0 });
 
     useEffect(() => {
         setPrompt(initialPrompt);

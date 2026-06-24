@@ -557,10 +557,26 @@ func requestCredits(modelName string, path string, body []byte, contentType stri
 	if err != nil {
 		return 0, err
 	}
-	if isImageRequestPath(path) && is4KImageRequest(body, contentType) {
-		credits = 6
+	count := readAIRequestCount(body, contentType)
+	if isImageRequestPath(path) {
+		return imageRequestCredits(credits, is4KImageRequest(body, contentType), count, readAIReferenceImageCount(body, contentType)), nil
 	}
-	return credits * readAIRequestCount(body, contentType), nil
+	return credits * count, nil
+}
+
+func imageRequestCredits(modelCredits int, is4K bool, count int, referenceImages int) int {
+	baseCredits := modelCredits
+	if is4K {
+		baseCredits = 6
+	}
+	if count < 1 {
+		count = 1
+	}
+	extraReferenceCredits := 0
+	if referenceImages > 1 {
+		extraReferenceCredits = (referenceImages - 1) * modelCredits
+	}
+	return (baseCredits + extraReferenceCredits) * count
 }
 
 func isImageRequestPath(path string) bool {

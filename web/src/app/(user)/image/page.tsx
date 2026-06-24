@@ -11,6 +11,7 @@ import { ModelPicker } from "@/components/model-picker";
 import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
 import { AssetPickerModal, type InsertAssetPayload } from "@/app/(user)/canvas/components/asset-picker-modal";
 import { ImageGenerationPending } from "@/components/image-generation-pending";
+import { CreditSymbol, requestCreditCost } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { imageReferenceLabel } from "@/lib/image-reference-prompt";
 import { imageGenerationWaitInfo, type ImageWaitInfo } from "@/lib/image-wait-time";
@@ -77,6 +78,7 @@ export default function ImagePage() {
     const updateConfig = useConfigStore((state) => state.updateConfig);
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const modelCosts = useConfigStore((state) => state.publicSettings?.modelChannel.modelCosts);
     const addAsset = useAssetStore((state) => state.addAsset);
     const [prompt, setPrompt] = useState("");
     const [references, setReferences] = useState<ReferenceImage[]>([]);
@@ -97,6 +99,7 @@ export default function ImagePage() {
     const model = effectiveConfig.imageModel || effectiveConfig.model;
     const canGenerate = Boolean(prompt.trim());
     const generationCount = Math.max(1, Math.min(10, Number(config.count) || 1));
+    const generationCredits = requestCreditCost({ channelMode: effectiveConfig.channelMode, modelCosts, model, count: generationCount, size: effectiveConfig.size, quality: effectiveConfig.quality, referenceCount: references.length });
 
     useEffect(() => {
         if (!running || !startedAt) return;
@@ -416,7 +419,13 @@ export default function ImagePage() {
 
                         <div className="mt-auto pt-6">
                             <Button type="primary" size="large" block icon={<Sparkles className="size-4" />} loading={running} disabled={!canGenerate || running} onClick={() => void generate()}>
-                                开始生成
+                                <span className="inline-flex items-center gap-1.5">
+                                    <span className="inline-flex items-center gap-1">
+                                        <CreditSymbol />
+                                        {generationCredits.toLocaleString()}
+                                    </span>
+                                    <span>开始生成</span>
+                                </span>
                             </Button>
                         </div>
                     </div>

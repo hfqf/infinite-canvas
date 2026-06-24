@@ -18,11 +18,13 @@ export function modelCreditCost(modelCosts: ModelCreditCost[] | undefined, model
     return modelCosts?.find((item) => item.model === model)?.credits || 0;
 }
 
-export function requestCreditCost(options: { channelMode: string; modelCosts?: ModelCreditCost[]; model: string; count?: string | number; size?: string; quality?: string }) {
+export function requestCreditCost(options: { channelMode: string; modelCosts?: ModelCreditCost[]; model: string; count?: string | number; size?: string; quality?: string; referenceCount?: number }) {
     if (options.channelMode !== "remote") return 0;
     const count = Math.max(1, Math.floor(Math.abs(Number(options.count)) || 1));
-    const credits = is4KImageRequest(options.size, options.quality) ? 6 : modelCreditCost(options.modelCosts, options.model);
-    return credits * count;
+    const modelCredits = modelCreditCost(options.modelCosts, options.model);
+    const baseCredits = is4KImageRequest(options.size, options.quality) ? 6 : modelCredits;
+    const extraReferenceCredits = Math.max(0, Math.floor(Number(options.referenceCount) || 0) - 1) * modelCredits;
+    return (baseCredits + extraReferenceCredits) * count;
 }
 
 function is4KImageRequest(size = "", quality = "") {
