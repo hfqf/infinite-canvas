@@ -98,7 +98,7 @@ func ConsumeUserCredits(id string, credits int, now string) (model.User, bool, e
 		user, ok, err := GetUserByID(id)
 		return user, ok, err
 	}
-	tx := db.Model(&model.User{}).Where("id = ? AND credits >= ?", id, credits).Updates(map[string]any{
+	tx := db.Model(&model.User{}).Where("id = ? AND credits - frozen_credits >= ?", id, credits).Updates(map[string]any{
 		"credits":    gorm.Expr("credits - ?", credits),
 		"updated_at": now,
 	})
@@ -277,31 +277,45 @@ func CompleteAIImageTaskSuccess(taskID string, userID string, status string, ima
 		if err := tx.Where("task_id = ? AND user_id = ?", taskID, userID).First(&task).Error; err != nil {
 			return err
 		}
+		if task.ReleasedAt != "" {
+			return nil
+		}
 		task.Status = status
 		task.ImageURL = imageURL
 		task.UpdatedAt = now
 		if task.ChargedAt != "" || task.Credits <= 0 {
 			return tx.Save(&task).Error
 		}
-		updates := map[string]any{"credits": gorm.Expr("credits - ?", task.Credits), "updated_at": now}
-		query := tx.Model(&model.User{}).Where("id = ? AND credits >= ?", userID, task.Credits)
-		if task.FrozenAt != "" {
-			query = query.Where("frozen_credits >= ?", task.Credits)
-			updates["frozen_credits"] = gorm.Expr("frozen_credits - ?", task.Credits)
-		}
-		result := query.Updates(updates)
+		result := tx.Model(&model.AIImageTask{}).Where("id = ? AND charged_at = ? AND released_at = ?", task.ID, "", "").Updates(map[string]any{
+			"status":     status,
+			"image_url":  imageURL,
+			"charged_at": now,
+			"updated_at": now,
+		})
 		if result.Error != nil {
 			return result.Error
 		}
 		if result.RowsAffected == 0 {
+			return tx.Where("id = ?", task.ID).First(&task).Error
+		}
+		task.ChargedAt = now
+		updates := map[string]any{"credits": gorm.Expr("credits - ?", task.Credits), "updated_at": now}
+		query := tx.Model(&model.User{}).Where("id = ?", userID)
+		if task.FrozenAt != "" {
+			query = query.Where("credits >= ? AND frozen_credits >= ?", task.Credits, task.Credits)
+			updates["frozen_credits"] = gorm.Expr("frozen_credits - ?", task.Credits)
+		} else {
+			query = query.Where("credits - frozen_credits >= ?", task.Credits)
+		}
+		userResult := query.Updates(updates)
+		if userResult.Error != nil {
+			return userResult.Error
+		}
+		if userResult.RowsAffected == 0 {
 			return errors.New("算力点不足")
 		}
 		var user model.User
 		if err := tx.Where("id = ?", userID).First(&user).Error; err != nil {
-			return err
-		}
-		task.ChargedAt = now
-		if err := tx.Save(&task).Error; err != nil {
 			return err
 		}
 		if err := tx.Save(&model.CreditLog{
@@ -334,27 +348,38 @@ func ReleaseAIImageTask(taskID string, userID string, status string, now string)
 		if err := tx.Where("task_id = ? AND user_id = ?", taskID, userID).First(&task).Error; err != nil {
 			return err
 		}
+		if task.ReleasedAt != "" || task.ChargedAt != "" {
+			return nil
+		}
 		task.Status = status
 		task.UpdatedAt = now
-		if task.ReleasedAt != "" || task.ChargedAt != "" || task.FrozenAt == "" || task.Credits <= 0 {
+		if task.FrozenAt == "" || task.Credits <= 0 {
 			return tx.Save(&task).Error
 		}
-		result := tx.Model(&model.User{}).Where("id = ? AND frozen_credits >= ?", userID, task.Credits).Updates(map[string]any{
-			"frozen_credits": gorm.Expr("frozen_credits - ?", task.Credits),
-			"updated_at":     now,
+		result := tx.Model(&model.AIImageTask{}).Where("id = ? AND charged_at = ? AND released_at = ?", task.ID, "", "").Updates(map[string]any{
+			"status":      status,
+			"released_at": now,
+			"updated_at":  now,
 		})
 		if result.Error != nil {
 			return result.Error
 		}
 		if result.RowsAffected == 0 {
+			return tx.Where("id = ?", task.ID).First(&task).Error
+		}
+		task.ReleasedAt = now
+		userResult := tx.Model(&model.User{}).Where("id = ? AND frozen_credits >= ?", userID, task.Credits).Updates(map[string]any{
+			"frozen_credits": gorm.Expr("frozen_credits - ?", task.Credits),
+			"updated_at":     now,
+		})
+		if userResult.Error != nil {
+			return userResult.Error
+		}
+		if userResult.RowsAffected == 0 {
 			return errors.New("冻结算力点不足")
 		}
 		var user model.User
 		if err := tx.Where("id = ?", userID).First(&user).Error; err != nil {
-			return err
-		}
-		task.ReleasedAt = now
-		if err := tx.Save(&task).Error; err != nil {
 			return err
 		}
 		if err := tx.Save(&model.CreditLog{
@@ -429,6 +454,18 @@ func CompleteRechargeOrderPaid(outTradeNo string, amountFen int, transactionID s
 		if order.Status == model.RechargeOrderStatusPaid {
 			return nil
 		}
+		result := tx.Model(&model.RechargeOrder{}).Where("id = ? AND status <> ?", order.ID, model.RechargeOrderStatusPaid).Updates(map[string]any{
+			"status":         model.RechargeOrderStatusPaid,
+			"transaction_id": transactionID,
+			"paid_at":        now,
+			"updated_at":     now,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return nil
+		}
 		if err := tx.Model(&model.User{}).Where("id = ?", order.UserID).Updates(map[string]any{
 			"credits":                   gorm.Expr("credits + ?", order.Credits),
 			"member_type":               order.MemberType,
@@ -441,14 +478,6 @@ func CompleteRechargeOrderPaid(outTradeNo string, amountFen int, transactionID s
 		}
 		var user model.User
 		if err := tx.Where("id = ?", order.UserID).First(&user).Error; err != nil {
-			return err
-		}
-		if err := tx.Model(&model.RechargeOrder{}).Where("id = ?", order.ID).Updates(map[string]any{
-			"status":         model.RechargeOrderStatusPaid,
-			"transaction_id": transactionID,
-			"paid_at":        now,
-			"updated_at":     now,
-		}).Error; err != nil {
 			return err
 		}
 		if err := tx.Save(&model.CreditLog{

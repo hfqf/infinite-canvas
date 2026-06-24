@@ -17,6 +17,7 @@ type Config struct {
 	AdminPassword                string `env:"ADMIN_PASSWORD" envDefault:"infinite-canvas"`
 	JWTSecret                    string `env:"JWT_SECRET" envDefault:"infinite-canvas"`
 	JWTExpireHours               int    `env:"JWT_EXPIRE_HOURS" envDefault:"168"`
+	DatabaseDriver               string `env:"DATABASE_DRIVER"`
 	StorageDriver                string `env:"STORAGE_DRIVER" envDefault:"sqlite"`
 	DatabaseDSN                  string `env:"DATABASE_DSN" envDefault:"data/infinite-canvas.db"`
 	PublicBaseURL                string `env:"PUBLIC_BASE_URL"`
@@ -56,6 +57,7 @@ func Load() error {
 	if Cfg.VerificationProvider == "" {
 		Cfg.VerificationProvider = "noop"
 	}
+	normalizeDatabaseDriver()
 	normalizeDockerSQLiteDSN("/app/data")
 	if strings.TrimSpace(Cfg.JWTSecret) == "" || Cfg.JWTSecret == "infinite-canvas" {
 		secret, err := randomSecret()
@@ -65,6 +67,18 @@ func Load() error {
 		Cfg.JWTSecret = secret
 	}
 	return nil
+}
+
+func normalizeDatabaseDriver() {
+	driver := strings.ToLower(strings.TrimSpace(Cfg.DatabaseDriver))
+	if driver == "" {
+		driver = strings.ToLower(strings.TrimSpace(Cfg.StorageDriver))
+	}
+	if driver == "" {
+		driver = "sqlite"
+	}
+	Cfg.DatabaseDriver = driver
+	Cfg.StorageDriver = driver
 }
 
 func normalizeDockerSQLiteDSN(appDataDir string) {

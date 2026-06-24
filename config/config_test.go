@@ -31,3 +31,30 @@ func TestNormalizeDockerSQLiteDSNLeavesLocalPathWithoutMountedDataDir(t *testing
 		t.Fatalf("DatabaseDSN = %q, want relative local path", Cfg.DatabaseDSN)
 	}
 }
+
+func TestNormalizeDatabaseDriverPrefersDatabaseDriver(t *testing.T) {
+	Cfg = Config{DatabaseDriver: "mysql", StorageDriver: "sqlite"}
+
+	normalizeDatabaseDriver()
+
+	if Cfg.StorageDriver != "mysql" {
+		t.Fatalf("StorageDriver = %q, want mysql", Cfg.StorageDriver)
+	}
+}
+
+func TestNormalizeDockerSQLiteDSNLeavesMySQLDSN(t *testing.T) {
+	root := t.TempDir()
+	appDataDir := filepath.Join(root, "data")
+	if err := os.MkdirAll(appDataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	Cfg = Config{DatabaseDriver: "mysql", StorageDriver: "sqlite", DatabaseDSN: "user:pass@tcp(127.0.0.1:3306)/infinite_canvas?parseTime=true"}
+	normalizeDatabaseDriver()
+
+	normalizeDockerSQLiteDSN(appDataDir)
+
+	want := "user:pass@tcp(127.0.0.1:3306)/infinite_canvas?parseTime=true"
+	if Cfg.DatabaseDSN != want {
+		t.Fatalf("DatabaseDSN = %q, want mysql dsn unchanged", Cfg.DatabaseDSN)
+	}
+}

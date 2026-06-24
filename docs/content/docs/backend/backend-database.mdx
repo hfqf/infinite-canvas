@@ -11,6 +11,12 @@ description: 当前后端主要数据表与字段说明
 
 后端使用 GORM 管理数据库连接和表结构迁移。
 
+运行时通过环境变量切换数据库：
+
+- `DATABASE_DRIVER`：推荐使用的数据库驱动配置，支持 `sqlite`、`mysql`、`postgresql`
+- `STORAGE_DRIVER`：旧配置名，仍可使用；当 `DATABASE_DRIVER` 为空时生效
+- `DATABASE_DSN`：数据库连接串
+
 支持的存储驱动：
 
 - `sqlite`

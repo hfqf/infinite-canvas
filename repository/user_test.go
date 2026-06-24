@@ -82,6 +82,20 @@ func TestCompleteAIImageTaskSuccessChargesOnce(t *testing.T) {
 	if user.Credits != 14 {
 		t.Fatalf("credits after second completion=%d, want 14", user.Credits)
 	}
+	_, released, err := ReleaseAIImageTask(task.TaskID, user.ID, "failed", "failed-after-success")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if released {
+		t.Fatal("release after charged task released=true, want false")
+	}
+	completed, ok, err = GetAIImageTaskByTaskID(task.TaskID)
+	if err != nil || !ok {
+		t.Fatalf("load task ok=%v err=%v", ok, err)
+	}
+	if completed.Status != "succeeded" || completed.ChargedAt != "done" || completed.ReleasedAt != "" {
+		t.Fatalf("task after release attempt=%#v, want charged succeeded unchanged", completed)
+	}
 	logs, total, err := ListCreditLogs(model.Query{Keyword: task.TaskID, Page: 1, PageSize: 10})
 	if err != nil {
 		t.Fatal(err)
@@ -125,6 +139,16 @@ func TestFreezeAIImageTaskPreventsOverspendingAndCanRelease(t *testing.T) {
 	if user.Credits != 10 || user.FrozenCredits != 0 {
 		t.Fatalf("after release credits=%d frozen=%d, want total 10 frozen 0", user.Credits, user.FrozenCredits)
 	}
+	if _, charged, err := CompleteAIImageTaskSuccess(first.TaskID, user.ID, "succeeded", "https://cdn.example.com/late.png", "success-after-release"); err != nil || charged {
+		t.Fatalf("complete released task charged=%v err=%v, want false nil", charged, err)
+	}
+	user, ok, err = GetUserByID(user.ID)
+	if err != nil || !ok {
+		t.Fatalf("load user ok=%v err=%v", ok, err)
+	}
+	if user.Credits != 10 || user.FrozenCredits != 0 {
+		t.Fatalf("after late success credits=%d frozen=%d, want total 10 frozen 0", user.Credits, user.FrozenCredits)
+	}
 	logs, total, err := ListCreditLogs(model.Query{Keyword: first.TaskID, Page: 1, PageSize: 10})
 	if err != nil {
 		t.Fatal(err)
@@ -134,6 +158,36 @@ func TestFreezeAIImageTaskPreventsOverspendingAndCanRelease(t *testing.T) {
 	}
 	if logs[0].Type != model.CreditLogTypeAIFreezeRelease || logs[1].Type != model.CreditLogTypeAIFreeze {
 		t.Fatalf("log types=%s,%s want release,freeze", logs[0].Type, logs[1].Type)
+	}
+}
+
+func TestConsumeUserCreditsUsesAvailableCredits(t *testing.T) {
+	resetDBForTest(t)
+	user, err := SaveUser(model.User{ID: "user_available_credits_001", Username: "available-user", Role: model.UserRoleUser, Status: model.UserStatusActive, Credits: 10, FrozenCredits: 6})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok, err := ConsumeUserCredits(user.ID, 5, "consume-too-much"); err != nil || ok {
+		t.Fatalf("consume frozen credits ok=%v err=%v, want false nil", ok, err)
+	}
+	user, ok, err := GetUserByID(user.ID)
+	if err != nil || !ok {
+		t.Fatalf("load user ok=%v err=%v", ok, err)
+	}
+	if user.Credits != 10 || user.FrozenCredits != 6 {
+		t.Fatalf("after failed consume credits=%d frozen=%d, want total 10 frozen 6", user.Credits, user.FrozenCredits)
+	}
+
+	if _, ok, err = ConsumeUserCredits(user.ID, 4, "consume-available"); err != nil || !ok {
+		t.Fatalf("consume available credits ok=%v err=%v, want true nil", ok, err)
+	}
+	user, ok, err = GetUserByID(user.ID)
+	if err != nil || !ok {
+		t.Fatalf("load user ok=%v err=%v", ok, err)
+	}
+	if user.Credits != 6 || user.FrozenCredits != 6 {
+		t.Fatalf("after consume credits=%d frozen=%d, want total 6 frozen 6", user.Credits, user.FrozenCredits)
 	}
 }
 

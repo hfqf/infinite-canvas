@@ -1,0 +1,95 @@
+---
+title: SQLite 迁移到 MySQL
+description: 将本地 SQLite 数据库一次性迁移到 MySQL 的操作说明
+---
+
+# SQLite 迁移到 MySQL
+
+后端已经支持通过环境变量切换数据库驱动。新环境可以直接使用 MySQL；如果需要保留本地 SQLite 中已有用户、配置、充值、算力流水、提示词和素材记录，可以使用仓库内的一次性迁移脚本。
+
+## 迁移范围
+
+脚本会迁移以下数据库表：
+
+- `users`
+- `email_verification_codes`
+- `credit_logs`
+- `ai_image_tasks`
+- `recharge_orders`
+- `prompts`
+- `assets`
+- `settings`
+
+脚本只迁移数据库记录，不迁移图片、视频、参考素材等本地文件。文件仍需要保留原来的 `data/` 目录或按部署方式单独复制到新环境。
+
+## 准备 MySQL
+
+推荐 MySQL 使用 `utf8mb4`：
+
+```sql
+CREATE DATABASE infinite_canvas
+  DEFAULT CHARACTER SET utf8mb4
+  DEFAULT COLLATE utf8mb4_unicode_ci;
+```
+
+准备 DSN：
+
+```bash
+MYSQL_DSN='user:password@tcp(127.0.0.1:3306)/infinite_canvas?charset=utf8mb4&parseTime=True&loc=Local'
+```
+
+## 执行迁移
+
+在仓库根目录执行：
+
+```bash
+go run ./scripts/migrate_sqlite_to_mysql.go \
+  -sqlite data/infinite-canvas.db \
+  -mysql "$MYSQL_DSN"
+```
+
+如果目标 MySQL 库已经导入过测试数据，需要先清空目标表再导入：
+
+```bash
+go run ./scripts/migrate_sqlite_to_mysql.go \
+  -sqlite data/infinite-canvas.db \
+  -mysql "$MYSQL_DSN" \
+  -truncate
+```
+
+脚本会先对 MySQL 执行 `AutoMigrate`，再按表复制数据。迁移完成后会输出每张表导入行数。
+
+## 切换后端配置
+
+迁移完成后，将后端环境变量改为：
+
+```env
+DATABASE_DRIVER=mysql
+STORAGE_DRIVER=mysql
+DATABASE_DSN=user:password@tcp(127.0.0.1:3306)/infinite_canvas?charset=utf8mb4&parseTime=True&loc=Local
+```
+
+然后重启后端服务。
+
+`DATABASE_DRIVER` 是推荐使用的新配置项，`STORAGE_DRIVER` 保留兼容旧配置；两者同时存在时以 `DATABASE_DRIVER` 为准。
+
+## 验证
+
+建议验证：
+
+- 管理后台能登录，用户列表数量正常。
+- 系统设置里的模型渠道、模型价格、微信支付参数仍存在。
+- 用户算力点余额、冻结算力点、充值记录和扣款流水正常。
+- 生图能创建异步任务，成功后扣款，失败后释放冻结额度。
+- 充值回调重复触发时只会给同一订单加一次算力。
+- 用户存在冻结算力点时，新的扣费只会消耗未冻结的可用余额。
+- 我的素材、提示词列表能正常读取。
+- 本地媒体文件仍能访问；如果迁移到新机器，需要同步复制原 `data/` 下的媒体文件。
+
+## 注意事项
+
+- 迁移前先停止旧后端，避免 SQLite 在迁移过程中继续写入。
+- 目标 MySQL 库如果已有同主键数据，不加 `-truncate` 会导入失败。
+- 迁移脚本是一次性工具，不会做增量同步。
+- SQLite 数据库文件和 `data/` 媒体目录建议先备份后再迁移。
+- 扣费、冻结、释放和充值到账使用事务与条件更新保证幂等性和余额约束，没有依赖 MySQL 专属锁语法；切换 MySQL 后仍建议用真实微信回调和并发生图做一次压测。
