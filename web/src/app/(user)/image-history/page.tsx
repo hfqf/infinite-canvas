@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarDays, Copy, Download, Eye, ImageIcon, RefreshCw, Search, X } from "lucide-react";
-import { App, Button, DatePicker, Empty, Image, Input, Modal, Select, Space, Spin, Tag, Typography } from "antd";
+import { App, Button, DatePicker, Empty, Image, Input, Modal, Pagination, Select, Space, Spin, Tag, Typography } from "antd";
 import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
 import { saveAs } from "file-saver";
@@ -69,6 +69,9 @@ export default function ImageHistoryPage() {
     const token = useUserStore((state) => state.token);
     const clearSession = useUserStore((state) => state.clearSession);
     const [logs, setLogs] = useState<GenerationLog[]>([]);
+    const [total, setTotal] = useState(0);
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(12);
     const [loading, setLoading] = useState(true);
     const [keywordText, setKeywordText] = useState("");
     const [keyword, setKeyword] = useState("");
@@ -83,13 +86,24 @@ export default function ImageHistoryPage() {
     const refresh = async () => {
         if (!token) {
             setLogs([]);
+            setTotal(0);
             setLoading(false);
             return;
         }
         setLoading(true);
         try {
-            const result = await fetchMyImageTasks(token, { page: 1, pageSize: 500 });
+            const result = await fetchMyImageTasks(token, {
+                page,
+                pageSize,
+                keyword,
+                type: mode,
+                status,
+                size,
+                dateFrom: appliedDateRange?.[0].startOf("day").format("YYYY-MM-DD HH:mm:ss"),
+                dateTo: appliedDateRange?.[1].endOf("day").format("YYYY-MM-DD HH:mm:ss"),
+            });
             setLogs(result.items.map(taskToLog));
+            setTotal(result.total);
         } catch (error) {
             const text = error instanceof Error ? error.message : "读取生图历史失败";
             if (text.includes("未登录") || text.includes("登录状态无效")) clearSession();
@@ -101,7 +115,7 @@ export default function ImageHistoryPage() {
 
     useEffect(() => {
         void refresh();
-    }, [token]);
+    }, [appliedDateRange, keyword, mode, page, pageSize, size, status, token]);
 
     const items = useMemo<HistoryItem[]>(
         () =>
@@ -117,24 +131,11 @@ export default function ImageHistoryPage() {
         [logs],
     );
 
-    const filteredItems = useMemo(() => {
-        const normalizedKeyword = keyword.trim().toLowerCase();
-        const normalizedSize = size.trim().toLowerCase();
-        return items.filter((item) => {
-            const createdAt = dayjs(item.log.createdAt);
-            if (appliedDateRange && (createdAt.isBefore(appliedDateRange[0], "day") || createdAt.isAfter(appliedDateRange[1], "day"))) return false;
-            if (normalizedKeyword && !`${item.log.prompt} ${item.log.model}`.toLowerCase().includes(normalizedKeyword)) return false;
-            if (normalizedSize && !itemSize(item).toLowerCase().includes(normalizedSize)) return false;
-            if (status && status !== statusValue(item.log.status)) return false;
-            if (mode && mode !== item.mode) return false;
-            return true;
-        });
-    }, [appliedDateRange, items, keyword, mode, size, status]);
-
     const search = () => {
         setKeyword(keywordText.trim());
         setSize(sizeText.trim());
         setAppliedDateRange(dateRange);
+        setPage(1);
     };
 
     const reset = () => {
@@ -146,6 +147,7 @@ export default function ImageHistoryPage() {
         setMode("");
         setDateRange(null);
         setAppliedDateRange(null);
+        setPage(1);
     };
 
     const copyPrompt = async (prompt: string) => {
@@ -154,7 +156,7 @@ export default function ImageHistoryPage() {
     };
 
     return (
-        <main className="min-h-screen bg-[#f7f3ee] px-3 py-6 text-stone-950 sm:px-6">
+        <main className="h-full min-h-0 overflow-y-auto bg-[#f7f3ee] px-3 py-6 text-stone-950 sm:px-6">
             <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                 <div>
                     <Typography.Text className="tracking-[0.32em] !text-stone-500">IMAGES</Typography.Text>
@@ -181,16 +183,16 @@ export default function ImageHistoryPage() {
                 <div className="flex items-center justify-between border-b border-stone-100 px-6 py-5 text-stone-600">
                     <Space>
                         <ImageIcon className="size-4" />
-                        <span>共 {filteredItems.length} 张</span>
+                        <span>共 {total} 条</span>
                     </Space>
                     <Button type="text" icon={<RefreshCw className="size-4" />} onClick={() => void refresh()}>
                         刷新
                     </Button>
                 </div>
                 <Spin spinning={loading}>
-                    {filteredItems.length ? (
+                    {items.length ? (
                         <div className="grid grid-cols-1 divide-y divide-stone-100 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4">
-                            {filteredItems.map((item) => (
+                            {items.map((item) => (
                                 <HistoryCard key={item.id} item={item} userName={userLabel(user)} onDetail={setDetail} onCopyPrompt={copyPrompt} />
                             ))}
                         </div>
@@ -200,6 +202,24 @@ export default function ImageHistoryPage() {
                         </div>
                     )}
                 </Spin>
+                <div className="flex justify-center border-t border-stone-100 px-6 py-5">
+                    <Pagination
+                        current={page}
+                        pageSize={pageSize}
+                        total={total}
+                        showSizeChanger
+                        pageSizeOptions={[12, 24, 48, 96]}
+                        showTotal={(value) => `共 ${value} 条`}
+                        onChange={(nextPage, nextPageSize) => {
+                            if (nextPageSize !== pageSize) {
+                                setPageSize(nextPageSize);
+                                setPage(1);
+                                return;
+                            }
+                            setPage(nextPage);
+                        }}
+                    />
+                </div>
             </section>
 
             <Modal open={Boolean(detail)} footer={null} width={1180} centered closeIcon={<X className="size-5" />} onCancel={() => setDetail(null)} styles={{ body: { padding: 28 } }}>

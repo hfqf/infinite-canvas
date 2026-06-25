@@ -143,7 +143,11 @@ func Register(username string, password string, email string, verificationCode s
 		return model.AuthSession{}, err
 	}
 	if inviter.ID != "" {
-		if err := repository.IncrementUserAffCount(inviter.ID, now()); err != nil {
+		inviteRewardCredits := 0
+		if normalizedSettings.Public.Auth.InviteRewardCredits != nil {
+			inviteRewardCredits = *normalizedSettings.Public.Auth.InviteRewardCredits
+		}
+		if _, err := repository.RewardUserInvitation(inviter.ID, user.ID, inviteRewardCredits, current); err != nil {
 			return model.AuthSession{}, err
 		}
 	}
@@ -797,7 +801,7 @@ func ListUserAIDeductionLogs(userID string, q model.Query) (model.CreditLogList,
 }
 
 func deductionLogTypes() []model.CreditLogType {
-	return []model.CreditLogType{model.CreditLogTypeAIFreeze, model.CreditLogTypeAIConsume, model.CreditLogTypeAIFreezeRelease, model.CreditLogTypeInviteRegisterBonus}
+	return []model.CreditLogType{model.CreditLogTypeAIFreeze, model.CreditLogTypeAIConsume, model.CreditLogTypeAIFreezeRelease, model.CreditLogTypeInviteRegisterBonus, model.CreditLogTypeInviteReward}
 }
 
 func ListUserAIImageTasks(userID string, q model.Query) (model.AIImageTaskList, error) {

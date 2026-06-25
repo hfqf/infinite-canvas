@@ -108,6 +108,45 @@ func IncrementUserAffCount(id string, now string) error {
 	}).Error
 }
 
+func RewardUserInvitation(inviterID string, inviteeID string, credits int, now string) (model.CreditLog, error) {
+	db, err := DB()
+	if err != nil {
+		return model.CreditLog{}, err
+	}
+	log := model.CreditLog{}
+	err = db.Transaction(func(tx *gorm.DB) error {
+		updates := map[string]any{
+			"aff_count":  gorm.Expr("aff_count + 1"),
+			"updated_at": now,
+		}
+		if credits > 0 {
+			updates["credits"] = gorm.Expr("credits + ?", credits)
+		}
+		if err := tx.Model(&model.User{}).Where("id = ?", inviterID).Updates(updates).Error; err != nil {
+			return err
+		}
+		var inviter model.User
+		if err := tx.Where("id = ?", inviterID).First(&inviter).Error; err != nil {
+			return err
+		}
+		if credits <= 0 {
+			return nil
+		}
+		log = model.CreditLog{
+			ID:        "credit_invite_reward_" + inviteeID,
+			UserID:    inviterID,
+			Type:      model.CreditLogTypeInviteReward,
+			Amount:    credits,
+			Balance:   inviter.Credits,
+			RelatedID: inviteeID,
+			Remark:    "邀请成功奖励",
+			CreatedAt: now,
+		}
+		return tx.Save(&log).Error
+	})
+	return log, err
+}
+
 func ListInvitationRecords(inviterID string, q model.Query) ([]model.InvitationRecord, int64, error) {
 	db, err := DB()
 	if err != nil {
@@ -236,6 +275,22 @@ func ListUserAIImageTasks(userID string, q model.Query) ([]model.AIImageTask, in
 		} else if taskType == "edit" {
 			tx = tx.Where("path LIKE ?", "%/images/edits")
 		}
+	}
+	if status := strings.TrimSpace(q.Status); status != "" {
+		if status == "success" {
+			tx = tx.Where("status IN ?", []string{"succeeded", "success"})
+		} else if status == "failed" {
+			tx = tx.Where("status NOT IN ?", []string{"succeeded", "success"})
+		}
+	}
+	if size := strings.TrimSpace(q.Size); size != "" {
+		tx = tx.Where("size LIKE ?", "%"+size+"%")
+	}
+	if dateFrom := strings.TrimSpace(q.DateFrom); dateFrom != "" {
+		tx = tx.Where("created_at >= ?", dateFrom)
+	}
+	if dateTo := strings.TrimSpace(q.DateTo); dateTo != "" {
+		tx = tx.Where("created_at <= ?", dateTo)
 	}
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {

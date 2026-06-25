@@ -93,6 +93,13 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 		enabled := true
 		setting.Auth.AllowRegister = &enabled
 	}
+	if setting.Auth.InviteRewardCredits == nil {
+		defaultRewardCredits := 20
+		setting.Auth.InviteRewardCredits = &defaultRewardCredits
+	} else if *setting.Auth.InviteRewardCredits < 0 {
+		zeroRewardCredits := 0
+		setting.Auth.InviteRewardCredits = &zeroRewardCredits
+	}
 	enabledModels := enabledChannelModels(channels)
 	if len(enabledModels) > 0 {
 		setting.ModelChannel.AvailableModels = enabledModels

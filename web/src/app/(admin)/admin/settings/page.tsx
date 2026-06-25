@@ -36,7 +36,7 @@ const emptySettings: AdminSettings = {
             systemPrompt: "",
             allowCustomChannel: true,
         },
-        auth: { allowRegister: true, linuxDo: { enabled: false } },
+        auth: { allowRegister: true, inviteRewardCredits: 20, linuxDo: { enabled: false } },
     },
     private: { channels: [], promptSync: { enabled: true, cron: "*/5 * * * *" }, auth: { linuxDo: { clientId: "", clientSecret: "" } } },
 };
@@ -453,6 +453,11 @@ export default function AdminSettingsPage() {
                                             <Switch />
                                         </Form.Item>
                                     </Col>
+                                    <Col xs={24} md={8}>
+                                        <Form.Item name={["public", "auth", "inviteRewardCredits"]} label="邀请成功奖励积分" extra="每邀请成功 1 个新用户，奖励给邀请人的积分">
+                                            <InputNumber min={0} precision={0} addonAfter="积分" className="!w-full" />
+                                        </Form.Item>
+                                    </Col>
                                     <Col span={24}>
                                         <Typography.Title level={5}>模型积分</Typography.Title>
                                         <Table
@@ -854,6 +859,7 @@ function normalizePublicSetting(setting: Partial<AdminSettings["public"]> = {}):
         },
         auth: {
             allowRegister: setting.auth?.allowRegister !== false,
+            inviteRewardCredits: Math.max(0, Number(setting.auth?.inviteRewardCredits ?? emptySettings.public.auth.inviteRewardCredits) || 0),
             linuxDo: {
                 enabled: setting.auth?.linuxDo?.enabled === true,
             },

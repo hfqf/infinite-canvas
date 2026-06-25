@@ -198,6 +198,7 @@ export type AdminPublicSettings = {
     modelChannel: AdminPublicModelChannelSettings;
     auth: {
         allowRegister: boolean;
+        inviteRewardCredits: number;
         linuxDo: {
             enabled: boolean;
         };

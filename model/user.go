@@ -155,6 +155,7 @@ const (
 	CreditLogTypeAIRefund            CreditLogType = "ai_refund"
 	CreditLogTypeRegisterGift        CreditLogType = "register_gift"
 	CreditLogTypeInviteRegisterBonus CreditLogType = "invite_register_bonus"
+	CreditLogTypeInviteReward        CreditLogType = "invite_reward"
 	CreditLogTypeRecharge            CreditLogType = "recharge"
 )
 

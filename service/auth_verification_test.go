@@ -96,6 +96,9 @@ func TestRegisterWithInviteCodeRecordsInviter(t *testing.T) {
 	if inviter.AffCount != 1 {
 		t.Fatalf("inviter affCount=%d, want 1", inviter.AffCount)
 	}
+	if inviter.Credits != 50 {
+		t.Fatalf("inviter credits=%d, want 50 after invite reward", inviter.Credits)
+	}
 	if invitee.Credits != 33 {
 		t.Fatalf("invitee credits=%d, want 33", invitee.Credits)
 	}
@@ -108,5 +111,15 @@ func TestRegisterWithInviteCodeRecordsInviter(t *testing.T) {
 	}
 	if list.Items[0].Type != model.CreditLogTypeInviteRegisterBonus || list.Items[0].Amount != 3 || list.Items[0].Balance != 33 {
 		t.Fatalf("bonus log=%#v, want +3 balance 33", list.Items[0])
+	}
+	inviterLogs, err := ListUserAIDeductionLogs(inviter.ID, model.Query{Keyword: "邀请成功", Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inviterLogs.Total != 1 || len(inviterLogs.Items) != 1 {
+		t.Fatalf("inviter logs=%#v total=%d, want one invite reward log", inviterLogs.Items, inviterLogs.Total)
+	}
+	if inviterLogs.Items[0].Type != model.CreditLogTypeInviteReward || inviterLogs.Items[0].Amount != 20 || inviterLogs.Items[0].Balance != 50 {
+		t.Fatalf("invite reward log=%#v, want +20 balance 50", inviterLogs.Items[0])
 	}
 }

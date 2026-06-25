@@ -214,6 +214,14 @@ func TestListUserAIImageTasksFiltersUserAndKeyword(t *testing.T) {
 	if total != 1 || len(list) != 1 || list[0].TaskID != "task_history_001" {
 		t.Fatalf("tasks=%#v total=%d, want only current user's blue task", list, total)
 	}
+
+	list, total, err = ListUserAIImageTasks(user.ID, model.Query{Status: "failed", Type: "edit", Size: "2048", DateFrom: "2026-06-24 00:00:00", DateTo: "2026-06-24 23:59:59", Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(list) != 1 || list[0].TaskID != "task_history_002" {
+		t.Fatalf("filtered tasks=%#v total=%d, want current user's failed edit task", list, total)
+	}
 }
 
 func TestListInvitationRecordsFiltersInviterAndKeyword(t *testing.T) {

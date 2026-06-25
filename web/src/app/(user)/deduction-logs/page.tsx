@@ -176,6 +176,7 @@ function deductionTypeLabel(type: string) {
     if (type === "ai_freeze_release") return "释放";
     if (type === "ai_consume") return "扣款";
     if (type === "invite_register_bonus") return "邀请赠送";
+    if (type === "invite_reward") return "邀请奖励";
     return type || "-";
 }
 
@@ -184,6 +185,7 @@ function deductionTypeColor(type: string) {
     if (type === "ai_freeze_release") return "green";
     if (type === "ai_consume") return "red";
     if (type === "invite_register_bonus") return "cyan";
+    if (type === "invite_reward") return "blue";
     return "default";
 }
 

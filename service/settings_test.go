@@ -97,4 +97,19 @@ func TestNormalizeSettingsPublishesEnabledChannelModelsAndRepairsDefaults(t *tes
 	if channel.DefaultVideoModel != "doubao-seedance-2.0-fast" {
 		t.Fatalf("default video model = %q, want seedance", channel.DefaultVideoModel)
 	}
+	if settings.Public.Auth.InviteRewardCredits == nil || *settings.Public.Auth.InviteRewardCredits != 20 {
+		t.Fatalf("invite reward credits = %v, want default 20", settings.Public.Auth.InviteRewardCredits)
+	}
+}
+
+func TestNormalizeSettingsPreservesZeroInviteRewardCredits(t *testing.T) {
+	zero := 0
+	settings := normalizeSettings(model.Settings{
+		Public: model.PublicSetting{
+			Auth: model.PublicAuthSetting{InviteRewardCredits: &zero},
+		},
+	})
+	if settings.Public.Auth.InviteRewardCredits == nil || *settings.Public.Auth.InviteRewardCredits != 0 {
+		t.Fatalf("invite reward credits = %v, want configured 0", settings.Public.Auth.InviteRewardCredits)
+	}
 }

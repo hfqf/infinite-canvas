@@ -31,6 +31,10 @@ export type AIImageTaskListResponse = {
 
 export type AIImageTaskQuery = AdminUserQuery & {
     type?: string;
+    status?: string;
+    size?: string;
+    dateFrom?: string;
+    dateTo?: string;
 };
 
 export async function fetchMyImageTasks(token: string, query: AIImageTaskQuery = {}) {

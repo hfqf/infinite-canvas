@@ -162,6 +162,13 @@ description: 当前后端主要数据表与字段说明
 | `model` | string | 模型名称 |
 | `credits` | number | 模型默认积分单价；图片请求不再读取该字段作为非 4K 基础价，扣费公式固定为 `(非 4K 基础 3 / 4K 基础 6 + 额外参考图数 * 1) * 生成张数`，第一张参考图免费；远程异步生图会在任务成功返回后扣费 |
 
+`auth` 当前字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `allowRegister` | bool | 是否允许用户注册，默认允许 |
+| `inviteRewardCredits` | number | 每邀请成功 1 个新用户时奖励给邀请人的积分，默认 `20`，可设为 `0` |
+
 `auth.linuxDo` 当前字段：
 
 | 字段 | 类型 | 说明 |
@@ -209,13 +216,13 @@ description: 当前后端主要数据表与字段说明
 
 ### credit_logs
 
-用户积分变更流水表。当前记录后台手动调整、异步生图冻结、异步生图冻结释放、模型调用消费、模型调用失败返还和微信充值到账。
+用户积分变更流水表。当前记录后台手动调整、异步生图冻结、异步生图冻结释放、模型调用消费、模型调用失败返还、邀请赠送、邀请奖励和微信充值到账。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | string | 主键 |
 | `user_id` | string | 关联用户 ID |
-| `type` | string | 类型：`admin_adjust`、`ai_freeze`、`ai_freeze_release`、`ai_consume`、`ai_refund`、`recharge` |
+| `type` | string | 类型：`admin_adjust`、`ai_freeze`、`ai_freeze_release`、`ai_consume`、`ai_refund`、`invite_register_bonus`、`invite_reward`、`recharge` |
 | `amount` | number | 本次变动数量，增加为正，扣减为负 |
 | `balance` | number | 变动后的用户积分余额 |
 | `related_id` | string | 关联业务 ID，可为空 |
@@ -232,6 +239,8 @@ description: 当前后端主要数据表与字段说明
 | `ai_freeze_release` | 异步生图任务失败或取消后释放冻结积分 |
 | `ai_consume` | 调用后端模型接口消费；异步生图会在上游成功后从冻结额度转为真实扣款 |
 | `ai_refund` | 后端模型接口调用失败返还 |
+| `invite_register_bonus` | 使用邀请码注册的新用户额外赠送 |
+| `invite_reward` | 邀请成功后奖励给邀请人 |
 | `recharge` | 微信充值到账 |
 
 ### ai_image_tasks
