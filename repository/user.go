@@ -174,6 +174,33 @@ func ListFrozenAIImageTasks(limit int) ([]model.AIImageTask, error) {
 	return tasks, err
 }
 
+func ListUserAIImageTasks(userID string, q model.Query) ([]model.AIImageTask, int64, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, 0, err
+	}
+	q.Normalize()
+	tx := db.Model(&model.AIImageTask{}).Where("user_id = ?", userID)
+	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
+		like := "%" + keyword + "%"
+		tx = tx.Where("task_id LIKE ? OR model LIKE ? OR prompt LIKE ? OR image_url LIKE ?", like, like, like, like)
+	}
+	if taskType := strings.TrimSpace(q.Type); taskType != "" {
+		if taskType == "generate" {
+			tx = tx.Where("path LIKE ?", "%/images/generations")
+		} else if taskType == "edit" {
+			tx = tx.Where("path LIKE ?", "%/images/edits")
+		}
+	}
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var tasks []model.AIImageTask
+	err = tx.Order("created_at desc").Offset(q.Offset()).Limit(q.PageSize).Find(&tasks).Error
+	return tasks, total, err
+}
+
 func AttachAIImageTask(reservedTaskID string, upstreamTaskID string, status string, imageURL string, channel model.ModelChannel, now string) (model.AIImageTask, error) {
 	db, err := DB()
 	if err != nil {

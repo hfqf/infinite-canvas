@@ -35,6 +35,7 @@ func New() *gin.Engine {
 	v1.POST("/images/edits", gin.WrapF(handler.AIImagesEdits))
 	v1.POST("/images/uploads", gin.WrapF(handler.UploadImage))
 	v1.GET("/deduction-logs", gin.WrapF(handler.UserAIDeductionLogs))
+	v1.GET("/image-tasks", gin.WrapF(handler.UserAIImageTasks))
 	v1.POST("/images/vectorize", gin.WrapF(handler.VectorizeImage))
 	v1.GET("/image-tasks/:id", func(c *gin.Context) {
 		handler.AIImageTask(c.Writer, c.Request, c.Param("id"))

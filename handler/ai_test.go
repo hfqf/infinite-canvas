@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -93,14 +94,17 @@ func TestReadAIReferenceImageCountFromJSONAliases(t *testing.T) {
 }
 
 func TestImageRequestCreditsAddsReferenceImageSurchargeAfterFirstReference(t *testing.T) {
-	if got := imageRequestCredits(2, false, 2, 3); got != 12 {
-		t.Fatalf("non-4k credits = %d, want (2 + 2*2) * 2 = 12", got)
+	if got := imageRequestCredits(3, false, 2, 3); got != 10 {
+		t.Fatalf("non-4k credits = %d, want (3 + 2*1) * 2 = 10", got)
 	}
-	if got := imageRequestCredits(2, true, 1, 3); got != 10 {
-		t.Fatalf("4k credits = %d, want 6 + 2*2 = 10", got)
+	if got := imageRequestCredits(9, false, 1, 0); got != 3 {
+		t.Fatalf("non-4k base credits = %d, want fixed 3", got)
 	}
-	if got := imageRequestCredits(2, false, 4, 1); got != 8 {
-		t.Fatalf("single reference credits = %d, want 2 * 4 = 8", got)
+	if got := imageRequestCredits(3, true, 1, 3); got != 8 {
+		t.Fatalf("4k credits = %d, want 6 + 2*1 = 8", got)
+	}
+	if got := imageRequestCredits(3, false, 4, 1); got != 12 {
+		t.Fatalf("single reference credits = %d, want 3 * 4 = 12", got)
 	}
 }
 
@@ -173,6 +177,7 @@ func TestCopyAIImageResponseWithFallbackRetriesBackupOnServerError(t *testing.T)
 	recorder := httptest.NewRecorder()
 
 	copyAIImageResponseWithFallback(
+		context.Background(),
 		recorder,
 		[]model.ModelChannel{
 			{Name: "primary-test", BaseURL: primary.URL, APIKey: "primary-key"},

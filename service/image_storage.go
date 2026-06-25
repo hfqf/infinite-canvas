@@ -1,12 +1,15 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -16,6 +19,7 @@ import (
 )
 
 const ossImagePrefix = "canvas/images"
+const remoteImageMaxBytes = 30 << 20
 
 type UploadedImage struct {
 	URL        string `json:"url"`
@@ -48,6 +52,67 @@ func SaveUploadedImage(ctx context.Context, fileName string, contentType string,
 		return UploadedImage{}, err
 	}
 	return storage.Save(ctx, imageUploadRequest{FileName: fileName, ContentType: contentType, Reader: reader})
+}
+
+func SaveRemoteImage(ctx context.Context, imageURL string) (UploadedImage, error) {
+	imageURL = strings.TrimSpace(imageURL)
+	if imageURL == "" {
+		return UploadedImage{}, errors.New("image url is required")
+	}
+	if isOSSImageURL(imageURL) {
+		return UploadedImage{URL: imageURL, StorageKey: "oss:" + strings.TrimPrefix(imageURL, strings.TrimRight(config.Cfg.AliyunOSSPublicBaseURL, "/")+"/")}, nil
+	}
+	parsed, err := url.Parse(imageURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return UploadedImage{}, errors.New("image url is invalid")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
+	if err != nil {
+		return UploadedImage{}, err
+	}
+	response, err := (&http.Client{Timeout: 60 * time.Second}).Do(request)
+	if err != nil {
+		return UploadedImage{}, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return UploadedImage{}, fmt.Errorf("download image status=%d", response.StatusCode)
+	}
+	contentType := strings.TrimSpace(strings.Split(response.Header.Get("Content-Type"), ";")[0])
+	if !strings.HasPrefix(strings.ToLower(contentType), "image/") {
+		contentType = "image/png"
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, remoteImageMaxBytes+1))
+	if err != nil {
+		return UploadedImage{}, err
+	}
+	if len(data) == 0 {
+		return UploadedImage{}, errors.New("downloaded image is empty")
+	}
+	if len(data) > remoteImageMaxBytes {
+		return UploadedImage{}, errors.New("downloaded image is too large")
+	}
+	fileName := path.Base(parsed.Path)
+	if fileName == "." || fileName == "/" || fileName == "" {
+		fileName = "image" + imageExtension(contentType)
+	}
+	return SaveUploadedImage(ctx, fileName, contentType, bytes.NewReader(data))
+}
+
+func isOSSImageURL(imageURL string) bool {
+	publicBaseURL := strings.TrimRight(strings.TrimSpace(config.Cfg.AliyunOSSPublicBaseURL), "/")
+	return publicBaseURL != "" && strings.HasPrefix(imageURL, publicBaseURL+"/")
+}
+
+func imageExtension(contentType string) string {
+	switch strings.ToLower(strings.TrimSpace(contentType)) {
+	case "image/jpeg", "image/jpg":
+		return ".jpg"
+	case "image/webp":
+		return ".webp"
+	default:
+		return ".png"
+	}
 }
 
 func newOSSImageStorageFromConfig() (*ossImageStorage, error) {

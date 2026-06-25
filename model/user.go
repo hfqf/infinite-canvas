@@ -157,22 +157,31 @@ type CreditLogList struct {
 
 // AIImageTask 保存异步生图任务的计费上下文。
 type AIImageTask struct {
-	ID          string `json:"id" gorm:"primaryKey"`
-	TaskID      string `json:"taskId" gorm:"uniqueIndex"`
-	UserID      string `json:"userId" gorm:"index"`
-	Model       string `json:"model"`
-	Path        string `json:"path"`
-	Prompt      string `json:"prompt" gorm:"type:text"`
-	Credits     int    `json:"credits"`
-	Status      string `json:"status" gorm:"index"`
-	ImageURL    string `json:"imageUrl" gorm:"type:text"`
-	ChannelName string `json:"channelName"`
-	ChannelURL  string `json:"channelUrl"`
-	FrozenAt    string `json:"frozenAt"`
-	ChargedAt   string `json:"chargedAt"`
-	ReleasedAt  string `json:"releasedAt"`
-	CreatedAt   string `json:"createdAt"`
-	UpdatedAt   string `json:"updatedAt"`
+	ID             string `json:"id" gorm:"primaryKey"`
+	TaskID         string `json:"taskId" gorm:"uniqueIndex"`
+	UserID         string `json:"userId" gorm:"index"`
+	Model          string `json:"model"`
+	Path           string `json:"path"`
+	Prompt         string `json:"prompt" gorm:"type:text"`
+	Credits        int    `json:"credits"`
+	Size           string `json:"size"`
+	Quality        string `json:"quality"`
+	Count          int    `json:"count"`
+	ReferenceCount int    `json:"referenceCount"`
+	Status         string `json:"status" gorm:"index"`
+	ImageURL       string `json:"imageUrl" gorm:"type:text"`
+	ChannelName    string `json:"channelName"`
+	ChannelURL     string `json:"channelUrl"`
+	FrozenAt       string `json:"frozenAt"`
+	ChargedAt      string `json:"chargedAt"`
+	ReleasedAt     string `json:"releasedAt"`
+	CreatedAt      string `json:"createdAt"`
+	UpdatedAt      string `json:"updatedAt"`
+}
+
+type AIImageTaskList struct {
+	Items []AIImageTask `json:"items"`
+	Total int           `json:"total"`
 }
 
 type RechargeOrderStatus string

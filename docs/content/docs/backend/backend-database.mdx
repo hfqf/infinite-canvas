@@ -160,7 +160,7 @@ description: 当前后端主要数据表与字段说明
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `model` | string | 模型名称 |
-| `credits` | number | 模型非 4K 基础单价；图片请求扣费公式为 `(基础单价 + 额外参考图数 * 非 4K 基础单价) * 生成张数`，其中 4K 基础单价固定为 `6`，第一张参考图免费；远程异步生图会在任务成功返回后扣费 |
+| `credits` | number | 模型默认算力单价；图片请求不再读取该字段作为非 4K 基础价，扣费公式固定为 `(非 4K 基础 3 / 4K 基础 6 + 额外参考图数 * 1) * 生成张数`，第一张参考图免费；远程异步生图会在任务成功返回后扣费 |
 
 `auth.linuxDo` 当前字段：
 
@@ -247,8 +247,12 @@ description: 当前后端主要数据表与字段说明
 | `path` | string | 创建任务路径，如 `/images/generations` 或 `/images/edits` |
 | `prompt` | text | 本次生图提示词 |
 | `credits` | number | 成功后需要扣除的算力点 |
+| `size` | string | 请求目标尺寸 |
+| `quality` | string | 请求质量 |
+| `count` | number | 请求生成张数 |
+| `reference_count` | number | 参考图数量 |
 | `status` | string | 上游任务状态 |
-| `image_url` | text | 成功结果图 URL；仅返回 base64 时记录为 `[b64_json]` |
+| `image_url` | text | 成功结果图 URL，优先保存后端转存后的阿里云 OSS 链接；仅返回 base64 时记录为 `[b64_json]` |
 | `channel_name` | string | 创建任务时使用的渠道名称 |
 | `channel_url` | string | 创建任务时使用的渠道 Base URL |
 | `frozen_at` | string | 冻结算力点时间 |

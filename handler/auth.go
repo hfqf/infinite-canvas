@@ -185,6 +185,20 @@ func UserAIDeductionLogs(w http.ResponseWriter, r *http.Request) {
 	OK(w, logs)
 }
 
+func UserAIImageTasks(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok || user.ID == "" {
+		Fail(w, "请先登录")
+		return
+	}
+	tasks, err := service.ListUserAIImageTasks(user.ID, parseQuery(r))
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, tasks)
+}
+
 func AdminSaveCreditLog(w http.ResponseWriter, r *http.Request) {
 	var log model.CreditLog
 	_ = json.NewDecoder(r.Body).Decode(&log)

@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -421,18 +422,22 @@ func EnsureUserCredits(userID string, credits int) error {
 	return nil
 }
 
-func FreezeAIImageCredits(userID string, modelName string, credits int, path string, prompt string) (model.AIImageTask, error) {
+func FreezeAIImageCredits(userID string, modelName string, credits int, path string, prompt string, size string, quality string, count int, referenceCount int) (model.AIImageTask, error) {
 	current := now()
 	task := model.AIImageTask{
-		ID:        newID("ai_image_task"),
-		UserID:    userID,
-		Model:     modelName,
-		Path:      path,
-		Prompt:    prompt,
-		Credits:   credits,
-		Status:    "reserved",
-		CreatedAt: current,
-		UpdatedAt: current,
+		ID:             newID("ai_image_task"),
+		UserID:         userID,
+		Model:          modelName,
+		Path:           path,
+		Prompt:         prompt,
+		Credits:        credits,
+		Size:           size,
+		Quality:        quality,
+		Count:          count,
+		ReferenceCount: referenceCount,
+		Status:         "reserved",
+		CreatedAt:      current,
+		UpdatedAt:      current,
 	}
 	task.TaskID = task.ID
 	task, ok, err := repository.FreezeAIImageTask(task, current)
@@ -559,7 +564,12 @@ func checkFrozenAIImageTask(task model.AIImageTask) error {
 		return ReleaseAIImageTask(task.TaskID, task.UserID, firstNonEmpty(status, "failed"))
 	}
 	if strings.TrimSpace(imageURL) != "" {
-		return CompleteAIImageTaskSuccess(task.TaskID, task.UserID, firstNonEmpty(status, "succeeded"), imageURL)
+		ossURL, err := saveAIImageTaskResultToOSS(imageURL)
+		if err != nil {
+			log.Printf("save scheduled AI image result to OSS failed: task=%s url=%s err=%v", task.TaskID, imageURL, err)
+			return ReleaseAIImageTask(task.TaskID, task.UserID, "oss_upload_failed")
+		}
+		return CompleteAIImageTaskSuccess(task.TaskID, task.UserID, firstNonEmpty(status, "succeeded"), ossURL)
 	}
 	if status != "" {
 		return ReleaseAIImageTask(task.TaskID, task.UserID, "response_unrecognized")
@@ -597,6 +607,17 @@ func fetchAIImageTaskState(channel model.ModelChannel, task model.AIImageTask) (
 		return "", "", fmt.Errorf("upstream task status=%d body=%s", response.StatusCode, safeUpstreamTaskText(body))
 	}
 	return parseAIImageTaskState(body), parseAIImageTaskImageURL(body), nil
+}
+
+func saveAIImageTaskResultToOSS(imageURL string) (string, error) {
+	if strings.TrimSpace(imageURL) == "" || imageURL == "[b64_json]" {
+		return imageURL, nil
+	}
+	uploaded, err := SaveRemoteImage(context.Background(), imageURL)
+	if err != nil {
+		return "", err
+	}
+	return uploaded.URL, nil
 }
 
 func parseAIImageTaskState(body []byte) string {
@@ -703,6 +724,14 @@ func ListUserAIDeductionLogs(userID string, q model.Query) (model.CreditLogList,
 		return model.CreditLogList{}, err
 	}
 	return model.CreditLogList{Items: logs, Total: int(total)}, nil
+}
+
+func ListUserAIImageTasks(userID string, q model.Query) (model.AIImageTaskList, error) {
+	tasks, total, err := repository.ListUserAIImageTasks(userID, q)
+	if err != nil {
+		return model.AIImageTaskList{}, err
+	}
+	return model.AIImageTaskList{Items: tasks, Total: int(total)}, nil
 }
 
 func SaveCreditLog(log model.CreditLog) (model.CreditLog, error) {

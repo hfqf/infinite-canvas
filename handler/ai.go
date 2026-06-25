@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -101,7 +102,8 @@ func proxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 			Fail(w, "AI 接口请求失败")
 			return
 		}
-		imageTask, err = service.FreezeAIImageCredits(user.ID, modelName, credits, path, readAIRequestPrompt(body, contentType))
+		size, quality := readAIImageRequestSizeQuality(body, contentType)
+		imageTask, err = service.FreezeAIImageCredits(user.ID, modelName, credits, path, readAIRequestPrompt(body, contentType), size, quality, readAIRequestCount(body, contentType), readAIReferenceImageCount(body, contentType))
 		if err != nil {
 			FailError(w, err)
 			return
@@ -121,7 +123,7 @@ func proxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		}
 	}
 	if isImageRequestPath(path) {
-		copyAIImageResponseWithFallback(w, imageChannels, imageTask, modelName, path, body, contentType)
+		copyAIImageResponseWithFallback(r.Context(), w, imageChannels, imageTask, modelName, path, body, contentType)
 		return
 	}
 	if err := service.ConsumeUserCredits(user.ID, modelName, credits, path); err != nil {
@@ -148,11 +150,13 @@ const (
 	aiImageFailureCooldownSeconds   = 120
 	aiImage4KFailureCooldownSeconds = 180
 	aiImageReferenceTimeoutSeconds  = 60
+	aiImageBaseCredits              = 3
+	aiImageExtraReferenceCredits    = 1
 	aiImageResponseMaxBytes         = 30 << 20
 	aiImageTaskPollResponseMaxBytes = 30 << 20
 )
 
-func copyAIImageResponseWithFallback(w http.ResponseWriter, channels []model.ModelChannel, imageTask model.AIImageTask, modelName string, path string, body []byte, contentType string) {
+func copyAIImageResponseWithFallback(ctx context.Context, w http.ResponseWriter, channels []model.ModelChannel, imageTask model.AIImageTask, modelName string, path string, body []byte, contentType string) {
 	lastResult := aiProxyAttemptResult{message: "AI 接口请求失败"}
 	timeoutSeconds := aiImageRequestTimeoutSeconds(body, contentType)
 	for index, channel := range channels {
@@ -165,7 +169,7 @@ func copyAIImageResponseWithFallback(w http.ResponseWriter, channels []model.Mod
 		}
 		result := fetchAIImageResponse(request, time.Duration(timeoutSeconds)*time.Second)
 		if result.statusCode < http.StatusBadRequest && result.message == "" {
-			if err := handleAIImageBilling(imageTask, channel, result.body); err != nil {
+			if err := handleAIImageBilling(ctx, imageTask, channel, result.body); err != nil {
 				FailError(w, err)
 				return
 			}
@@ -299,7 +303,7 @@ func proxyAIImageTaskGetRequest(w http.ResponseWriter, r *http.Request, path str
 		return
 	}
 	if ok {
-		if err := handleAIImageBilling(task, channel, result.body); err != nil {
+		if err := handleAIImageBilling(r.Context(), task, channel, result.body); err != nil {
 			FailError(w, err)
 			return
 		}
@@ -307,13 +311,23 @@ func proxyAIImageTaskGetRequest(w http.ResponseWriter, r *http.Request, path str
 	writeAIProxySuccess(w, result)
 }
 
-func handleAIImageBilling(imageTask model.AIImageTask, channel model.ModelChannel, body []byte) error {
+func handleAIImageBilling(ctx context.Context, imageTask model.AIImageTask, channel model.ModelChannel, body []byte) error {
 	if imageTask.Credits <= 0 {
 		return nil
 	}
 	status := imagePayloadStatus(body)
 	taskID := imagePayloadTaskID(body)
 	imageURL := imagePayloadImageURL(body)
+	if imageBillingOutcome(status, imageURL) == imageBillingCharge {
+		ossURL, err := saveAIImageResultToOSS(ctx, imageURL)
+		if err != nil {
+			if releaseErr := service.ReleaseAIImageTask(imageTask.TaskID, imageTask.UserID, "oss_upload_failed"); releaseErr != nil {
+				return releaseErr
+			}
+			return safeHandlerError{message: "图片保存 OSS 失败，已释放冻结算力"}
+		}
+		imageURL = ossURL
+	}
 	if taskID != "" {
 		attached, err := service.AttachAIImageTask(imageTask.TaskID, taskID, status, imageURL, channel)
 		if err != nil {
@@ -336,6 +350,17 @@ func handleAIImageBilling(imageTask model.AIImageTask, channel model.ModelChanne
 		return service.CompleteAIImageTaskSuccess(imageTask.TaskID, imageTask.UserID, firstNonEmpty(status, "succeeded"), imageURL)
 	}
 	return nil
+}
+
+func saveAIImageResultToOSS(ctx context.Context, imageURL string) (string, error) {
+	if strings.TrimSpace(imageURL) == "" || imageURL == "[b64_json]" {
+		return imageURL, nil
+	}
+	uploaded, err := service.SaveRemoteImage(ctx, imageURL)
+	if err != nil {
+		return "", err
+	}
+	return uploaded.URL, nil
 }
 
 type imageBillingState string
@@ -802,8 +827,8 @@ func requestCredits(modelName string, path string, body []byte, contentType stri
 	return credits * count, nil
 }
 
-func imageRequestCredits(modelCredits int, is4K bool, count int, referenceImages int) int {
-	baseCredits := modelCredits
+func imageRequestCredits(_ int, is4K bool, count int, referenceImages int) int {
+	baseCredits := aiImageBaseCredits
 	if is4K {
 		baseCredits = 6
 	}
@@ -812,7 +837,7 @@ func imageRequestCredits(modelCredits int, is4K bool, count int, referenceImages
 	}
 	extraReferenceCredits := 0
 	if referenceImages > 1 {
-		extraReferenceCredits = (referenceImages - 1) * modelCredits
+		extraReferenceCredits = (referenceImages - 1) * aiImageExtraReferenceCredits
 	}
 	return (baseCredits + extraReferenceCredits) * count
 }

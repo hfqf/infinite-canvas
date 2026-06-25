@@ -5,12 +5,10 @@ import { App, Button, DatePicker, Empty, Image, Input, Modal, Select, Space, Spi
 import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
 import { saveAs } from "file-saver";
-import localforage from "localforage";
-import { nanoid } from "nanoid";
 import { useEffect, useMemo, useState } from "react";
 
 import { formatBytes, formatDuration } from "@/lib/image-utils";
-import { resolveImageUrl } from "@/services/image-storage";
+import { fetchMyImageTasks, type AIImageTask } from "@/services/api/image-tasks";
 import { useUserStore } from "@/stores/use-user-store";
 import type { ReferenceImage } from "@/types/image";
 
@@ -35,7 +33,9 @@ type GenerationLogConfig = {
 
 type GenerationLog = {
     id: string;
+    taskId: string;
     createdAt: number;
+    updatedAt: number;
     title: string;
     prompt: string;
     time: string;
@@ -46,6 +46,8 @@ type GenerationLog = {
     successCount: number;
     failCount: number;
     imageCount: number;
+    credits: number;
+    referenceCount: number;
     size: string;
     quality: string;
     status: "成功" | "失败";
@@ -61,11 +63,11 @@ type HistoryItem = {
     mode: "generate" | "edit";
 };
 
-const logStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_generation_logs" });
-
 export default function ImageHistoryPage() {
     const { message } = App.useApp();
     const user = useUserStore((state) => state.user);
+    const token = useUserStore((state) => state.token);
+    const clearSession = useUserStore((state) => state.clearSession);
     const [logs, setLogs] = useState<GenerationLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [keywordText, setKeywordText] = useState("");
@@ -79,24 +81,37 @@ export default function ImageHistoryPage() {
     const [detail, setDetail] = useState<HistoryItem | null>(null);
 
     const refresh = async () => {
+        if (!token) {
+            setLogs([]);
+            setLoading(false);
+            return;
+        }
         setLoading(true);
-        setLogs(await readStoredLogs());
-        setLoading(false);
+        try {
+            const result = await fetchMyImageTasks(token, { page: 1, pageSize: 500 });
+            setLogs(result.items.map(taskToLog));
+        } catch (error) {
+            const text = error instanceof Error ? error.message : "读取生图历史失败";
+            if (text.includes("未登录") || text.includes("登录状态无效")) clearSession();
+            message.error(text);
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
         void refresh();
-    }, []);
+    }, [token]);
 
     const items = useMemo<HistoryItem[]>(
         () =>
             logs.flatMap((log) =>
-                log.images.map((image, index) => ({
+                (log.images.length ? log.images : [emptyHistoryImage(log)]).map((image, index) => ({
                     id: `${log.id}-${image.id || index}`,
                     log,
                     image,
                     imageIndex: index,
-                    mode: log.references.length ? "edit" : "generate",
+                    mode: log.referenceCount ? "edit" : "generate",
                 })),
             ),
         [logs],
@@ -199,7 +214,7 @@ function HistoryCard({ item, userName, onDetail, onCopyPrompt }: { item: History
     return (
         <article className="p-6">
             <button type="button" className="block w-full overflow-hidden rounded-lg bg-stone-100 text-left" onClick={() => onDetail(item)}>
-                <Image src={item.image.dataUrl} alt={log.title || "生成图片"} preview={false} className="!h-[290px] !w-full object-cover" />
+                {item.image.dataUrl ? <Image src={item.image.dataUrl} alt={log.title || "生成图片"} preview={false} className="!h-[290px] !w-full object-cover" /> : <EmptyImagePlaceholder />}
             </button>
             <div className="mt-4 flex items-center justify-between text-sm text-stone-500">
                 <span className="inline-flex items-center gap-1 font-medium">
@@ -226,7 +241,7 @@ function HistoryCard({ item, userName, onDetail, onCopyPrompt }: { item: History
                 <Tag className="m-0 rounded-full px-3">托管生图</Tag>
                 <Tag className="m-0 rounded-full px-3">{statusValue(log.status)}</Tag>
                 <Tag className="m-0 rounded-full px-3">{itemSize(item)}</Tag>
-                <Tag className="m-0 rounded-full px-3">¥-</Tag>
+                <Tag className="m-0 rounded-full px-3">{log.credits ? `${log.credits} 算力` : "-"}</Tag>
             </div>
             <Button block className="mt-3 rounded-lg" icon={<Eye className="size-4" />} onClick={() => onDetail(item)}>
                 查看详情
@@ -244,14 +259,14 @@ function HistoryDetail({ item, userName, onCopyPrompt, onClose }: { item: Histor
         ["模式", item.mode],
         ["目标尺寸", log.size || log.config.size || "-"],
         ["尺寸状态", sizeHitLabel(item)],
-        ["参考图", `${log.references.length} 张${log.references.length > 1 ? ` / 附加 ${log.references.length - 1} 张` : ""}`],
+        ["参考图", `${log.referenceCount} 张${log.referenceCount > 1 ? ` / 附加 ${log.referenceCount - 1} 张` : ""}`],
         ["来源", "platform"],
-        ["任务", log.id],
-        ["更新", formatDate(log.createdAt)],
+        ["任务", log.taskId],
+        ["更新", formatDate(log.updatedAt || log.createdAt)],
         ["模型", log.model || log.config.imageModel || log.config.model || "-"],
         ["生图链路", "托管生图"],
         ["实际尺寸", itemSize(item)],
-        ["金额", "¥-"],
+        ["金额", log.credits ? `${log.credits} 算力` : "-"],
         ["状态", statusValue(log.status)],
     ];
 
@@ -261,7 +276,7 @@ function HistoryDetail({ item, userName, onCopyPrompt, onClose }: { item: Histor
                 生成记录详情
             </Typography.Title>
             <div className="grid gap-7 lg:grid-cols-[460px_1fr]">
-                <Image src={item.image.dataUrl} alt={log.title || "生成图片"} className="!aspect-square !w-full rounded-xl object-cover" />
+                {item.image.dataUrl ? <Image src={item.image.dataUrl} alt={log.title || "生成图片"} className="!aspect-square !w-full rounded-xl object-cover" /> : <EmptyImagePlaceholder large />}
                 <div>
                     <div className="grid gap-x-10 gap-y-4 md:grid-cols-2">
                         {fields.map(([label, value]) => (
@@ -289,63 +304,84 @@ function HistoryDetail({ item, userName, onCopyPrompt, onClose }: { item: Histor
     );
 }
 
-async function readStoredLogs() {
-    if (typeof window === "undefined") return [];
-    try {
-        const values: GenerationLog[] = [];
-        await logStore.iterate<GenerationLog, void>((value) => {
-            values.push(value);
-        });
-        const logs = await Promise.all(values.map(normalizeLog));
-        return logs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    } catch {
-        return [];
-    }
-}
-
-async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog> {
-    const references = await Promise.all(
-        (log.references || []).map(async (item) => ({
-            ...item,
-            dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl),
-        })),
-    );
-    const images = await Promise.all(
-        (log.images || []).map(async (item) => ({
-            ...item,
-            dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl),
-        })),
-    );
-    const config = normalizeLogConfig(log);
+function taskToLog(task: AIImageTask): GenerationLog {
+    const createdAt = parseDate(task.createdAt);
+    const updatedAt = parseDate(task.updatedAt);
+    const mode = task.path.includes("/images/edits") ? "edit" : "generate";
+    const image = task.imageUrl && task.imageUrl !== "[b64_json]" ? taskImage(task, updatedAt || createdAt) : null;
+    const config = {
+        model: task.model,
+        imageModel: task.model,
+        quality: task.quality,
+        size: task.size,
+        count: String(task.count || 1),
+    };
     return {
-        id: log.id || nanoid(),
-        createdAt: log.createdAt || Date.now(),
-        title: log.title || log.model || "未命名",
-        prompt: log.prompt || log.title || "",
-        time: log.time || new Date().toLocaleString("zh-CN", { hour12: false }),
-        model: log.model || config.imageModel || "",
+        id: task.id || task.taskId,
+        taskId: task.taskId,
+        createdAt,
+        updatedAt,
+        title: task.prompt.slice(0, 12) || task.model || "未命名",
+        prompt: task.prompt,
+        time: dayjs(createdAt).format("YYYY-MM-DD HH:mm:ss"),
+        model: task.model,
         config,
-        references,
-        durationMs: log.durationMs || 0,
-        successCount: log.successCount ?? log.imageCount ?? 0,
-        failCount: log.failCount || 0,
-        imageCount: log.imageCount || log.successCount || 0,
-        size: log.size || config.size || "",
-        quality: log.quality || "",
-        status: log.status || "成功",
-        images,
-        thumbnails: images.map((image) => image.dataUrl).filter(Boolean),
+        references: [],
+        durationMs: updatedAt > createdAt ? updatedAt - createdAt : 0,
+        successCount: image ? 1 : 0,
+        failCount: isSuccessStatus(task.status) ? 0 : 1,
+        imageCount: task.count || 1,
+        credits: task.credits || 0,
+        referenceCount: task.referenceCount || (mode === "edit" ? 1 : 0),
+        size: task.size,
+        quality: task.quality,
+        status: isSuccessStatus(task.status) ? "成功" : "失败",
+        images: image ? [image] : [],
+        thumbnails: image ? [image.dataUrl] : [],
     };
 }
 
-function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
+function taskImage(task: AIImageTask, durationMs: number): GeneratedImage {
+    const size = parseSize(task.size);
     return {
-        model: log.config?.model || log.model || "",
-        imageModel: log.config?.imageModel || log.model || "",
-        quality: log.config?.quality || log.quality || "",
-        size: log.config?.size || log.size || "",
-        count: log.config?.count || String(log.imageCount || log.successCount || 1),
+        id: task.taskId,
+        dataUrl: task.imageUrl,
+        durationMs,
+        width: size.width,
+        height: size.height,
+        bytes: 0,
+        mimeType: "image/png",
     };
+}
+
+function emptyHistoryImage(log: GenerationLog): GeneratedImage {
+    const size = parseSize(log.size || log.config.size || "");
+    return { id: `${log.id}-empty`, dataUrl: "", durationMs: log.durationMs, width: size.width, height: size.height, bytes: 0, mimeType: "image/png" };
+}
+
+function EmptyImagePlaceholder({ large = false }: { large?: boolean }) {
+    return (
+        <div className={`grid w-full place-items-center bg-stone-100 text-stone-400 ${large ? "aspect-square rounded-xl" : "h-[290px]"}`}>
+            <div className="flex flex-col items-center gap-2">
+                <ImageIcon className="size-8" />
+                <span className="text-sm">暂无图片</span>
+            </div>
+        </div>
+    );
+}
+
+function parseDate(value: string) {
+    const parsed = Date.parse(value || "");
+    return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+function parseSize(value: string) {
+    const match = value.match(/^(\d+)x(\d+)$/i);
+    return match ? { width: Number(match[1]), height: Number(match[2]) } : { width: 0, height: 0 };
+}
+
+function isSuccessStatus(status: string) {
+    return ["succeeded", "success", "completed"].includes(status.trim().toLowerCase());
 }
 
 function userLabel(user: ReturnType<typeof useUserStore.getState>["user"]) {

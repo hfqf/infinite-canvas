@@ -187,6 +187,35 @@ func TestListFrozenAIImageTasks(t *testing.T) {
 	}
 }
 
+func TestListUserAIImageTasksFiltersUserAndKeyword(t *testing.T) {
+	resetDBForTest(t)
+	user := model.User{ID: "user_image_history_001", Username: "history-user", Role: model.UserRoleUser, Status: model.UserStatusActive, AffCode: "HIST001"}
+	if _, err := SaveUser(user); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SaveUser(model.User{ID: "user_image_history_002", Username: "other-history-user", Role: model.UserRoleUser, Status: model.UserStatusActive, AffCode: "HIST002"}); err != nil {
+		t.Fatal(err)
+	}
+	tasks := []model.AIImageTask{
+		{ID: "history_task_001", TaskID: "task_history_001", UserID: user.ID, Model: "gpt-image-2", Path: "/images/generations", Prompt: "blue cat", Status: "succeeded", ImageURL: "https://cdn.example.com/cat.png", Size: "1024x1024", Quality: "low", Count: 1, ReferenceCount: 0, Credits: 2, CreatedAt: "2026-06-24 10:00:00", UpdatedAt: "2026-06-24 10:01:00"},
+		{ID: "history_task_002", TaskID: "task_history_002", UserID: user.ID, Model: "gpt-image-2", Path: "/images/edits", Prompt: "red dog", Status: "failed", Size: "2048x2048", Quality: "medium", Count: 1, ReferenceCount: 2, Credits: 4, CreatedAt: "2026-06-24 11:00:00", UpdatedAt: "2026-06-24 11:01:00"},
+		{ID: "history_task_003", TaskID: "task_history_003", UserID: "user_image_history_002", Model: "gpt-image-2", Path: "/images/generations", Prompt: "blue cat other", Status: "succeeded", CreatedAt: "2026-06-24 12:00:00", UpdatedAt: "2026-06-24 12:01:00"},
+	}
+	for _, task := range tasks {
+		if _, err := SaveAIImageTask(task); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	list, total, err := ListUserAIImageTasks(user.ID, model.Query{Keyword: "blue", Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(list) != 1 || list[0].TaskID != "task_history_001" {
+		t.Fatalf("tasks=%#v total=%d, want only current user's blue task", list, total)
+	}
+}
+
 func TestConsumeUserCreditsUsesAvailableCredits(t *testing.T) {
 	resetDBForTest(t)
 	user, err := SaveUser(model.User{ID: "user_available_credits_001", Username: "available-user", Role: model.UserRoleUser, Status: model.UserStatusActive, Credits: 10, FrozenCredits: 6})
