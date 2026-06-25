@@ -27,7 +27,7 @@ const PANEL_MOTION_MS = 500;
 const PANEL_MOTION_SECONDS = PANEL_MOTION_MS / 1000;
 const ONLINE_AGENT_MAX_STEPS = 4;
 const ONLINE_AGENT_PROMPT =
-    '你是 Infinite Canvas 网页内置在线画布助手。你只能返回 JSON，不要 Markdown，不要解释。格式：{"reply":"给用户看的中文说明","ops":[...]}。reply 只能说明“准备执行/等待确认”，不能说“已完成/已删除/已连接/已调整”，因为工具操作需要用户确认后才会执行。工具执行结果返回后，你要判断任务是否完成；完成时返回 ops:[]，未完成时返回下一步 ops。ops 可用类型：add_node、update_node、delete_node、delete_connections、connect_nodes、set_viewport、select_nodes、run_generation。add_node 支持 nodeType: text/image/config/video/audio，position:{x,y}，metadata。delete_node 必须带 id/ids，或用 nodeType:"config" 删除全部生成配置节点。delete_connections 可用 all:true 删除全部连线。文本内容放 metadata.content。用户要求生图、生成文字、视频或音频时，不要直接生成最终内容，要创建提示词文本节点、config 节点、connect_nodes，并追加 run_generation 触发画布已有生成工具；config 节点 metadata 至少包含 generationMode、composerContent、prompt、status:"idle"，composerContent/prompt 用 @[node:id] 引用提示词节点或参考节点。只输出能直接 JSON.parse 的对象。';
+    '你是 好图秀画布 网页内置在线画布助手。你只能返回 JSON，不要 Markdown，不要解释。格式：{"reply":"给用户看的中文说明","ops":[...]}。reply 只能说明“准备执行/等待确认”，不能说“已完成/已删除/已连接/已调整”，因为工具操作需要用户确认后才会执行。工具执行结果返回后，你要判断任务是否完成；完成时返回 ops:[]，未完成时返回下一步 ops。ops 可用类型：add_node、update_node、delete_node、delete_connections、connect_nodes、set_viewport、select_nodes、run_generation。add_node 支持 nodeType: text/image/config/video/audio，position:{x,y}，metadata。delete_node 必须带 id/ids，或用 nodeType:"config" 删除全部生成配置节点。delete_connections 可用 all:true 删除全部连线。文本内容放 metadata.content。用户要求生图、生成文字、视频或音频时，不要直接生成最终内容，要创建提示词文本节点、config 节点、connect_nodes，并追加 run_generation 触发画布已有生成工具；config 节点 metadata 至少包含 generationMode、composerContent、prompt、status:"idle"，composerContent/prompt 用 @[node:id] 引用提示词节点或参考节点。只输出能直接 JSON.parse 的对象。';
 type OnlineAgentTab = "setup" | "chat" | "history" | "log";
 type OnlineAgentLog = { id: string; time: string; title: string; data?: unknown };
 type OnlineLoopContext = { step: number; previous?: unknown };
@@ -361,10 +361,10 @@ export function CanvasAssistantPanel({ nodes, selectedNodeIds, snapshot, session
                     ) : (
                         <div className="flex h-full flex-col items-center justify-center px-1 text-center">
                             <div className="relative font-serif text-4xl font-bold italic tracking-normal" style={{ color: theme.node.text }}>
-                                <span>Infinite Canvas</span>
-                                <DiaTextReveal className="absolute inset-0" colors={["#A97CF8", "#F38CB8", "#FDCC92"]} textColor="transparent" duration={1.8} startOnView={false} text="Infinite Canvas" />
+                                <span>好图秀画布</span>
+                                <DiaTextReveal className="absolute inset-0" colors={["#A97CF8", "#F38CB8", "#FDCC92"]} textColor="transparent" duration={1.8} startOnView={false} text="好图秀画布" />
                             </div>
-                            <div className="mt-3 font-serif text-base italic tracking-wide opacity-60">One canvas, infinite ideas</div>
+                            <div className="mt-3 font-serif text-base italic tracking-wide opacity-60">一张画布，灵感成图</div>
                         </div>
                     )}
                 </div>

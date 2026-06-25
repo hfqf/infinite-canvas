@@ -2,15 +2,13 @@
 
 import type { CSSProperties, RefObject } from "react";
 import { Avatar, Dropdown, Tooltip } from "antd";
-import { BookOpen, History, Keyboard, LogOut, ReceiptText, Settings2, Shield, UserPlus } from "lucide-react";
+import { History, Keyboard, LogOut, ReceiptText, Settings2, Shield, UserPlus } from "lucide-react";
 import type { ItemType } from "antd/es/menu/interface";
 import Link from "next/link";
 
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { RechargeButton } from "@/components/layout/recharge-button";
-import { VersionReleaseModal } from "@/components/layout/version-release-modal";
 import { CreditSymbol } from "@/constant/credits";
-import { DOCS_URL } from "@/constant/env";
 import { cn } from "@/lib/utils";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useConfigStore } from "@/stores/use-config-store";
@@ -40,7 +38,6 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
     const avatarText = (userName.trim()[0] || "U").toUpperCase();
     const naturalIconClass = "inline-flex size-7 shrink-0 items-center justify-center text-stone-600 transition hover:text-stone-950 dark:text-stone-300 dark:hover:text-white [&_svg]:size-4";
     const iconStyle: CSSProperties | undefined = variant === "canvas" ? { color: canvasTheme.node.text } : undefined;
-    const versionStyle = iconStyle;
     const rechargeClassName = "bg-transparent hover:bg-transparent dark:hover:bg-transparent";
     const rechargeStyle = iconStyle;
     const avatarStyle: CSSProperties | undefined = variant === "canvas" ? { borderColor: canvasTheme.toolbar.border, color: canvasTheme.node.text, background: "transparent" } : undefined;
@@ -55,22 +52,18 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
 
     return (
         <div className="inline-flex shrink-0 items-center gap-1">
-            {variant === "canvas" ? (
+            {user ? (
                 <Link href="/deduction-logs" className={naturalIconClass} style={iconStyle} aria-label="我的流水" title="我的流水">
                     <ReceiptText className="size-4" />
                 </Link>
-            ) : (
-                <a href={DOCS_URL} target="_blank" rel="noopener noreferrer" className={naturalIconClass} style={iconStyle} aria-label="文档" title="文档">
-                    <BookOpen className="size-4" />
-                </a>
-            )}
+            ) : null}
             {showConfig ? (
                 <button type="button" className={naturalIconClass} style={iconStyle} onClick={() => openConfigDialog(false)} aria-label="配置" title="配置">
                     <Settings2 className="size-4" />
                 </button>
             ) : null}
             <AnimatedThemeToggler theme={theme} onThemeChange={setTheme} className={naturalIconClass} style={iconStyle} aria-label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"} title={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"} />
-            {variant === "canvas" ? (
+            {user ? (
                 <Link
                     href="/image-history"
                     className="inline-flex h-7 shrink-0 items-center gap-1 px-1.5 text-xs font-medium text-stone-600 transition hover:text-stone-950 dark:text-stone-300 dark:hover:text-white"
@@ -81,10 +74,8 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
                     <History className="size-3.5" />
                     <span>生图历史</span>
                 </Link>
-            ) : (
-                <VersionReleaseModal style={versionStyle} />
-            )}
-            <RechargeButton className={rechargeClassName} style={rechargeStyle} />
+            ) : null}
+            {user ? <RechargeButton className={rechargeClassName} style={rechargeStyle} /> : null}
             {user ? (
                 <Tooltip title="当前积分余额" placement="bottom">
                     <div

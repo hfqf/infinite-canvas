@@ -7,8 +7,12 @@ import "./globals.css";
 import React from "react";
 
 export const metadata: Metadata = {
-    title: "无限画布",
-    description: "一个无限画布创作工具",
+    title: "好图秀",
+    description: "好图秀 AI 创作平台",
+    icons: {
+        icon: "/haotushow-logo.png",
+        apple: "/haotushow-logo.png",
+    },
 };
 
 export default function RootLayout({

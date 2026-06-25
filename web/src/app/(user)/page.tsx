@@ -40,11 +40,11 @@ export default function IndexPage() {
                 <div className="pointer-events-none absolute right-[23%] top-[48%] size-20 rounded-full border border-dashed border-stone-200 dark:border-stone-800" />
 
                 <div className="relative flex min-h-[620px] flex-col items-center justify-center pt-10 text-center">
-                    <h1 className="ai-title-aurora max-w-5xl text-balance text-5xl font-semibold tracking-normal sm:text-7xl lg:text-8xl">无限画布</h1>
+                    <h1 className="ai-title-aurora max-w-5xl text-balance text-5xl font-semibold tracking-normal sm:text-7xl lg:text-8xl">好图秀</h1>
                     <p className="mt-8 max-w-3xl text-balance text-lg leading-8 text-stone-500 dark:text-stone-400">
                         在
                         <Highlighter action="underline" color="#FF9800">
-                            无限画布
+                            好图秀画布
                         </Highlighter>
                         中生成、连接和重组
                         <Highlighter action="highlight" color="#87CEFA">
@@ -75,11 +75,40 @@ export default function IndexPage() {
                     </div>
                     {items.length ? <HomeImageMasonry items={items} onDetail={setDetail} /> : <Empty className="py-20" description="暂无精选图片" />}
                 </section>
+                <SiteFooter />
             </section>
             <Modal open={Boolean(detail)} footer={null} width={980} centered onCancel={() => setDetail(null)}>
                 {detail ? <HomeImageDetail item={detail} /> : null}
             </Modal>
         </main>
+    );
+}
+
+function SiteFooter() {
+    return (
+        <footer className="border-t border-stone-200 py-8 dark:border-stone-800">
+            <div className="flex flex-col items-center justify-center gap-4 text-sm text-stone-500 md:flex-row dark:text-stone-400">
+                <div className="flex flex-wrap items-center justify-center gap-1">
+                    <span>© 2026 好图秀 haotushow.com</span>
+                    <span className="mx-2 text-stone-300 dark:text-stone-700">|</span>
+                    <span>Made with Pure Joy</span>
+                </div>
+
+                <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" className="group flex items-center gap-1.5 rounded-full border border-stone-200 px-3 py-1.5 text-stone-500 transition-all duration-200 hover:border-stone-400 hover:bg-stone-950/5 hover:text-stone-700 dark:border-stone-800 dark:text-stone-400 dark:hover:border-stone-600 dark:hover:bg-white/5 dark:hover:text-stone-200">
+                    <svg className="h-3.5 w-3.5 transition-colors group-hover:text-stone-700 dark:group-hover:text-stone-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    <span className="font-medium">苏ICP备18027098号-7</span>
+                </a>
+
+                <a href="https://beian.mps.gov.cn/#/query/webSearch?code=32011502013847" target="_blank" rel="noreferrer" className="group flex items-center gap-1.5 rounded-full border border-stone-200 px-3 py-1.5 text-stone-500 transition-all duration-200 hover:border-stone-400 hover:bg-stone-950/5 hover:text-stone-700 dark:border-stone-800 dark:text-stone-400 dark:hover:border-stone-600 dark:hover:bg-white/5 dark:hover:text-stone-200">
+                    <svg className="h-3.5 w-3.5 transition-colors group-hover:text-stone-700 dark:group-hover:text-stone-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    <span className="font-medium">苏公网安备32011502013847号</span>
+                </a>
+            </div>
+        </footer>
     );
 }
 

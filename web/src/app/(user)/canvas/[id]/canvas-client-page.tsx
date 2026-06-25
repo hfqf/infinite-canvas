@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent as ReactChangeEvent, DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Bot, Home, ImageIcon, Images, List, Menu, Music2, Plus, ReceiptText, Redo2, Settings2, Trash2, Undo2, Upload, Video } from "lucide-react";
+import { Home, ImageIcon, Images, List, Menu, Music2, Plus, ReceiptText, Redo2, Settings2, Trash2, Undo2, Upload, Video } from "lucide-react";
 import { saveAs } from "file-saver";
 
 import { requestEdit, requestGeneration, requestImageQuestion, requestVectorizeImage } from "@/services/api/image";
@@ -45,7 +45,7 @@ import { AssetPickerModal, type AssetPickerTab, type InsertAssetPayload } from "
 import { CanvasZoomControls } from "../components/canvas-zoom-controls";
 import { useCanvasStore } from "../stores/use-canvas-store";
 import { applyCanvasAgentOps, type CanvasAgentOp, type CanvasAgentSnapshot } from "../utils/canvas-agent-ops";
-import { buildCanvasResourceReferences, buildNodeMentionReferences } from "../utils/canvas-resource-references";
+import { MAX_CANVAS_REFERENCE_IMAGES, buildCanvasResourceReferences, buildNodeMentionReferences, type CanvasResourceReference } from "../utils/canvas-resource-references";
 import type { CanvasAgentMode } from "../components/canvas-agent-chat-ui";
 import {
     CanvasNodeType,
@@ -507,6 +507,10 @@ function InfiniteCanvasPage() {
             const { fromNodeId, toNodeId } = connection;
             const exists = connectionsRef.current.some((conn) => conn.fromNodeId === fromNodeId && conn.toNodeId === toNodeId);
             if (!exists) {
+                if (wouldExceedImageReferenceLimit(connection, nodesRef.current, connectionsRef.current)) {
+                    message.warning(`最多支持 ${MAX_CANVAS_REFERENCE_IMAGES} 张参考图`);
+                    return;
+                }
                 setConnections((prev) => [...prev, { id: `conn-${Date.now()}`, fromNodeId, toNodeId }]);
             }
             setContextMenu(null);
@@ -770,6 +774,17 @@ function InfiniteCanvasPage() {
         setContextMenu((current) => (current?.type === "connection" && current.connectionId === connectionId ? null : current));
     }, []);
 
+    const removePromptPanelReference = useCallback((nodeId: string, reference: CanvasResourceReference) => {
+        const configNodeId = connectionsRef.current.find((connection) => connection.fromNodeId === nodeId && nodesRef.current.find((node) => node.id === connection.toNodeId)?.type === CanvasNodeType.Config)?.toNodeId;
+        const targetNodeIds = configNodeId ? [configNodeId] : [nodeId];
+        const nextConnections = connectionsRef.current.filter((connection) => !(connection.fromNodeId === reference.nodeId && targetNodeIds.includes(connection.toNodeId)));
+        if (nextConnections.length === connectionsRef.current.length) return;
+        connectionsRef.current = nextConnections;
+        setConnections(nextConnections);
+        setSelectedConnectionId((current) => (current && nextConnections.some((connection) => connection.id === current) ? current : null));
+        setContextMenu((current) => (current?.type === "connection" && !nextConnections.some((connection) => connection.id === current.connectionId) ? null : current));
+    }, []);
+
     const deselectCanvas = useCallback(() => {
         cancelPendingConnectionCreate();
         setSelectedNodeIds(new Set());
@@ -946,7 +961,7 @@ function InfiniteCanvasPage() {
     }, [applyHistory]);
 
     const createAndOpenProject = useCallback(() => {
-        const id = createProject(`无限画布 ${useCanvasStore.getState().projects.length + 1}`);
+        const id = createProject(`好图秀画布 ${useCanvasStore.getState().projects.length + 1}`);
         router.push(`/canvas/${id}`);
     }, [createProject, router]);
 
@@ -2513,8 +2528,6 @@ function InfiniteCanvasPage() {
                     onImportImage={() => handleUploadRequest()}
                     onUndo={undoCanvas}
                     onRedo={redoCanvas}
-                    agentOpen={assistantOpen}
-                    onToggleAgent={() => (assistantOpen ? closeAgent() : openAgent())}
                 />
 
                 <InfiniteCanvas
@@ -2602,6 +2615,7 @@ function InfiniteCanvasPage() {
                                         onPromptChange={handleNodePromptChange}
                                         onConfigChange={handleConfigNodeChange}
                                         onGenerate={handleGenerateNode}
+                                        onRemoveReference={removePromptPanelReference}
                                         onImageSettingsOpenChange={(open) => {
                                             setNodeImageSettingsOpen(open);
                                             if (open) setToolbarNodeId(null);
@@ -2840,8 +2854,6 @@ function CanvasTopBar({
     onImportImage,
     onUndo,
     onRedo,
-    agentOpen,
-    onToggleAgent,
 }: {
     title: string;
     titleDraft: string;
@@ -2859,8 +2871,6 @@ function CanvasTopBar({
     onImportImage: () => void;
     onUndo: () => void;
     onRedo: () => void;
-    agentOpen: boolean;
-    onToggleAgent: () => void;
 }) {
     const colorTheme = useThemeStore((state) => state.theme);
     const theme = canvasThemes[colorTheme];
@@ -2953,16 +2963,6 @@ function CanvasTopBar({
                             setAccountOpen(false);
                         }}
                     />
-                    <span className="h-6 w-px" style={{ background: theme.toolbar.border }} />
-                    <Button
-                        type="text"
-                        className="!h-10 !rounded-xl !px-3 !font-medium"
-                        style={{ background: agentOpen ? theme.toolbar.activeBg : theme.toolbar.panel, color: theme.node.text, boxShadow: "0 10px 30px rgba(28,25,23,.10)" }}
-                        icon={<Bot className="size-4" />}
-                        onClick={onToggleAgent}
-                    >
-                        Agent
-                    </Button>
                 </div>
             </div>
             <Modal title="快捷键" open={shortcutsOpen} onCancel={() => setShortcutsOpen(false)} footer={null} centered>
@@ -3168,6 +3168,19 @@ function normalizeConnection(firstNodeId: string, secondNodeId: string, nodes: C
     if (first.type === CanvasNodeType.Config && firstHandleType === "target") return { fromNodeId: second.id, toNodeId: first.id };
     if (first.type === CanvasNodeType.Config) return { fromNodeId: first.id, toNodeId: second.id };
     return { fromNodeId: first.id, toNodeId: second.id };
+}
+
+function wouldExceedImageReferenceLimit(connection: Pick<CanvasConnection, "fromNodeId" | "toNodeId">, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
+    const fromNode = nodes.find((node) => node.id === connection.fromNodeId);
+    const toNode = nodes.find((node) => node.id === connection.toNodeId);
+    if (fromNode?.type !== CanvasNodeType.Image || !fromNode.metadata?.content || (toNode?.type !== CanvasNodeType.Image && toNode?.type !== CanvasNodeType.Config)) return false;
+    const referenceCount = connections
+        .filter((item) => item.toNodeId === connection.toNodeId && item.fromNodeId !== connection.fromNodeId)
+        .filter((item) => {
+            const node = nodes.find((candidate) => candidate.id === item.fromNodeId);
+            return node?.type === CanvasNodeType.Image && Boolean(node.metadata?.content);
+        }).length;
+    return referenceCount >= MAX_CANVAS_REFERENCE_IMAGES;
 }
 
 function getInputSummary(inputs: NodeGenerationInput[]) {

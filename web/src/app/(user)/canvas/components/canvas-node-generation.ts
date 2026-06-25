@@ -4,7 +4,7 @@ import { seedanceReferenceLabel } from "@/lib/seedance-video";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 import { CanvasNodeType, type CanvasConnection, type CanvasNodeData } from "../types";
-import { getGenerationResourceNodes } from "../utils/canvas-resource-references";
+import { MAX_CANVAS_REFERENCE_IMAGES, getGenerationResourceNodes } from "../utils/canvas-resource-references";
 
 export type NodeGenerationContext = {
     prompt: string;
@@ -38,7 +38,10 @@ export function buildNodeGenerationContext(nodeId: string, nodes: CanvasNodeData
         .map((input) => input.text)
         .filter(Boolean)
         .join("\n\n");
-    const referenceImages = inputs.map((input) => input.image).filter((image): image is ReferenceImage => Boolean(image));
+    const referenceImages = inputs
+        .map((input) => input.image)
+        .filter((image): image is ReferenceImage => Boolean(image))
+        .slice(0, MAX_CANVAS_REFERENCE_IMAGES);
     const referenceVideos = inputs.map((input) => input.video).filter((video): video is ReferenceVideo => Boolean(video));
     const referenceAudios = inputs.map((input) => input.audio).filter((audio): audio is ReferenceAudio => Boolean(audio));
 
@@ -84,7 +87,10 @@ function buildComposerGenerationContext(inputs: NodeGenerationInput[], prompt: s
 
     nextPrompt += prompt.slice(lastIndex);
     if (textBlocks.length) nextPrompt = `${nextPrompt.trim()}\n\n${textBlocks.join("\n\n")}`;
-    const referenceImages = selectedInputs.map((input) => input.image).filter((image): image is ReferenceImage => Boolean(image));
+    const referenceImages = selectedInputs
+        .map((input) => input.image)
+        .filter((image): image is ReferenceImage => Boolean(image))
+        .slice(0, MAX_CANVAS_REFERENCE_IMAGES);
     const referenceVideos = selectedInputs.map((input) => input.video).filter((video): video is ReferenceVideo => Boolean(video));
     const referenceAudios = selectedInputs.map((input) => input.audio).filter((audio): audio is ReferenceAudio => Boolean(audio));
 
