@@ -35,6 +35,7 @@ func New() *gin.Engine {
 	v1.POST("/images/edits", gin.WrapF(handler.AIImagesEdits))
 	v1.POST("/images/uploads", gin.WrapF(handler.UploadImage))
 	v1.GET("/deduction-logs", gin.WrapF(handler.UserAIDeductionLogs))
+	v1.GET("/invitations", gin.WrapF(handler.UserInvitationRecords))
 	v1.GET("/image-tasks", gin.WrapF(handler.UserAIImageTasks))
 	v1.POST("/images/vectorize", gin.WrapF(handler.VectorizeImage))
 	v1.GET("/image-tasks/:id", func(c *gin.Context) {
@@ -72,6 +73,7 @@ func New() *gin.Engine {
 	})
 	admin.GET("/credit-logs", gin.WrapF(handler.AdminCreditLogs))
 	admin.GET("/deduction-logs", gin.WrapF(handler.AdminAIDeductionLogs))
+	admin.GET("/invitations", gin.WrapF(handler.AdminInvitationRecords))
 	admin.POST("/credit-logs", gin.WrapF(handler.AdminSaveCreditLog))
 	admin.DELETE("/credit-logs/:id", func(c *gin.Context) {
 		handler.AdminDeleteCreditLog(c.Writer, c.Request, c.Param("id"))

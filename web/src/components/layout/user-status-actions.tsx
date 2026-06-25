@@ -2,7 +2,7 @@
 
 import type { CSSProperties, RefObject } from "react";
 import { Avatar, Dropdown, Tooltip } from "antd";
-import { BookOpen, History, Keyboard, LogOut, ReceiptText, Settings2, Shield } from "lucide-react";
+import { BookOpen, History, Keyboard, LogOut, ReceiptText, Settings2, Shield, UserPlus } from "lucide-react";
 import type { ItemType } from "antd/es/menu/interface";
 import Link from "next/link";
 
@@ -47,6 +47,7 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
     const menuItems: ItemType[] = [
         { key: "user", disabled: true, label: <span className="font-medium text-current">{userName}</span> },
         ...(user?.role === "admin" ? [{ key: "admin", icon: <Shield className="size-4" />, label: <Link href="/admin">管理后台</Link> }] : []),
+        ...(user ? [{ key: "invitations", icon: <UserPlus className="size-4" />, label: <Link href="/invitations">我的邀请</Link> }] : []),
         ...(onOpenShortcuts ? [{ key: "shortcuts", icon: <Keyboard className="size-4" />, label: "快捷键", onClick: onOpenShortcuts }] : []),
         { type: "divider" },
         { key: "logout", icon: <LogOut className="size-4" />, label: "退出登录", onClick: logout },
@@ -85,7 +86,7 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
             )}
             <RechargeButton className={rechargeClassName} style={rechargeStyle} />
             {user ? (
-                <Tooltip title="当前算力点余额" placement="bottom">
+                <Tooltip title="当前积分余额" placement="bottom">
                     <div
                         className={cn(
                             "flex h-8 shrink-0 items-center gap-1.5 px-1.5 text-xs font-medium tabular-nums opacity-75 transition hover:opacity-100",

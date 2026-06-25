@@ -20,6 +20,7 @@ type registerRequest struct {
 	Password         string `json:"password"`
 	Email            string `json:"email"`
 	VerificationCode string `json:"verificationCode"`
+	InviteCode       string `json:"inviteCode"`
 }
 
 type verificationCodeRequest struct {
@@ -44,7 +45,7 @@ type adjustUserCreditsRequest struct {
 func Register(w http.ResponseWriter, r *http.Request) {
 	var request registerRequest
 	_ = json.NewDecoder(r.Body).Decode(&request)
-	session, err := service.Register(request.Username, request.Password, request.Email, request.VerificationCode)
+	session, err := service.Register(request.Username, request.Password, request.Email, request.VerificationCode, request.InviteCode)
 	if err != nil {
 		FailError(w, err)
 		return
@@ -160,6 +161,29 @@ func AdminCreditLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	OK(w, logs)
+}
+
+func AdminInvitationRecords(w http.ResponseWriter, r *http.Request) {
+	records, err := service.ListInvitationRecords(parseQuery(r))
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, records)
+}
+
+func UserInvitationRecords(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok || user.ID == "" {
+		Fail(w, "请先登录")
+		return
+	}
+	records, err := service.ListUserInvitationRecords(user.ID, parseQuery(r))
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, records)
 }
 
 func AdminAIDeductionLogs(w http.ResponseWriter, r *http.Request) {

@@ -241,7 +241,7 @@ function HistoryCard({ item, userName, onDetail, onCopyPrompt }: { item: History
                 <Tag className="m-0 rounded-full px-3">托管生图</Tag>
                 <Tag className="m-0 rounded-full px-3">{statusValue(log.status)}</Tag>
                 <Tag className="m-0 rounded-full px-3">{itemSize(item)}</Tag>
-                <Tag className="m-0 rounded-full px-3">{log.credits ? `${log.credits} 算力` : "-"}</Tag>
+                <Tag className="m-0 rounded-full px-3">{log.credits ? `${log.credits} 积分` : "-"}</Tag>
             </div>
             <Button block className="mt-3 rounded-lg" icon={<Eye className="size-4" />} onClick={() => onDetail(item)}>
                 查看详情
@@ -266,7 +266,7 @@ function HistoryDetail({ item, userName, onCopyPrompt, onClose }: { item: Histor
         ["模型", log.model || log.config.imageModel || log.config.model || "-"],
         ["生图链路", "托管生图"],
         ["实际尺寸", itemSize(item)],
-        ["金额", log.credits ? `${log.credits} 算力` : "-"],
+        ["金额", log.credits ? `${log.credits} 积分` : "-"],
         ["状态", statusValue(log.status)],
     ];
 

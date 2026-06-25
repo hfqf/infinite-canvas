@@ -26,15 +26,15 @@ func TestRechargeAmountValidation(t *testing.T) {
 		memberLevel model.MemberLevel
 		productName string
 	}{
-		{amountYuan: 59, amountFen: 5900, credits: 590, memberType: model.MemberTypeMonthly, memberLevel: model.MemberLevelBasic, productName: "好图秀AI算力充值-月度-基础版"},
-		{amountYuan: 99, amountFen: 9900, credits: 1100, memberType: model.MemberTypeMonthly, memberLevel: model.MemberLevelAdvanced, productName: "好图秀AI算力充值-月度-高级版"},
-		{amountYuan: 199, amountFen: 19900, credits: 2488, memberType: model.MemberTypeMonthly, memberLevel: model.MemberLevelPremium, productName: "好图秀AI算力充值-月度-尊享版"},
-		{amountYuan: 499, amountFen: 49900, credits: 5000, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelStandard, productName: "好图秀AI算力充值-年度-普通版"},
-		{amountYuan: 699, amountFen: 69900, credits: 6996, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelBasic, productName: "好图秀AI算力充值-年度-基础版"},
-		{amountYuan: 999, amountFen: 99900, credits: 10020, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelAdvanced, productName: "好图秀AI算力充值-年度-高级版"},
-		{amountYuan: 1999, amountFen: 199900, credits: 21044, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelPremium, productName: "好图秀AI算力充值-年度-尊享版"},
-		{amountYuan: 0, amountFen: 10, credits: 1, memberType: model.MemberTypeTest, memberLevel: model.MemberLevelTest, productName: "好图秀AI算力充值-测试-0.10元"},
-		{amountYuan: 0, amountFen: 50, credits: 5, memberType: model.MemberTypeTest, memberLevel: model.MemberLevelTest, productName: "好图秀AI算力充值-测试-0.50元"},
+		{amountYuan: 59, amountFen: 5900, credits: 590, memberType: model.MemberTypeMonthly, memberLevel: model.MemberLevelBasic, productName: "好图秀AI积分充值-月度-基础版"},
+		{amountYuan: 99, amountFen: 9900, credits: 1100, memberType: model.MemberTypeMonthly, memberLevel: model.MemberLevelAdvanced, productName: "好图秀AI积分充值-月度-高级版"},
+		{amountYuan: 199, amountFen: 19900, credits: 2488, memberType: model.MemberTypeMonthly, memberLevel: model.MemberLevelPremium, productName: "好图秀AI积分充值-月度-尊享版"},
+		{amountYuan: 499, amountFen: 49900, credits: 5000, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelStandard, productName: "好图秀AI积分充值-年度-普通版"},
+		{amountYuan: 699, amountFen: 69900, credits: 6996, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelBasic, productName: "好图秀AI积分充值-年度-基础版"},
+		{amountYuan: 999, amountFen: 99900, credits: 10020, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelAdvanced, productName: "好图秀AI积分充值-年度-高级版"},
+		{amountYuan: 1999, amountFen: 199900, credits: 21044, memberType: model.MemberTypeAnnual, memberLevel: model.MemberLevelPremium, productName: "好图秀AI积分充值-年度-尊享版"},
+		{amountYuan: 0, amountFen: 10, credits: 1, memberType: model.MemberTypeTest, memberLevel: model.MemberLevelTest, productName: "好图秀AI积分充值-测试-0.10元"},
+		{amountYuan: 0, amountFen: 50, credits: 5, memberType: model.MemberTypeTest, memberLevel: model.MemberLevelTest, productName: "好图秀AI积分充值-测试-0.50元"},
 	} {
 		order, err := model.NewRechargeOrderByAmountFen("user_1", item.amountFen, "now")
 		if err != nil {

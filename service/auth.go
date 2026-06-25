@@ -33,6 +33,11 @@ type userExtra struct {
 	LinuxDo any `json:"linuxDo,omitempty"`
 }
 
+const (
+	registerGiftCredits     = 30
+	inviteRegisterBonusRate = 10
+)
+
 func EnsureDefaultAdmin() error {
 	if strings.TrimSpace(config.Cfg.AdminUsername) == "" || strings.TrimSpace(config.Cfg.AdminPassword) == "" {
 		return nil
@@ -59,7 +64,7 @@ func EnsureDefaultAdmin() error {
 	return err
 }
 
-func Register(username string, password string, email string, verificationCode string) (model.AuthSession, error) {
+func Register(username string, password string, email string, verificationCode string, inviteCodes ...string) (model.AuthSession, error) {
 	settings, err := repository.GetSettings()
 	if err != nil {
 		return model.AuthSession{}, err
@@ -91,6 +96,21 @@ func Register(username string, password string, email string, verificationCode s
 		}
 		return model.AuthSession{}, safeMessageError{message: "邮箱已注册"}
 	}
+	var inviter model.User
+	inviteCode := ""
+	if len(inviteCodes) > 0 {
+		inviteCode = strings.ToUpper(strings.TrimSpace(inviteCodes[0]))
+	}
+	if inviteCode != "" {
+		var ok bool
+		inviter, ok, err = repository.GetUserByAffCode(inviteCode)
+		if err != nil {
+			return model.AuthSession{}, err
+		}
+		if !ok {
+			return model.AuthSession{}, safeMessageError{message: "邀请码无效"}
+		}
+	}
 	if err := consumeVerificationCode(email, model.VerificationPurposeRegister, verificationCode); err != nil {
 		return model.AuthSession{}, err
 	}
@@ -98,7 +118,12 @@ func Register(username string, password string, email string, verificationCode s
 	if err != nil {
 		return model.AuthSession{}, err
 	}
-	user, err := repository.SaveUser(model.User{
+	current := now()
+	inviteBonusCredits := 0
+	if inviter.ID != "" {
+		inviteBonusCredits = registerGiftCredits * inviteRegisterBonusRate / 100
+	}
+	userValue := model.User{
 		ID:        newID("user"),
 		Username:  username,
 		Password:  hash,
@@ -106,22 +131,43 @@ func Register(username string, password string, email string, verificationCode s
 		Role:      model.UserRoleUser,
 		AffCode:   newAffCode(),
 		Status:    model.UserStatusActive,
-		Credits:   30,
-		CreatedAt: now(),
-		UpdatedAt: now(),
-	})
+		Credits:   registerGiftCredits + inviteBonusCredits,
+		CreatedAt: current,
+		UpdatedAt: current,
+	}
+	if inviter.ID != "" {
+		userValue.InviterID = inviter.ID
+	}
+	user, err := repository.SaveUser(userValue)
 	if err != nil {
 		return model.AuthSession{}, err
+	}
+	if inviter.ID != "" {
+		if err := repository.IncrementUserAffCount(inviter.ID, now()); err != nil {
+			return model.AuthSession{}, err
+		}
 	}
 	_, _ = repository.SaveCreditLog(model.CreditLog{
 		ID:        newID("credit"),
 		UserID:    user.ID,
 		Type:      model.CreditLogTypeRegisterGift,
-		Amount:    30,
-		Balance:   30,
+		Amount:    registerGiftCredits,
+		Balance:   registerGiftCredits,
 		Remark:    "新用户注册赠送",
-		CreatedAt: now(),
+		CreatedAt: current,
 	})
+	if inviteBonusCredits > 0 {
+		_, _ = repository.SaveCreditLog(model.CreditLog{
+			ID:        newID("credit"),
+			UserID:    user.ID,
+			Type:      model.CreditLogTypeInviteRegisterBonus,
+			Amount:    inviteBonusCredits,
+			Balance:   user.Credits,
+			RelatedID: inviter.ID,
+			Remark:    "邀请注册额外赠送",
+			CreatedAt: current,
+		})
+	}
 	return newSession(user)
 }
 
@@ -266,6 +312,14 @@ func CurrentAuthUser(tokenText string) (model.AuthUser, bool) {
 	if user.Status == model.UserStatusBan {
 		return model.AuthUser{}, false
 	}
+	if user.AffCode == "" {
+		normalizeUserDefaults(&user)
+		user.UpdatedAt = now()
+		user, err = repository.SaveUser(user)
+		if err != nil {
+			return model.AuthUser{}, false
+		}
+	}
 	return model.PublicUser(user), true
 }
 
@@ -279,6 +333,22 @@ func ListUsers(q model.Query) (model.UserList, error) {
 		normalizeUserDefaults(&users[i])
 	}
 	return model.UserList{Items: users, Total: int(total)}, nil
+}
+
+func ListInvitationRecords(q model.Query) (model.InvitationRecordList, error) {
+	records, total, err := repository.ListInvitationRecords("", q)
+	if err != nil {
+		return model.InvitationRecordList{}, err
+	}
+	return model.InvitationRecordList{Items: records, Total: int(total)}, nil
+}
+
+func ListUserInvitationRecords(userID string, q model.Query) (model.InvitationRecordList, error) {
+	records, total, err := repository.ListInvitationRecords(userID, q)
+	if err != nil {
+		return model.InvitationRecordList{}, err
+	}
+	return model.InvitationRecordList{Items: records, Total: int(total)}, nil
 }
 
 func SaveUser(user model.User, password string) (model.User, error) {
@@ -389,7 +459,7 @@ func ConsumeUserCredits(userID string, modelName string, credits int, path strin
 		return err
 	}
 	if !ok {
-		return safeMessageError{message: "算力点不足"}
+		return safeMessageError{message: "积分不足"}
 	}
 	extra, _ := json.Marshal(map[string]string{"model": modelName, "path": path})
 	_, err = repository.SaveCreditLog(model.CreditLog{
@@ -417,7 +487,7 @@ func EnsureUserCredits(userID string, credits int) error {
 		return safeMessageError{message: "用户不存在"}
 	}
 	if user.Credits-user.FrozenCredits < credits {
-		return safeMessageError{message: "算力点不足"}
+		return safeMessageError{message: "积分不足"}
 	}
 	return nil
 }
@@ -445,7 +515,7 @@ func FreezeAIImageCredits(userID string, modelName string, credits int, path str
 		return task, err
 	}
 	if !ok {
-		return task, safeMessageError{message: "算力点不足"}
+		return task, safeMessageError{message: "积分不足"}
 	}
 	return task, nil
 }
@@ -459,7 +529,7 @@ func ConsumeAIImageCredits(userID string, modelName string, credits int, path st
 		return err
 	}
 	if !ok {
-		return safeMessageError{message: "算力点不足"}
+		return safeMessageError{message: "积分不足"}
 	}
 	if strings.TrimSpace(taskID) == "" {
 		taskID = newID("sync_image")
@@ -524,8 +594,8 @@ func GetAIImageTask(taskID string, userID string) (model.AIImageTask, bool, erro
 
 func CompleteAIImageTaskSuccess(taskID string, userID string, status string, imageURL string) error {
 	_, _, err := repository.CompleteAIImageTaskSuccess(taskID, userID, status, imageURL, now())
-	if err != nil && err.Error() == "算力点不足" {
-		return safeMessageError{message: "算力点不足"}
+	if err != nil && err.Error() == "积分不足" {
+		return safeMessageError{message: "积分不足"}
 	}
 	return err
 }
@@ -711,7 +781,7 @@ func ListCreditLogs(q model.Query) (model.CreditLogList, error) {
 }
 
 func ListAIDeductionLogs(q model.Query) (model.CreditLogList, error) {
-	logs, total, err := repository.ListCreditLogsByTypes([]model.CreditLogType{model.CreditLogTypeAIFreeze, model.CreditLogTypeAIConsume, model.CreditLogTypeAIFreezeRelease}, q)
+	logs, total, err := repository.ListCreditLogsByTypes(deductionLogTypes(), q)
 	if err != nil {
 		return model.CreditLogList{}, err
 	}
@@ -719,11 +789,15 @@ func ListAIDeductionLogs(q model.Query) (model.CreditLogList, error) {
 }
 
 func ListUserAIDeductionLogs(userID string, q model.Query) (model.CreditLogList, error) {
-	logs, total, err := repository.ListUserCreditLogsByTypes(userID, []model.CreditLogType{model.CreditLogTypeAIFreeze, model.CreditLogTypeAIConsume, model.CreditLogTypeAIFreezeRelease}, q)
+	logs, total, err := repository.ListUserCreditLogsByTypes(userID, deductionLogTypes(), q)
 	if err != nil {
 		return model.CreditLogList{}, err
 	}
 	return model.CreditLogList{Items: logs, Total: int(total)}, nil
+}
+
+func deductionLogTypes() []model.CreditLogType {
+	return []model.CreditLogType{model.CreditLogTypeAIFreeze, model.CreditLogTypeAIConsume, model.CreditLogTypeAIFreezeRelease, model.CreditLogTypeInviteRegisterBonus}
 }
 
 func ListUserAIImageTasks(userID string, q model.Query) (model.AIImageTaskList, error) {

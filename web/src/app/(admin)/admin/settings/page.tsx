@@ -454,7 +454,7 @@ export default function AdminSettingsPage() {
                                         </Form.Item>
                                     </Col>
                                     <Col span={24}>
-                                        <Typography.Title level={5}>模型算力点</Typography.Title>
+                                        <Typography.Title level={5}>模型积分</Typography.Title>
                                         <Table
                                             rowKey="model"
                                             pagination={false}

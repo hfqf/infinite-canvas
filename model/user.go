@@ -83,6 +83,8 @@ type AuthUser struct {
 	MemberLevel            MemberLevel `json:"memberLevel"`
 	LastRechargeAmountYuan int         `json:"lastRechargeAmountYuan"`
 	LastRechargedAt        string      `json:"lastRechargedAt"`
+	AffCode                string      `json:"affCode"`
+	AffCount               int         `json:"affCount"`
 	CreatedAt              string      `json:"createdAt"`
 	UpdatedAt              string      `json:"updatedAt"`
 }
@@ -107,9 +109,27 @@ func PublicUser(user User) AuthUser {
 		MemberLevel:            user.MemberLevel,
 		LastRechargeAmountYuan: user.LastRechargeAmountYuan,
 		LastRechargedAt:        user.LastRechargedAt,
+		AffCode:                user.AffCode,
+		AffCount:               user.AffCount,
 		CreatedAt:              user.CreatedAt,
 		UpdatedAt:              user.UpdatedAt,
 	}
+}
+
+type InvitationRecord struct {
+	InviterID          string `json:"inviterId"`
+	InviterUsername    string `json:"inviterUsername"`
+	InviterDisplayName string `json:"inviterDisplayName"`
+	InviteeID          string `json:"inviteeId"`
+	InviteeUsername    string `json:"inviteeUsername"`
+	InviteeDisplayName string `json:"inviteeDisplayName"`
+	InviteeEmail       string `json:"inviteeEmail"`
+	CreatedAt          string `json:"createdAt"`
+}
+
+type InvitationRecordList struct {
+	Items []InvitationRecord `json:"items"`
+	Total int                `json:"total"`
 }
 
 // EmailVerificationCode 邮箱验证码记录。
@@ -128,16 +148,17 @@ type EmailVerificationCode struct {
 type CreditLogType string
 
 const (
-	CreditLogTypeAdminAdjust     CreditLogType = "admin_adjust"
-	CreditLogTypeAIFreeze        CreditLogType = "ai_freeze"
-	CreditLogTypeAIFreezeRelease CreditLogType = "ai_freeze_release"
-	CreditLogTypeAIConsume       CreditLogType = "ai_consume"
-	CreditLogTypeAIRefund        CreditLogType = "ai_refund"
-	CreditLogTypeRegisterGift    CreditLogType = "register_gift"
-	CreditLogTypeRecharge        CreditLogType = "recharge"
+	CreditLogTypeAdminAdjust         CreditLogType = "admin_adjust"
+	CreditLogTypeAIFreeze            CreditLogType = "ai_freeze"
+	CreditLogTypeAIFreezeRelease     CreditLogType = "ai_freeze_release"
+	CreditLogTypeAIConsume           CreditLogType = "ai_consume"
+	CreditLogTypeAIRefund            CreditLogType = "ai_refund"
+	CreditLogTypeRegisterGift        CreditLogType = "register_gift"
+	CreditLogTypeInviteRegisterBonus CreditLogType = "invite_register_bonus"
+	CreditLogTypeRecharge            CreditLogType = "recharge"
 )
 
-// CreditLog 用户算力点变更流水。
+// CreditLog 用户积分变更流水。
 type CreditLog struct {
 	ID        string        `json:"id" gorm:"primaryKey"`
 	UserID    string        `json:"userId" gorm:"index"`
@@ -289,7 +310,7 @@ func newRechargePlan(amountYuan int, credits int, memberType MemberType, memberL
 		MemberLevel: memberLevel,
 		TypeName:    typeName,
 		LevelName:   levelName,
-		ProductName: "好图秀AI算力充值-" + typeName + "-" + levelName,
+		ProductName: "好图秀AI积分充值-" + typeName + "-" + levelName,
 	}
 }
 
@@ -302,7 +323,7 @@ func newTestRechargePlan(amountFen int) RechargePlan {
 		MemberLevel: MemberLevelTest,
 		TypeName:    "测试",
 		LevelName:   amountFenLabel(amountFen),
-		ProductName: "好图秀AI算力充值-测试-" + amountFenLabel(amountFen),
+		ProductName: "好图秀AI积分充值-测试-" + amountFenLabel(amountFen),
 	}
 }
 

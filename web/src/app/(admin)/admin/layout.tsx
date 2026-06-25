@@ -1,6 +1,6 @@
 "use client";
 
-import { FileTextOutlined, HomeOutlined, LogoutOutlined, PictureOutlined, SettingOutlined, TransactionOutlined, UserOutlined } from "@ant-design/icons";
+import { FileTextOutlined, HomeOutlined, LogoutOutlined, PictureOutlined, SettingOutlined, TeamOutlined, TransactionOutlined, UserOutlined } from "@ant-design/icons";
 import { Button, Flex, Layout, Menu, Typography, theme } from "antd";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -13,7 +13,8 @@ import { useUserStore } from "@/stores/use-user-store";
 
 const adminMenus = [
     { key: "/admin/users", icon: <UserOutlined />, label: "用户管理" },
-    { key: "/admin/credit-logs", icon: <TransactionOutlined />, label: "算力点日志" },
+    { key: "/admin/invitations", icon: <TeamOutlined />, label: "邀请记录" },
+    { key: "/admin/credit-logs", icon: <TransactionOutlined />, label: "积分日志" },
     { key: "/admin/deduction-logs", icon: <TransactionOutlined />, label: "扣款流水" },
     { key: "/admin/prompts", icon: <FileTextOutlined />, label: "提示词管理" },
     { key: "/admin/assets", icon: <PictureOutlined />, label: "素材库" },
@@ -36,12 +37,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             ? "/admin/prompts"
             : pathname.startsWith("/admin/deduction-logs")
               ? "/admin/deduction-logs"
-              : pathname.startsWith("/admin/credit-logs")
-                ? "/admin/credit-logs"
-                : pathname.startsWith("/admin/users")
-                  ? "/admin/users"
-                  : "";
-    const pageTitle = pathname.startsWith("/admin/settings") ? "系统设置" : pathname.startsWith("/admin/assets") ? "素材库管理" : pathname.startsWith("/admin/prompts") ? "提示词管理" : pathname.startsWith("/admin/deduction-logs") ? "扣款流水" : pathname.startsWith("/admin/credit-logs") ? "算力点日志" : "用户管理";
+              : pathname.startsWith("/admin/invitations")
+                ? "/admin/invitations"
+                : pathname.startsWith("/admin/credit-logs")
+                  ? "/admin/credit-logs"
+                  : pathname.startsWith("/admin/users")
+                    ? "/admin/users"
+                    : "";
+    const pageTitle = pathname.startsWith("/admin/settings") ? "系统设置" : pathname.startsWith("/admin/assets") ? "素材库管理" : pathname.startsWith("/admin/prompts") ? "提示词管理" : pathname.startsWith("/admin/deduction-logs") ? "扣款流水" : pathname.startsWith("/admin/invitations") ? "邀请记录" : pathname.startsWith("/admin/credit-logs") ? "积分日志" : "用户管理";
 
     useEffect(() => {
         if (!isReady) return;

@@ -80,6 +80,14 @@ func GetUserByEmail(email string) (model.User, bool, error) {
 	return findUser(db, "email = ?", email)
 }
 
+func GetUserByAffCode(affCode string) (model.User, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.User{}, false, err
+	}
+	return findUser(db, "aff_code = ?", strings.ToUpper(strings.TrimSpace(affCode)))
+}
+
 // SaveUser 保存用户信息。
 func SaveUser(user model.User) (model.User, error) {
 	db, err := DB()
@@ -87,6 +95,43 @@ func SaveUser(user model.User) (model.User, error) {
 		return user, err
 	}
 	return user, db.Save(&user).Error
+}
+
+func IncrementUserAffCount(id string, now string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return db.Model(&model.User{}).Where("id = ?", id).Updates(map[string]any{
+		"aff_count":  gorm.Expr("aff_count + 1"),
+		"updated_at": now,
+	}).Error
+}
+
+func ListInvitationRecords(inviterID string, q model.Query) ([]model.InvitationRecord, int64, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, 0, err
+	}
+	q.Normalize()
+	tx := db.Table("users AS invitees").
+		Select("inviters.id AS inviter_id, inviters.username AS inviter_username, inviters.display_name AS inviter_display_name, invitees.id AS invitee_id, invitees.username AS invitee_username, invitees.display_name AS invitee_display_name, invitees.email AS invitee_email, invitees.created_at AS created_at").
+		Joins("LEFT JOIN users AS inviters ON inviters.id = invitees.inviter_id").
+		Where("invitees.inviter_id <> ?", "")
+	if strings.TrimSpace(inviterID) != "" {
+		tx = tx.Where("invitees.inviter_id = ?", inviterID)
+	}
+	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
+		like := "%" + keyword + "%"
+		tx = tx.Where("invitees.id LIKE ? OR invitees.username LIKE ? OR invitees.display_name LIKE ? OR invitees.email LIKE ? OR inviters.id LIKE ? OR inviters.username LIKE ? OR inviters.display_name LIKE ?", like, like, like, like, like, like, like)
+	}
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var records []model.InvitationRecord
+	err = tx.Order("invitees.created_at desc").Offset(q.Offset()).Limit(q.PageSize).Scan(&records).Error
+	return records, total, err
 }
 
 func ConsumeUserCredits(id string, credits int, now string) (model.User, bool, error) {
@@ -129,7 +174,7 @@ func RefundUserCredits(id string, credits int, now string) (model.User, bool, er
 	return user, ok && tx.RowsAffected > 0, err
 }
 
-// SaveCreditLog 保存算力点变更流水。
+// SaveCreditLog 保存积分变更流水。
 func SaveCreditLog(log model.CreditLog) (model.CreditLog, error) {
 	db, err := DB()
 	if err != nil {
@@ -294,7 +339,7 @@ func FreezeAIImageTask(task model.AIImageTask, now string) (model.AIImageTask, b
 			Amount:    0,
 			Balance:   user.Credits - user.FrozenCredits,
 			RelatedID: task.TaskID,
-			Remark:    "冻结图片生成算力",
+			Remark:    "冻结图片生成积分",
 			Extra:     aiImageCreditLogExtra(task, ""),
 			CreatedAt: now,
 		}).Error; err != nil {
@@ -352,7 +397,7 @@ func CompleteAIImageTaskSuccess(taskID string, userID string, status string, ima
 			return userResult.Error
 		}
 		if userResult.RowsAffected == 0 {
-			return errors.New("算力点不足")
+			return errors.New("积分不足")
 		}
 		var user model.User
 		if err := tx.Where("id = ?", userID).First(&user).Error; err != nil {
@@ -416,7 +461,7 @@ func ReleaseAIImageTask(taskID string, userID string, status string, now string)
 			return userResult.Error
 		}
 		if userResult.RowsAffected == 0 {
-			return errors.New("冻结算力点不足")
+			return errors.New("冻结积分不足")
 		}
 		var user model.User
 		if err := tx.Where("id = ?", userID).First(&user).Error; err != nil {
@@ -429,7 +474,7 @@ func ReleaseAIImageTask(taskID string, userID string, status string, now string)
 			Amount:    0,
 			Balance:   user.Credits - user.FrozenCredits,
 			RelatedID: task.TaskID,
-			Remark:    "释放图片生成冻结算力",
+			Remark:    "释放图片生成冻结积分",
 			Extra:     aiImageCreditLogExtra(task, task.ImageURL),
 			CreatedAt: now,
 		}).Error; err != nil {
@@ -576,7 +621,10 @@ func listCreditLogsByTypes(userID string, logTypes []model.CreditLogType, q mode
 		return nil, 0, err
 	}
 	q.Normalize()
-	tx := db.Model(&model.CreditLog{}).Where("type IN ?", logTypes)
+	tx := db.Model(&model.CreditLog{})
+	if len(logTypes) > 0 {
+		tx = tx.Where("type IN ?", logTypes)
+	}
 	if userID != "" {
 		tx = tx.Where("user_id = ?", userID)
 	}

@@ -23,7 +23,7 @@ type ModelChannel struct {
 	Remark           string   `json:"remark"`
 }
 
-// ModelCost 模型算力点配置。
+// ModelCost 模型积分配置。
 type ModelCost struct {
 	Model   string `json:"model"`
 	Credits int    `json:"credits"`

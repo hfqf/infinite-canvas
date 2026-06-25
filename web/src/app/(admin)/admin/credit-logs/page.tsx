@@ -143,7 +143,7 @@ export default function AdminCreditLogsPage() {
                     cardProps={{ variant: "borderless" }}
                     headerTitle={
                         <Space>
-                            <Typography.Text strong>算力点日志</Typography.Text>
+                            <Typography.Text strong>积分日志</Typography.Text>
                             <Tag>{total} 条</Tag>
                         </Space>
                     }
@@ -225,7 +225,7 @@ export default function AdminCreditLogsPage() {
                 okButtonProps={{ danger: true }}
                 cancelText="取消"
             >
-                确定删除这条算力点日志吗？
+                确定删除这条积分日志吗？
             </Modal>
         </main>
     );

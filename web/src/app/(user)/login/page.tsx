@@ -1,7 +1,7 @@
 "use client";
 
-import { LockOutlined, MailOutlined, SafetyCertificateOutlined, UserOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, Segmented, Space } from "antd";
+import { LinkOutlined, LockOutlined, MailOutlined, SafetyCertificateOutlined, UserOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Form, Input, Segmented, Space } from "antd";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
@@ -14,6 +14,7 @@ type LoginFormValues = {
     password: string;
     email?: string;
     verificationCode?: string;
+    inviteCode?: string;
     confirmPassword?: string;
 };
 
@@ -50,6 +51,7 @@ function LoginContent() {
     const [codeLoading, setCodeLoading] = useState(false);
     const [codeCooldown, setCodeCooldown] = useState(0);
     const redirect = safeRedirect(searchParams.get("redirect"));
+    const inviteCode = (searchParams.get("inviteCode") || searchParams.get("invite") || searchParams.get("aff") || "").trim();
 
     useEffect(() => {
         const token = searchParams.get("token");
@@ -67,6 +69,12 @@ function LoginContent() {
     useEffect(() => {
         if (!allowRegister && mode === "register") setMode("login");
     }, [allowRegister, mode]);
+
+    useEffect(() => {
+        if (!inviteCode || !allowRegister) return;
+        setMode("register");
+        form.setFieldValue("inviteCode", inviteCode);
+    }, [allowRegister, form, inviteCode]);
 
     useEffect(() => {
         if (codeCooldown <= 0) return;
@@ -101,7 +109,7 @@ function LoginContent() {
             }
             const user =
                 mode === "register"
-                    ? await register({ username: values.username, password: values.password, email: values.email, verificationCode: values.verificationCode })
+                    ? await register({ username: values.username, password: values.password, email: values.email, verificationCode: values.verificationCode, inviteCode: values.inviteCode })
                     : await login({ username: values.username, password: values.password });
             message.success(mode === "register" ? "注册成功" : "登录成功");
             router.replace(redirect);
@@ -142,6 +150,7 @@ function LoginContent() {
                     </Form.Item>
                     {mode === "register" ? (
                         <>
+                            <Alert className="mb-4" type="success" showIcon message="使用邀请码注册，额外赠送 10% 积分" />
                             <Form.Item
                                 name="email"
                                 label={<span className="font-medium text-stone-800 dark:text-stone-200">邮箱</span>}
@@ -161,6 +170,9 @@ function LoginContent() {
                                         {codeCooldown > 0 ? `${codeCooldown}s` : "获取验证码"}
                                     </Button>
                                 </Space.Compact>
+                            </Form.Item>
+                            <Form.Item name="inviteCode" label={<span className="font-medium text-stone-800 dark:text-stone-200">邀请码</span>}>
+                                <Input prefix={<LinkOutlined />} placeholder="可选" autoComplete="off" />
                             </Form.Item>
                         </>
                     ) : null}

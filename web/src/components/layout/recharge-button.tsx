@@ -281,7 +281,7 @@ export function RechargeButton({ className, style }: RechargeButtonProps) {
 
     return (
         <>
-            <Tooltip title="充值算力点" placement="bottom">
+            <Tooltip title="充值积分" placement="bottom">
                 <button
                     type="button"
                     className={cn("inline-flex size-7 shrink-0 items-center justify-center text-stone-600 transition hover:text-stone-950 dark:text-stone-300 dark:hover:text-white [&_svg]:size-4", className)}

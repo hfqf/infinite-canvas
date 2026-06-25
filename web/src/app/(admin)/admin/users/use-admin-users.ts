@@ -28,7 +28,7 @@ export function useAdminUsers() {
     const saveMutation = useMutation({
         mutationFn: async (user: Partial<AdminUser> & { password?: string }) => {
             const result = await saveAdminUser(token, user);
-            // 同步算力点：仅在已存在用户且传入了 credits 时调整
+            // 同步积分：仅在已存在用户且传入了 credits 时调整
             if (user.id && typeof user.credits === "number") {
                 await adjustAdminUserCredits(token, user.id, user.credits);
             }
@@ -54,7 +54,7 @@ export function useAdminUsers() {
         mutationFn: ({ id, credits }: { id: string; credits: number }) => adjustAdminUserCredits(token, id, credits),
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
-            message.success("算力点已调整");
+            message.success("积分已调整");
         },
         onError: (error) => message.error(error instanceof Error ? error.message : "调整失败"),
     });

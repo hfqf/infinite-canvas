@@ -216,6 +216,35 @@ func TestListUserAIImageTasksFiltersUserAndKeyword(t *testing.T) {
 	}
 }
 
+func TestListInvitationRecordsFiltersInviterAndKeyword(t *testing.T) {
+	resetDBForTest(t)
+	inviter := model.User{ID: "user_inviter_001", Username: "inviter-user", DisplayName: "邀请人", Role: model.UserRoleUser, Status: model.UserStatusActive, AffCode: "INV001"}
+	otherInviter := model.User{ID: "user_inviter_002", Username: "other-inviter", Role: model.UserRoleUser, Status: model.UserStatusActive, AffCode: "INV002"}
+	if _, err := SaveUser(inviter); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SaveUser(otherInviter); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SaveUser(model.User{ID: "user_invitee_001", Username: "invitee-blue", Email: "blue@example.com", Role: model.UserRoleUser, Status: model.UserStatusActive, AffCode: "INVITEE1", InviterID: inviter.ID, CreatedAt: "2026-06-25T10:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SaveUser(model.User{ID: "user_invitee_002", Username: "invitee-red", Email: "red@example.com", Role: model.UserRoleUser, Status: model.UserStatusActive, AffCode: "INVITEE2", InviterID: otherInviter.ID, CreatedAt: "2026-06-25T11:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+
+	records, total, err := ListInvitationRecords(inviter.ID, model.Query{Keyword: "blue", Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(records) != 1 {
+		t.Fatalf("records=%#v total=%d, want one inviter record", records, total)
+	}
+	if records[0].InviterID != inviter.ID || records[0].InviteeUsername != "invitee-blue" || records[0].InviterUsername != "inviter-user" {
+		t.Fatalf("record=%#v, want inviter and invitee info", records[0])
+	}
+}
+
 func TestConsumeUserCreditsUsesAvailableCredits(t *testing.T) {
 	resetDBForTest(t)
 	user, err := SaveUser(model.User{ID: "user_available_credits_001", Username: "available-user", Role: model.UserRoleUser, Status: model.UserStatusActive, Credits: 10, FrozenCredits: 6})

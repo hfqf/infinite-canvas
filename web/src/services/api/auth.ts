@@ -19,6 +19,8 @@ export type AuthUser = {
     memberLevel: MemberLevel;
     lastRechargeAmountYuan: number;
     lastRechargedAt: string;
+    affCode: string;
+    affCount: number;
     createdAt: string;
     updatedAt: string;
 };
@@ -33,6 +35,7 @@ export type AuthPayload = {
     password: string;
     email?: string;
     verificationCode?: string;
+    inviteCode?: string;
 };
 
 export type VerificationCodeResult = {

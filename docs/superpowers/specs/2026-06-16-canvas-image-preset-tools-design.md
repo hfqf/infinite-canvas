@@ -117,7 +117,7 @@ onPresetEdit: (node: CanvasNodeData, preset: CanvasImagePresetEditId) => void;
 
 后端不新增接口。
 
-当用户使用远程渠道时，前端仍请求 `/api/v1/images/edits`，由 `handler/ai.go` 现有代理逻辑选择模型渠道、扣减算力点、转发到上游，并在失败时退款。
+当用户使用远程渠道时，前端仍请求 `/api/v1/images/edits`，由 `handler/ai.go` 现有代理逻辑选择模型渠道、扣减积分、转发到上游，并在失败时退款。
 
 当用户使用本地直连时，前端仍请求配置的 OpenAI 兼容 `baseUrl + /images/edits`。
 
@@ -140,7 +140,7 @@ onPresetEdit: (node: CanvasNodeData, preset: CanvasImagePresetEditId) => void;
 - 三个工具点击后都会创建 loading 子节点并自动连线。
 - 成功返回后新节点显示结果图，原节点不变。
 - 上游失败时新节点保留并显示错误状态。
-- 远程渠道会正确走 `/api/v1/images/edits` 并刷新用户算力点。
+- 远程渠道会正确走 `/api/v1/images/edits` 并刷新用户积分。
 - 本地直连渠道会正确走自定义 OpenAI 兼容地址。
 
 ## 文档更新

@@ -324,7 +324,7 @@ func handleAIImageBilling(ctx context.Context, imageTask model.AIImageTask, chan
 			if releaseErr := service.ReleaseAIImageTask(imageTask.TaskID, imageTask.UserID, "oss_upload_failed"); releaseErr != nil {
 				return releaseErr
 			}
-			return safeHandlerError{message: "图片保存 OSS 失败，已释放冻结算力"}
+			return safeHandlerError{message: "图片保存 OSS 失败，已释放冻结积分"}
 		}
 		imageURL = ossURL
 	}
@@ -343,7 +343,7 @@ func handleAIImageBilling(ctx context.Context, imageTask model.AIImageTask, chan
 			return err
 		}
 		if !isFailedImageStatus(status) {
-			return safeHandlerError{message: "图片生成结果解析失败，已释放冻结算力"}
+			return safeHandlerError{message: "图片生成结果解析失败，已释放冻结积分"}
 		}
 		return nil
 	case imageBillingCharge:

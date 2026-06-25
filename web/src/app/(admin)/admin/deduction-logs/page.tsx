@@ -109,7 +109,7 @@ export default function AdminDeductionLogsPage() {
                     <Form layout="vertical">
                         <Form.Item label="关键词">
                             <Space.Compact style={{ width: 520, maxWidth: "100%" }}>
-                                <Input value={keywordText} placeholder="搜索用户、任务、提示词、图片链接" allowClear onChange={(event) => setKeywordText(event.target.value)} onPressEnter={() => search()} />
+                                <Input value={keywordText} placeholder="搜索用户、任务、提示词、图片链接或赠送记录" allowClear onChange={(event) => setKeywordText(event.target.value)} onPressEnter={() => search()} />
                                 <Button icon={<SearchOutlined />} type="primary" onClick={() => search()}>
                                     查询
                                 </Button>
@@ -137,7 +137,7 @@ export default function AdminDeductionLogsPage() {
                     cardProps={{ variant: "borderless" }}
                     headerTitle={
                         <Space>
-                            <Typography.Text strong>扣款流水</Typography.Text>
+                            <Typography.Text strong>积分流水</Typography.Text>
                             <Tag>{query.data?.total || 0} 条</Tag>
                         </Space>
                     }
@@ -173,6 +173,7 @@ function deductionTypeLabel(type: string) {
     if (type === "ai_freeze") return "冻结";
     if (type === "ai_freeze_release") return "释放";
     if (type === "ai_consume") return "扣款";
+    if (type === "invite_register_bonus") return "邀请赠送";
     return type || "-";
 }
 
@@ -180,6 +181,7 @@ function deductionTypeColor(type: string) {
     if (type === "ai_freeze") return "gold";
     if (type === "ai_freeze_release") return "green";
     if (type === "ai_consume") return "red";
+    if (type === "invite_register_bonus") return "cyan";
     return "default";
 }
 
@@ -187,6 +189,7 @@ function deductionAmountCell(item: DeductionRow) {
     const frozenCredits = Number(item.parsedExtra.frozenCredits) || 0;
     if (item.type === "ai_freeze") return <Typography.Text type="warning">冻结 {frozenCredits}</Typography.Text>;
     if (item.type === "ai_freeze_release") return <Typography.Text type="success">释放 {frozenCredits}</Typography.Text>;
+    if (item.amount > 0) return <Typography.Text type="success">+{item.amount}</Typography.Text>;
     return <Typography.Text type="danger">{item.amount}</Typography.Text>;
 }
 
