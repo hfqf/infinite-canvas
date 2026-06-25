@@ -812,6 +812,33 @@ func ListUserAIImageTasks(userID string, q model.Query) (model.AIImageTaskList, 
 	return model.AIImageTaskList{Items: tasks, Total: int(total)}, nil
 }
 
+func ListAIImageTasks(q model.Query) (model.AIImageTaskList, error) {
+	tasks, total, err := repository.ListAIImageTasks(q)
+	if err != nil {
+		return model.AIImageTaskList{}, err
+	}
+	return model.AIImageTaskList{Items: tasks, Total: int(total)}, nil
+}
+
+func ListFeaturedAIImageTasks(q model.Query) (model.AIImageTaskList, error) {
+	tasks, total, err := repository.ListFeaturedAIImageTasks(q)
+	if err != nil {
+		return model.AIImageTaskList{}, err
+	}
+	return model.AIImageTaskList{Items: tasks, Total: int(total)}, nil
+}
+
+func UpdateAIImageTaskFeatured(taskID string, featured bool) (model.AIImageTask, error) {
+	task, ok, err := repository.UpdateAIImageTaskFeatured(taskID, featured, now())
+	if err != nil {
+		return model.AIImageTask{}, err
+	}
+	if !ok {
+		return model.AIImageTask{}, safeMessageError{message: "生图记录不存在"}
+	}
+	return task, nil
+}
+
 func SaveCreditLog(log model.CreditLog) (model.CreditLog, error) {
 	if log.ID == "" {
 		log.ID = newID("credit")

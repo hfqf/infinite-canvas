@@ -203,6 +203,9 @@ export type AdminPublicSettings = {
             enabled: boolean;
         };
     };
+    image: {
+        referenceCompressionQuality: number;
+    };
 };
 
 export type AdminPrivateSettings = {

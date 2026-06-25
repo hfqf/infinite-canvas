@@ -1,9 +1,9 @@
 import axios from "axios";
 
-import { buildApiUrl, type AiConfig } from "@/stores/use-config-store";
+import { buildApiUrl, useConfigStore, type AiConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { nanoid } from "nanoid";
-import { dataUrlToFile } from "@/lib/image-utils";
+import { dataUrlToJpegFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { apiPost } from "@/services/api/request";
 import { imageToDataUrl } from "@/services/image-storage";
@@ -58,6 +58,7 @@ const IMAGE_RESPONSE_FORMAT = "url";
 const IMAGE_TASK_MAX_POLLS = 90;
 const IMAGE_TASK_DEFAULT_DELAY = 2000;
 const IMAGE_TASK_MAX_DELAY = 10000;
+const DEFAULT_REFERENCE_COMPRESSION_QUALITY = 0.8;
 
 function normalizeQuality(quality: string) {
     const value = quality.trim().toLowerCase();
@@ -331,6 +332,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     const quality = normalizeQuality(config.quality);
     const requestSize = resolveRequestSize(quality, config.size);
     const requestPrompt = buildImageReferencePromptText(prompt, references);
+    const referenceCompressionQuality = resolveReferenceCompressionQuality();
     const formData = new FormData();
     formData.set("model", config.model);
     formData.set("prompt", withSystemPrompt(config, requestPrompt));
@@ -342,9 +344,9 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     if (requestSize) {
         formData.set("size", requestSize);
     }
-    const files = await Promise.all(references.map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
+    const files = await Promise.all(references.map(async (image) => dataUrlToJpegFile({ ...image, dataUrl: await imageToDataUrl(image) }, referenceCompressionQuality)));
     files.forEach((file) => formData.append("image", file));
-    if (mask) formData.set("mask", dataUrlToFile(mask));
+    if (mask) formData.set("mask", await dataUrlToJpegFile({ ...mask, dataUrl: await imageToDataUrl(mask) }, referenceCompressionQuality));
 
     try {
         const response = await axios.post<ImageApiResponse>(aiApiUrl(config, "/images/edits"), formData, { headers: aiHeaders(config) });
@@ -354,6 +356,12 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     } catch (error) {
         throw new Error(readAxiosError(error, "请求失败"));
     }
+}
+
+function resolveReferenceCompressionQuality() {
+    const quality = Number(useConfigStore.getState().publicSettings?.image?.referenceCompressionQuality ?? DEFAULT_REFERENCE_COMPRESSION_QUALITY);
+    if (!Number.isFinite(quality)) return DEFAULT_REFERENCE_COMPRESSION_QUALITY;
+    return Math.min(1, Math.max(0.1, quality));
 }
 
 export async function requestImageQuestion(config: AiConfig, messages: ChatCompletionMessage[], onDelta: (text: string) => void) {

@@ -42,6 +42,10 @@ type adjustUserCreditsRequest struct {
 	Credits int `json:"credits"`
 }
 
+type updateAIImageTaskFeaturedRequest struct {
+	Featured bool `json:"featured"`
+}
+
 func Register(w http.ResponseWriter, r *http.Request) {
 	var request registerRequest
 	_ = json.NewDecoder(r.Body).Decode(&request)
@@ -221,6 +225,35 @@ func UserAIImageTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	OK(w, tasks)
+}
+
+func FeaturedAIImageTasks(w http.ResponseWriter, r *http.Request) {
+	tasks, err := service.ListFeaturedAIImageTasks(parseQuery(r))
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, tasks)
+}
+
+func AdminAIImageTasks(w http.ResponseWriter, r *http.Request) {
+	tasks, err := service.ListAIImageTasks(parseQuery(r))
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, tasks)
+}
+
+func AdminUpdateAIImageTaskFeatured(w http.ResponseWriter, r *http.Request, id string) {
+	var request updateAIImageTaskFeaturedRequest
+	_ = json.NewDecoder(r.Body).Decode(&request)
+	task, err := service.UpdateAIImageTaskFeatured(id, request.Featured)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, task)
 }
 
 func AdminSaveCreditLog(w http.ResponseWriter, r *http.Request) {

@@ -100,6 +100,9 @@ func TestNormalizeSettingsPublishesEnabledChannelModelsAndRepairsDefaults(t *tes
 	if settings.Public.Auth.InviteRewardCredits == nil || *settings.Public.Auth.InviteRewardCredits != 20 {
 		t.Fatalf("invite reward credits = %v, want default 20", settings.Public.Auth.InviteRewardCredits)
 	}
+	if settings.Public.Image.ReferenceCompressionQuality == nil || *settings.Public.Image.ReferenceCompressionQuality != 0.8 {
+		t.Fatalf("reference compression quality = %v, want default 0.8", settings.Public.Image.ReferenceCompressionQuality)
+	}
 }
 
 func TestNormalizeSettingsPreservesZeroInviteRewardCredits(t *testing.T) {
@@ -111,5 +114,27 @@ func TestNormalizeSettingsPreservesZeroInviteRewardCredits(t *testing.T) {
 	})
 	if settings.Public.Auth.InviteRewardCredits == nil || *settings.Public.Auth.InviteRewardCredits != 0 {
 		t.Fatalf("invite reward credits = %v, want configured 0", settings.Public.Auth.InviteRewardCredits)
+	}
+}
+
+func TestNormalizeSettingsClampsReferenceCompressionQuality(t *testing.T) {
+	tooHigh := 1.2
+	settings := normalizeSettings(model.Settings{
+		Public: model.PublicSetting{
+			Image: model.PublicImageSetting{ReferenceCompressionQuality: &tooHigh},
+		},
+	})
+	if settings.Public.Image.ReferenceCompressionQuality == nil || *settings.Public.Image.ReferenceCompressionQuality != 1 {
+		t.Fatalf("reference compression quality = %v, want capped 1", settings.Public.Image.ReferenceCompressionQuality)
+	}
+
+	tooLow := -0.1
+	settings = normalizeSettings(model.Settings{
+		Public: model.PublicSetting{
+			Image: model.PublicImageSetting{ReferenceCompressionQuality: &tooLow},
+		},
+	})
+	if settings.Public.Image.ReferenceCompressionQuality == nil || *settings.Public.Image.ReferenceCompressionQuality != 0.1 {
+		t.Fatalf("reference compression quality = %v, want floored 0.1", settings.Public.Image.ReferenceCompressionQuality)
 	}
 }

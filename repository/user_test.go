@@ -224,6 +224,54 @@ func TestListUserAIImageTasksFiltersUserAndKeyword(t *testing.T) {
 	}
 }
 
+func TestAIImageTasksHomepageFeaturedFlow(t *testing.T) {
+	resetDBForTest(t)
+	user := model.User{ID: "user_featured_history_001", Username: "featured-user", Role: model.UserRoleUser, Status: model.UserStatusActive, AffCode: "FEAT001"}
+	if _, err := SaveUser(user); err != nil {
+		t.Fatal(err)
+	}
+	tasks := []model.AIImageTask{
+		{ID: "featured_task_001", TaskID: "task_featured_001", UserID: user.ID, Model: "gpt-image-2", Path: "/images/generations", Prompt: "old featured", Status: "succeeded", ImageURL: "https://oss.example.com/old.png", Size: "1024x1024", CreatedAt: "2026-06-24 10:00:00", UpdatedAt: "2026-06-24 10:01:00"},
+		{ID: "featured_task_002", TaskID: "task_featured_002", UserID: user.ID, Model: "gpt-image-2", Path: "/images/edits", Prompt: "new featured", Status: "succeeded", ImageURL: "https://oss.example.com/new.png", Size: "2048x2048", CreatedAt: "2026-06-24 11:00:00", UpdatedAt: "2026-06-24 11:01:00"},
+		{ID: "featured_task_003", TaskID: "task_featured_003", UserID: user.ID, Model: "gpt-image-2", Path: "/images/generations", Prompt: "not featured", Status: "succeeded", ImageURL: "https://oss.example.com/no.png", CreatedAt: "2026-06-24 12:00:00", UpdatedAt: "2026-06-24 12:01:00"},
+		{ID: "featured_task_004", TaskID: "task_featured_004", UserID: user.ID, Model: "gpt-image-2", Path: "/images/generations", Prompt: "failed featured", Status: "failed", ImageURL: "https://oss.example.com/failed.png", CreatedAt: "2026-06-24 13:00:00", UpdatedAt: "2026-06-24 13:01:00"},
+	}
+	for _, task := range tasks {
+		if _, err := SaveAIImageTask(task); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, ok, err := UpdateAIImageTaskFeatured("task_featured_001", true, "mark-old"); err != nil || !ok {
+		t.Fatalf("mark old ok=%v err=%v, want true nil", ok, err)
+	}
+	if _, ok, err := UpdateAIImageTaskFeatured("task_featured_002", true, "mark-new"); err != nil || !ok {
+		t.Fatalf("mark new ok=%v err=%v, want true nil", ok, err)
+	}
+	if _, ok, err := UpdateAIImageTaskFeatured("task_featured_004", true, "mark-failed"); err != nil || !ok {
+		t.Fatalf("mark failed ok=%v err=%v, want true nil", ok, err)
+	}
+
+	all, total, err := ListAIImageTasks(model.Query{Keyword: "featured", Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 4 || len(all) != 4 {
+		t.Fatalf("admin tasks=%#v total=%d, want four keyword matches", all, total)
+	}
+
+	featured, total, err := ListFeaturedAIImageTasks(model.Query{Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 2 || len(featured) != 2 {
+		t.Fatalf("featured tasks=%#v total=%d, want two successful featured tasks", featured, total)
+	}
+	if featured[0].TaskID != "task_featured_002" || featured[1].TaskID != "task_featured_001" {
+		t.Fatalf("featured order=%#v, want newest created_at first", featured)
+	}
+}
+
 func TestListInvitationRecordsFiltersInviterAndKeyword(t *testing.T) {
 	resetDBForTest(t)
 	inviter := model.User{ID: "user_inviter_001", Username: "inviter-user", DisplayName: "邀请人", Role: model.UserRoleUser, Status: model.UserStatusActive, AffCode: "INV001"}

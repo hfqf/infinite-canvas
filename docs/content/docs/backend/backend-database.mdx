@@ -141,6 +141,7 @@ description: 当前后端主要数据表与字段说明
 | --- | --- | --- |
 | `modelChannel` | object | 模型渠道公开配置组 |
 | `auth` | object | 公开登录配置 |
+| `image` | object | 图片处理公开配置 |
 
 `modelChannel` 当前字段：
 
@@ -168,6 +169,12 @@ description: 当前后端主要数据表与字段说明
 | --- | --- | --- |
 | `allowRegister` | bool | 是否允许用户注册，默认允许 |
 | `inviteRewardCredits` | number | 每邀请成功 1 个新用户时奖励给邀请人的积分，默认 `20`，可设为 `0` |
+
+`image` 当前字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `referenceCompressionQuality` | number | 编辑图参考图转 JPEG 时使用的压缩质量系数，默认 `0.8`，范围 `0.1` 到 `1` |
 
 `auth.linuxDo` 当前字段：
 
@@ -262,6 +269,8 @@ description: 当前后端主要数据表与字段说明
 | `reference_count` | number | 参考图数量 |
 | `status` | string | 上游任务状态 |
 | `image_url` | text | 成功结果图 URL，优先保存后端转存后的阿里云 OSS 链接；仅返回 base64 时记录为 `[b64_json]` |
+| `featured` | bool | 是否展示到网站首页精选瀑布流 |
+| `featured_at` | string | 管理员设置首页展示的时间 |
 | `channel_name` | string | 创建任务时使用的渠道名称 |
 | `channel_url` | string | 创建任务时使用的渠道 Base URL |
 | `frozen_at` | string | 冻结积分时间 |

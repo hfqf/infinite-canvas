@@ -37,6 +37,7 @@ const emptySettings: AdminSettings = {
             allowCustomChannel: true,
         },
         auth: { allowRegister: true, inviteRewardCredits: 20, linuxDo: { enabled: false } },
+        image: { referenceCompressionQuality: 0.8 },
     },
     private: { channels: [], promptSync: { enabled: true, cron: "*/5 * * * *" }, auth: { linuxDo: { clientId: "", clientSecret: "" } } },
 };
@@ -864,7 +865,16 @@ function normalizePublicSetting(setting: Partial<AdminSettings["public"]> = {}):
                 enabled: setting.auth?.linuxDo?.enabled === true,
             },
         },
+        image: {
+            referenceCompressionQuality: normalizeReferenceCompressionQuality(setting.image?.referenceCompressionQuality),
+        },
     };
+}
+
+function normalizeReferenceCompressionQuality(value: unknown) {
+    const quality = Number(value ?? emptySettings.public.image.referenceCompressionQuality);
+    if (!Number.isFinite(quality)) return emptySettings.public.image.referenceCompressionQuality;
+    return Math.min(1, Math.max(0.1, quality));
 }
 
 function normalizeModelCosts(items: Partial<AdminSettings["public"]["modelChannel"]["modelCosts"][number]>[]) {

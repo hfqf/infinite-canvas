@@ -1,6 +1,6 @@
 "use client";
 
-import { FileTextOutlined, HomeOutlined, LogoutOutlined, PictureOutlined, SettingOutlined, TeamOutlined, TransactionOutlined, UserOutlined } from "@ant-design/icons";
+import { ControlOutlined, FileTextOutlined, HomeOutlined, LogoutOutlined, PictureOutlined, SettingOutlined, TeamOutlined, TransactionOutlined, UserOutlined } from "@ant-design/icons";
 import { Button, Flex, Layout, Menu, Typography, theme } from "antd";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -16,9 +16,11 @@ const adminMenus = [
     { key: "/admin/invitations", icon: <TeamOutlined />, label: "邀请记录" },
     { key: "/admin/credit-logs", icon: <TransactionOutlined />, label: "积分日志" },
     { key: "/admin/deduction-logs", icon: <TransactionOutlined />, label: "扣款流水" },
+    { key: "/admin/image-history", icon: <PictureOutlined />, label: "生图历史" },
     { key: "/admin/prompts", icon: <FileTextOutlined />, label: "提示词管理" },
     { key: "/admin/assets", icon: <PictureOutlined />, label: "素材库" },
-    { key: "/admin/settings", icon: <SettingOutlined />, label: "系统设置" },
+    { key: "/admin/system-config", icon: <ControlOutlined />, label: "系统配置" },
+    { key: "/admin/settings", icon: <SettingOutlined />, label: "模型渠道" },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -29,22 +31,26 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const user = useUserStore((state) => state.user);
     const isReady = useUserStore((state) => state.isReady);
     const logout = useUserStore((state) => state.clearSession);
-    const activeKey = pathname.startsWith("/admin/settings")
+    const activeKey = pathname.startsWith("/admin/system-config")
+        ? "/admin/system-config"
+        : pathname.startsWith("/admin/settings")
         ? "/admin/settings"
         : pathname.startsWith("/admin/assets")
           ? "/admin/assets"
-          : pathname.startsWith("/admin/prompts")
-            ? "/admin/prompts"
-            : pathname.startsWith("/admin/deduction-logs")
-              ? "/admin/deduction-logs"
-              : pathname.startsWith("/admin/invitations")
-                ? "/admin/invitations"
-                : pathname.startsWith("/admin/credit-logs")
-                  ? "/admin/credit-logs"
-                  : pathname.startsWith("/admin/users")
-                    ? "/admin/users"
-                    : "";
-    const pageTitle = pathname.startsWith("/admin/settings") ? "系统设置" : pathname.startsWith("/admin/assets") ? "素材库管理" : pathname.startsWith("/admin/prompts") ? "提示词管理" : pathname.startsWith("/admin/deduction-logs") ? "扣款流水" : pathname.startsWith("/admin/invitations") ? "邀请记录" : pathname.startsWith("/admin/credit-logs") ? "积分日志" : "用户管理";
+          : pathname.startsWith("/admin/image-history")
+            ? "/admin/image-history"
+            : pathname.startsWith("/admin/prompts")
+              ? "/admin/prompts"
+              : pathname.startsWith("/admin/deduction-logs")
+                ? "/admin/deduction-logs"
+                : pathname.startsWith("/admin/invitations")
+                  ? "/admin/invitations"
+                  : pathname.startsWith("/admin/credit-logs")
+                    ? "/admin/credit-logs"
+                    : pathname.startsWith("/admin/users")
+                      ? "/admin/users"
+                      : "";
+    const pageTitle = pathname.startsWith("/admin/system-config") ? "系统配置" : pathname.startsWith("/admin/settings") ? "模型渠道" : pathname.startsWith("/admin/assets") ? "素材库管理" : pathname.startsWith("/admin/image-history") ? "生图历史" : pathname.startsWith("/admin/prompts") ? "提示词管理" : pathname.startsWith("/admin/deduction-logs") ? "扣款流水" : pathname.startsWith("/admin/invitations") ? "邀请记录" : pathname.startsWith("/admin/credit-logs") ? "积分日志" : "用户管理";
 
     useEffect(() => {
         if (!isReady) return;

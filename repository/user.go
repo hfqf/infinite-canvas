@@ -265,6 +265,72 @@ func ListUserAIImageTasks(userID string, q model.Query) ([]model.AIImageTask, in
 	}
 	q.Normalize()
 	tx := db.Model(&model.AIImageTask{}).Where("user_id = ?", userID)
+	tx = filterAIImageTasks(tx, q)
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var tasks []model.AIImageTask
+	err = tx.Order("created_at desc").Offset(q.Offset()).Limit(q.PageSize).Find(&tasks).Error
+	return tasks, total, err
+}
+
+func ListAIImageTasks(q model.Query) ([]model.AIImageTask, int64, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, 0, err
+	}
+	q.Normalize()
+	tx := filterAIImageTasks(db.Model(&model.AIImageTask{}), q)
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var tasks []model.AIImageTask
+	err = tx.Order("created_at desc").Offset(q.Offset()).Limit(q.PageSize).Find(&tasks).Error
+	return tasks, total, err
+}
+
+func ListFeaturedAIImageTasks(q model.Query) ([]model.AIImageTask, int64, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, 0, err
+	}
+	q.Normalize()
+	tx := filterAIImageTasks(db.Model(&model.AIImageTask{}), q).
+		Where("featured = ? AND image_url <> ? AND status IN ?", true, "", []string{"succeeded", "success"})
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var tasks []model.AIImageTask
+	err = tx.Order("created_at desc").Offset(q.Offset()).Limit(q.PageSize).Find(&tasks).Error
+	return tasks, total, err
+}
+
+func UpdateAIImageTaskFeatured(taskID string, featured bool, now string) (model.AIImageTask, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.AIImageTask{}, false, err
+	}
+	task := model.AIImageTask{}
+	if err := db.Where("task_id = ? OR id = ?", taskID, taskID).First(&task).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return model.AIImageTask{}, false, nil
+		}
+		return model.AIImageTask{}, false, err
+	}
+	task.Featured = featured
+	if featured {
+		task.FeaturedAt = now
+	} else {
+		task.FeaturedAt = ""
+	}
+	task.UpdatedAt = now
+	return task, true, db.Save(&task).Error
+}
+
+func filterAIImageTasks(tx *gorm.DB, q model.Query) *gorm.DB {
 	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
 		like := "%" + keyword + "%"
 		tx = tx.Where("task_id LIKE ? OR model LIKE ? OR prompt LIKE ? OR image_url LIKE ?", like, like, like, like)
@@ -292,13 +358,7 @@ func ListUserAIImageTasks(userID string, q model.Query) ([]model.AIImageTask, in
 	if dateTo := strings.TrimSpace(q.DateTo); dateTo != "" {
 		tx = tx.Where("created_at <= ?", dateTo)
 	}
-	var total int64
-	if err := tx.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	var tasks []model.AIImageTask
-	err = tx.Order("created_at desc").Offset(q.Offset()).Limit(q.PageSize).Find(&tasks).Error
-	return tasks, total, err
+	return tx
 }
 
 func AttachAIImageTask(reservedTaskID string, upstreamTaskID string, status string, imageURL string, channel model.ModelChannel, now string) (model.AIImageTask, error) {

@@ -192,6 +192,8 @@ type AIImageTask struct {
 	ReferenceCount int    `json:"referenceCount"`
 	Status         string `json:"status" gorm:"index"`
 	ImageURL       string `json:"imageUrl" gorm:"type:text"`
+	Featured       bool   `json:"featured" gorm:"index"`
+	FeaturedAt     string `json:"featuredAt"`
 	ChannelName    string `json:"channelName"`
 	ChannelURL     string `json:"channelUrl"`
 	FrozenAt       string `json:"frozenAt"`

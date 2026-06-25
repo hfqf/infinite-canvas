@@ -60,3 +60,48 @@ export function dataUrlToFile(image: ReferenceImage) {
     }
     return new File([bytes], image.name || "reference.png", { type: mimeType });
 }
+
+export function dataUrlToJpegFile(image: ReferenceImage, quality: number) {
+    return new Promise<File>((resolve, reject) => {
+        if (!image.dataUrl) {
+            reject(new Error("参考图为空"));
+            return;
+        }
+        const source = new Image();
+        source.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.max(1, source.naturalWidth || source.width);
+            canvas.height = Math.max(1, source.naturalHeight || source.height);
+            const context = canvas.getContext("2d");
+            if (!context) {
+                reject(new Error("参考图压缩失败"));
+                return;
+            }
+            context.fillStyle = "#fff";
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.drawImage(source, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(
+                (blob) => {
+                    if (!blob) {
+                        reject(new Error("参考图压缩失败"));
+                        return;
+                    }
+                    resolve(new File([blob], jpegFileName(image.name), { type: "image/jpeg" }));
+                },
+                "image/jpeg",
+                normalizeJpegQuality(quality),
+            );
+        };
+        source.onerror = () => reject(new Error("参考图压缩失败"));
+        source.src = image.dataUrl;
+    });
+}
+
+function normalizeJpegQuality(value: number) {
+    return Math.min(1, Math.max(0.1, Number.isFinite(value) ? value : 0.8));
+}
+
+function jpegFileName(name: string) {
+    const baseName = (name || "reference").replace(/\.[^.]+$/, "");
+    return `${baseName || "reference"}.jpg`;
+}

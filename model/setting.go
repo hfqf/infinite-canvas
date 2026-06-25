@@ -45,6 +45,7 @@ type PublicModelChannelSetting struct {
 type PublicSetting struct {
 	ModelChannel PublicModelChannelSetting `json:"modelChannel"`
 	Auth         PublicAuthSetting         `json:"auth"`
+	Image        PublicImageSetting        `json:"image"`
 }
 
 type PublicAuthSetting struct {
@@ -55,6 +56,10 @@ type PublicAuthSetting struct {
 
 type PublicLinuxDoAuthSetting struct {
 	Enabled bool `json:"enabled"`
+}
+
+type PublicImageSetting struct {
+	ReferenceCompressionQuality *float64 `json:"referenceCompressionQuality"`
 }
 
 // PrivateSetting 私有配置。

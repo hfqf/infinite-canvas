@@ -1,4 +1,4 @@
-import { apiGet, compactApiParams } from "@/services/api/request";
+import { apiGet, apiPost, compactApiParams } from "@/services/api/request";
 import type { AdminUserQuery } from "@/services/api/admin";
 
 export type AIImageTask = {
@@ -15,6 +15,8 @@ export type AIImageTask = {
     referenceCount: number;
     status: string;
     imageUrl: string;
+    featured: boolean;
+    featuredAt: string;
     channelName: string;
     channelUrl: string;
     frozenAt: string;
@@ -39,4 +41,16 @@ export type AIImageTaskQuery = AdminUserQuery & {
 
 export async function fetchMyImageTasks(token: string, query: AIImageTaskQuery = {}) {
     return apiGet<AIImageTaskListResponse>("/api/v1/image-tasks", compactApiParams(query), token);
+}
+
+export async function fetchFeaturedImageTasks(query: AIImageTaskQuery = {}) {
+    return apiGet<AIImageTaskListResponse>("/api/image-tasks/featured", compactApiParams(query));
+}
+
+export async function fetchAdminImageTasks(token: string, query: AIImageTaskQuery = {}) {
+    return apiGet<AIImageTaskListResponse>("/api/admin/image-tasks", compactApiParams(query), token);
+}
+
+export async function updateAdminImageTaskFeatured(token: string, id: string, featured: boolean) {
+    return apiPost<AIImageTask>(`/api/admin/image-tasks/${encodeURIComponent(id)}/featured`, { featured }, token);
 }

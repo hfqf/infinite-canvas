@@ -97,7 +97,7 @@ export default function MyDeductionLogsPage() {
     ];
 
     return (
-        <main style={{ padding: 24 }}>
+        <main className="h-full min-h-0 overflow-y-auto" style={{ padding: 24 }}>
             <Space direction="vertical" size={16} style={{ width: "100%" }}>
                 <div>
                     <Typography.Text type="secondary" style={{ letterSpacing: 4 }}>

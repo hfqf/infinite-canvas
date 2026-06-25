@@ -23,6 +23,7 @@ func New() *gin.Engine {
 	api.GET("/auth/linux-do/callback", gin.WrapF(handler.LinuxDoCallback))
 	api.GET("/auth/me", middleware.OptionalAuth, gin.WrapF(handler.CurrentUser))
 	api.GET("/settings", gin.WrapF(handler.Settings))
+	api.GET("/image-tasks/featured", gin.WrapF(handler.FeaturedAIImageTasks))
 	api.POST("/recharge/wechat/notify", gin.WrapF(handler.WechatRechargeNotify))
 	api.GET("/media/references/:id", func(c *gin.Context) {
 		handler.ReferenceMedia(c.Writer, c.Request, c.Param("id"))
@@ -73,6 +74,10 @@ func New() *gin.Engine {
 	})
 	admin.GET("/credit-logs", gin.WrapF(handler.AdminCreditLogs))
 	admin.GET("/deduction-logs", gin.WrapF(handler.AdminAIDeductionLogs))
+	admin.GET("/image-tasks", gin.WrapF(handler.AdminAIImageTasks))
+	admin.POST("/image-tasks/:id/featured", func(c *gin.Context) {
+		handler.AdminUpdateAIImageTaskFeatured(c.Writer, c.Request, c.Param("id"))
+	})
 	admin.GET("/invitations", gin.WrapF(handler.AdminInvitationRecords))
 	admin.POST("/credit-logs", gin.WrapF(handler.AdminSaveCreditLog))
 	admin.DELETE("/credit-logs/:id", func(c *gin.Context) {

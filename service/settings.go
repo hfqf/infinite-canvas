@@ -100,6 +100,16 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 		zeroRewardCredits := 0
 		setting.Auth.InviteRewardCredits = &zeroRewardCredits
 	}
+	if setting.Image.ReferenceCompressionQuality == nil {
+		defaultQuality := 0.8
+		setting.Image.ReferenceCompressionQuality = &defaultQuality
+	} else if *setting.Image.ReferenceCompressionQuality < 0.1 {
+		minQuality := 0.1
+		setting.Image.ReferenceCompressionQuality = &minQuality
+	} else if *setting.Image.ReferenceCompressionQuality > 1 {
+		maxQuality := 1.0
+		setting.Image.ReferenceCompressionQuality = &maxQuality
+	}
 	enabledModels := enabledChannelModels(channels)
 	if len(enabledModels) > 0 {
 		setting.ModelChannel.AvailableModels = enabledModels
