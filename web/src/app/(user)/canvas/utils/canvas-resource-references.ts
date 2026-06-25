@@ -2,6 +2,8 @@ import { imageReferenceLabel } from "@/lib/image-reference-prompt";
 import { seedanceReferenceLabel } from "@/lib/seedance-video";
 import { CanvasNodeType, type CanvasConnection, type CanvasNodeData } from "../types";
 
+export const MAX_CANVAS_REFERENCE_IMAGES = 20;
+
 export type CanvasResourceKind = "image" | "video" | "audio" | "text";
 
 export type CanvasResourceReference = {

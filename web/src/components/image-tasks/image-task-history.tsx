@@ -343,7 +343,8 @@ function taskToLog(task: AIImageTask): GenerationLog {
     const createdAt = parseDate(task.createdAt);
     const updatedAt = parseDate(task.updatedAt);
     const mode = task.path.includes("/images/edits") ? "edit" : "generate";
-    const image = task.imageUrl && task.imageUrl !== "[b64_json]" ? taskImage(task, updatedAt || createdAt) : null;
+    const durationMs = updatedAt > createdAt ? updatedAt - createdAt : 0;
+    const image = task.imageUrl && task.imageUrl !== "[b64_json]" ? taskImage(task, durationMs) : null;
     return {
         id: task.id || task.taskId,
         taskId: task.taskId,
@@ -354,7 +355,7 @@ function taskToLog(task: AIImageTask): GenerationLog {
         prompt: task.prompt,
         model: task.model,
         config: { model: task.model, imageModel: task.model, quality: task.quality, size: task.size, count: String(task.count || 1) },
-        durationMs: updatedAt > createdAt ? updatedAt - createdAt : 0,
+        durationMs,
         credits: task.credits || 0,
         referenceCount: task.referenceCount || (mode === "edit" ? 1 : 0),
         size: task.size,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, LoaderCircle } from "lucide-react";
+import { ArrowUp, LoaderCircle, X } from "lucide-react";
 import { Button } from "antd";
 
 import { ModelPicker } from "@/components/model-picker";
@@ -15,7 +15,7 @@ import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas
 import { CanvasResourceMentionTextarea } from "./canvas-resource-mention-textarea";
 import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
 import { CanvasNodeType, type CanvasGenerationMode, type CanvasNodeData } from "../types";
-import type { CanvasResourceReference } from "../utils/canvas-resource-references";
+import { MAX_CANVAS_REFERENCE_IMAGES, type CanvasResourceReference } from "../utils/canvas-resource-references";
 
 export type CanvasNodeGenerationMode = CanvasGenerationMode;
 
@@ -26,10 +26,11 @@ type CanvasNodePromptPanelProps = {
     onConfigChange: (nodeId: string, patch: Partial<CanvasNodeData["metadata"]>) => void;
     onGenerate: (nodeId: string, mode: CanvasNodeGenerationMode, prompt: string) => void;
     mentionReferences?: CanvasResourceReference[];
+    onRemoveReference?: (nodeId: string, reference: CanvasResourceReference) => void;
     onImageSettingsOpenChange?: (open: boolean) => void;
 };
 
-export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfigChange, onGenerate, mentionReferences = [], onImageSettingsOpenChange }: CanvasNodePromptPanelProps) {
+export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfigChange, onGenerate, mentionReferences = [], onRemoveReference, onImageSettingsOpenChange }: CanvasNodePromptPanelProps) {
     const globalConfig = useEffectiveConfig();
     const modelCosts = useConfigStore((state) => state.publicSettings?.modelChannel.modelCosts);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
@@ -42,7 +43,10 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
     const initialPrompt = hasImageContent || !isEditingExistingContent ? node.metadata?.prompt || "" : "";
     const [prompt, setPrompt] = useState(initialPrompt);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const referenceCount = hasImageContent ? 1 : mentionReferences.filter((item) => item.kind === "image").length;
+    const allImageReferences = mentionReferences.filter((item) => item.kind === "image");
+    const imageReferences = allImageReferences.slice(0, MAX_CANVAS_REFERENCE_IMAGES);
+    const hiddenImageReferenceCount = Math.max(0, allImageReferences.length - imageReferences.length);
+    const referenceCount = mode === "image" ? (allImageReferences.length ? imageReferences.length : hasImageContent ? 1 : 0) : 0;
     const credits = requestCreditCost({ channelMode: config.channelMode, modelCosts, model: config.model, count: mode === "image" ? config.count : 1, size: mode === "image" ? config.size : "", quality: mode === "image" ? config.quality : "", referenceCount: mode === "image" ? referenceCount : 0 });
 
     useEffect(() => {
@@ -89,6 +93,53 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
             onPointerDown={(event) => event.stopPropagation()}
             onWheel={(event) => event.stopPropagation()}
         >
+            {mode === "image" && imageReferences.length ? (
+                <div className="mb-2">
+                    <div className="thin-scrollbar flex max-w-full gap-2 overflow-x-auto pb-1">
+                        {imageReferences.map((reference, index) => {
+                            const canRemove = Boolean(onRemoveReference && reference.nodeId !== node.id);
+                            return (
+                                <div
+                                    key={reference.nodeId}
+                                    className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border"
+                                    style={{ background: theme.node.fill, borderColor: theme.node.stroke }}
+                                    title={reference.title}
+                                >
+                                    {reference.previewUrl ? <img src={reference.previewUrl} alt={reference.label} className="h-full w-full object-cover" draggable={false} /> : null}
+                                    <span
+                                        className="absolute left-1 top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-semibold leading-none"
+                                        style={{ background: theme.toolbar.panel, color: theme.node.text, border: `1px solid ${theme.toolbar.border}` }}
+                                    >
+                                        {index + 1}
+                                    </span>
+                                    {canRemove ? (
+                                        <button
+                                            type="button"
+                                            className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full opacity-90 transition hover:opacity-100"
+                                            style={{ background: theme.toolbar.panel, color: theme.node.text, border: `1px solid ${theme.toolbar.border}` }}
+                                            aria-label={`删除参考图${index + 1}`}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                onRemoveReference?.(node.id, reference);
+                                            }}
+                                        >
+                                            <X className="size-3" />
+                                        </button>
+                                    ) : null}
+                                </div>
+                            );
+                        })}
+                        {hiddenImageReferenceCount ? (
+                            <div className="flex h-12 min-w-16 shrink-0 items-center justify-center rounded-lg border px-2 text-xs" style={{ background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.muted }}>
+                                +{hiddenImageReferenceCount}
+                            </div>
+                        ) : null}
+                    </div>
+                    <div className="mt-1 text-[11px]" style={{ color: theme.node.muted }}>
+                        已选择 {imageReferences.length} 张参考图，最多 20 张
+                    </div>
+                </div>
+            ) : null}
             <CanvasResourceMentionTextarea
                 ref={textareaRef}
                 value={prompt}
