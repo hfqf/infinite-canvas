@@ -56,7 +56,13 @@ export async function setImageBlob(storageKey: string, blob: Blob) {
 }
 
 export async function imageToDataUrl(image: { url?: string; dataUrl?: string; storageKey?: string }) {
-    const url = image.dataUrl || (await resolveImageUrl(image.storageKey, image.url || ""));
+    let url = image.dataUrl;
+    // 防御：如果 dataUrl 被错误地存成了 oss: 存储键（老画布 / 字段误用），
+    // 用 image.url（公网 URL）或 resolveImageUrl(storageKey) 兑底，绝不让 oss: 进 fetch。
+    if (url && url.startsWith("oss:")) {
+        url = image.url || (await resolveImageUrl(image.storageKey, "")) || "";
+    }
+    url = url || (await resolveImageUrl(image.storageKey, image.url || ""));
     if (!url || url.startsWith("data:")) return url;
     return blobToDataUrl(await fetchImageBlob(url));
 }
@@ -138,5 +144,7 @@ function imageFileExtension(mimeType: string) {
 }
 
 function proxiedImageUrl(url: string) {
-    return /^https?:\/\//i.test(url) ? `/image-proxy?url=${encodeURIComponent(url)}` : url;
+    if (/^https?:\/\//i.test(url)) return `/image-proxy?url=${encodeURIComponent(url)}`;
+    if (url.startsWith("oss:")) return `/api/v1/oss-image?key=${encodeURIComponent(url)}`;
+    return url;
 }

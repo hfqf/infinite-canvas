@@ -622,6 +622,10 @@ func CheckFrozenAIImageTasks() {
 	}
 }
 
+// frozenTaskReleaseGracePeriod 冻结任务连续状态查询出错多久后默认按失败释放，
+// 避免上游 API 返 404/“生成失败”后积分永远被冻住卡住。
+const frozenTaskReleaseGracePeriod = 30 * time.Minute
+
 func checkFrozenAIImageTask(task model.AIImageTask) error {
 	channel, err := FindModelChannel(task.Model, task.ChannelName, task.ChannelURL)
 	if err != nil {
@@ -629,7 +633,14 @@ func checkFrozenAIImageTask(task model.AIImageTask) error {
 	}
 	status, imageURL, err := fetchAIImageTaskState(channel, task)
 	if err != nil {
-		return err
+		// 4xx 可能意味着上游明确告诉“这个 task 失败了 / 找不到了”；
+		// 也可能只是临时限流 / 5xx。为了避免积分永远被冻住，超过 frozenTaskReleaseGracePeriod 后
+		// 且是 4xx，则直接按失败释放；其他情况保留任务等下次 cron 重试。
+		if !shouldReleaseFrozenTaskOnError(task, err) {
+			return err
+		}
+		log.Printf("frozen AI image task exceeded grace period, releasing as failed task=%s err=%v", task.TaskID, err)
+		return ReleaseAIImageTask(task.TaskID, task.UserID, "upstream_unreachable")
 	}
 	if isPendingAIImageTaskStatus(status) {
 		return nil
@@ -649,6 +660,25 @@ func checkFrozenAIImageTask(task model.AIImageTask) error {
 		return ReleaseAIImageTask(task.TaskID, task.UserID, "response_unrecognized")
 	}
 	return nil
+}
+
+// shouldReleaseFrozenTaskOnError 判断上游查询出错时，是否超过宽限期应该默认按失败释放。
+// 仅在上游返 4xx 且任务已冻住超过 frozenTaskReleaseGracePeriod 时返回 true。
+func shouldReleaseFrozenTaskOnError(task model.AIImageTask, fetchErr error) bool {
+	if task.FrozenAt == "" || fetchErr == nil {
+		return false
+	}
+	frozenAt, err := time.Parse(time.RFC3339Nano, task.FrozenAt)
+	if err != nil {
+		frozenAt, err = time.Parse(time.RFC3339, task.FrozenAt)
+		if err != nil {
+			return false
+		}
+	}
+	if time.Since(frozenAt) < frozenTaskReleaseGracePeriod {
+		return false
+	}
+	return strings.Contains(fetchErr.Error(), "upstream task status=4")
 }
 
 func fetchAIImageTaskState(channel model.ModelChannel, task model.AIImageTask) (string, string, error) {
