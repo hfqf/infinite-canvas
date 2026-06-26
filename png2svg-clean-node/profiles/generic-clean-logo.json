@@ -1,0 +1,28 @@
+{
+  "name": "generic-clean-logo",
+  "preprocess": {
+    "alphaOff": true,
+    "fuzz": "2%",
+    "fill": "white",
+    "opaque": "white",
+    "colors": 8,
+    "dither": "none"
+  },
+  "vectorizer": {
+    "colorMode": "Color",
+    "hierarchical": "Stacked",
+    "mode": "Spline",
+    "colorPrecision": 6,
+    "filterSpeckle": 1,
+    "layerDifference": 8,
+    "cornerThreshold": 55,
+    "lengthThreshold": 3,
+    "maxIterations": 3,
+    "spliceThreshold": 35,
+    "pathPrecision": 6,
+    "unusedColorIterations": 16,
+    "keyingThreshold": 0.3,
+    "smallCircle": 2
+  },
+  "postprocess": {}
+}

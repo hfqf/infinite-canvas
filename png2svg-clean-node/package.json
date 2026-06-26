@@ -1,0 +1,16 @@
+{
+  "name": "png2svg-clean-node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Node CLI for clean PNG to SVG conversion used by Go services.",
+  "bin": {
+    "png2svg-clean": "./bin/png2svg-clean.mjs"
+  },
+  "scripts": {
+    "convert": "node ./bin/png2svg-clean.mjs"
+  },
+  "dependencies": {
+    "@neplex/vectorizer": "0.1.0"
+  }
+}

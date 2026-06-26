@@ -1,0 +1,47 @@
+{
+  "name": "bls-clean-ribbon",
+  "preprocess": {
+    "alphaOff": true,
+    "fuzz": "2%",
+    "fill": "white",
+    "opaque": "white",
+    "colors": 8,
+    "dither": "none",
+    "replacements": [
+      {
+        "from": "#278291",
+        "to": "#026979"
+      },
+      {
+        "from": "#99BAD1",
+        "to": "white"
+      },
+      {
+        "from": "#ABC9D7",
+        "to": "white"
+      }
+    ]
+  },
+  "vectorizer": {
+    "colorMode": "Color",
+    "hierarchical": "Stacked",
+    "mode": "Spline",
+    "colorPrecision": 6,
+    "filterSpeckle": 1,
+    "layerDifference": 8,
+    "cornerThreshold": 55,
+    "lengthThreshold": 3,
+    "maxIterations": 3,
+    "spliceThreshold": 35,
+    "pathPrecision": 6,
+    "unusedColorIterations": 16,
+    "keyingThreshold": 0.3,
+    "smallCircle": 2
+  },
+  "postprocess": {
+    "cleanRibbon": {
+      "fill": "#99bad1",
+      "path": "M365 496 C520 585 690 620 910 590 C1125 560 1340 482 1578 522 L1578 679 C1430 620 1270 590 1110 588 C1005 587 910 602 805 615 C625 637 485 620 365 650 Z"
+    }
+  }
+}
