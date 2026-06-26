@@ -55,6 +55,7 @@ const IMAGE_MAX_PIXELS = 3840 * 3840;
 const IMAGE_MAX_EDGE = 3840;
 const IMAGE_MAX_RATIO = 3;
 const IMAGE_RESPONSE_FORMAT = "url";
+const IMAGE_OUTPUT_FORMAT = "png";
 const IMAGE_TASK_MAX_POLLS = 90;
 const IMAGE_TASK_DEFAULT_DELAY = 2000;
 const IMAGE_TASK_MAX_DELAY = 10000;
@@ -314,6 +315,7 @@ export async function requestGeneration(config: AiConfig, prompt: string) {
                 ...(quality ? { quality } : {}),
                 ...(requestSize ? { size: requestSize } : {}),
                 response_format: IMAGE_RESPONSE_FORMAT,
+                output_format: IMAGE_OUTPUT_FORMAT,
                 async: true,
             },
             {
@@ -337,6 +339,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     formData.set("model", config.model);
     formData.set("prompt", withSystemPrompt(config, requestPrompt));
     formData.set("response_format", IMAGE_RESPONSE_FORMAT);
+    formData.set("output_format", IMAGE_OUTPUT_FORMAT);
     formData.set("async", "true");
     if (quality) {
         formData.set("quality", quality);

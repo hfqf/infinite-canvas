@@ -729,11 +729,14 @@ func pollAicodemeImageTaskIfNeeded(req *http.Request, body []byte, upstreamHeade
 
 // aicodeme 的 images/generations 默认返 task 格式。一种猜测是加上 async:true
 // 后会返 OpenAI 标准 / 同步结果 —— 为了避免依赖此行为不确定，这里两个都做：
-// 1. 转发时在 JSON body 上固定加 async:true（不动 multipart）
+// 1. 转发时补齐图片请求参数：JSON 文生图加 async:true/response_format=url，图片请求统一 output_format=png
 // 2. 响应端保留 normalizeAicodemeImagesResponse 作为兑底（处理仍返 task 格式的情况）
 func ensureAsyncTrueOnImages(path string, body []byte, contentType string) ([]byte, string) {
-	if !strings.HasSuffix(path, "/images/generations") {
+	if !isImageRequestPath(path) {
 		return body, contentType
+	}
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		return ensureMultipartImageOutputFormat(body, contentType)
 	}
 	if !strings.HasPrefix(contentType, "application/json") {
 		return body, contentType
@@ -742,18 +745,73 @@ func ensureAsyncTrueOnImages(path string, body []byte, contentType string) ([]by
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return body, contentType
 	}
-	// 用户可能已带 async 参数，不覆盖
-	if _, ok := payload["async"]; !ok {
-		asyncTrue, _ := json.Marshal(true)
-		payload["async"] = asyncTrue
+	if strings.HasSuffix(path, "/images/generations") {
+		// 用户可能已带 async 参数，不覆盖
+		if _, ok := payload["async"]; !ok {
+			asyncTrue, _ := json.Marshal(true)
+			payload["async"] = asyncTrue
+		}
 	}
-	responseFormat, _ := json.Marshal("url")
-	payload["response_format"] = responseFormat
+	if strings.HasSuffix(path, "/images/generations") {
+		responseFormat, _ := json.Marshal("url")
+		payload["response_format"] = responseFormat
+	}
+	outputFormat, _ := json.Marshal("png")
+	payload["output_format"] = outputFormat
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return body, contentType
 	}
 	return encoded, contentType
+}
+
+func ensureMultipartImageOutputFormat(body []byte, contentType string) ([]byte, string) {
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return body, contentType
+	}
+	form, err := multipart.NewReader(bytes.NewReader(body), params["boundary"]).ReadForm(64 << 20)
+	if err != nil {
+		return body, contentType
+	}
+	defer form.RemoveAll()
+
+	var next bytes.Buffer
+	writer := multipart.NewWriter(&next)
+	for key, values := range form.Value {
+		if key == "output_format" {
+			continue
+		}
+		for _, value := range values {
+			_ = writer.WriteField(key, value)
+		}
+	}
+	_ = writer.WriteField("output_format", "png")
+	for key, files := range form.File {
+		for _, fileHeader := range files {
+			file, err := fileHeader.Open()
+			if err != nil {
+				_ = writer.Close()
+				return body, contentType
+			}
+			part, err := writer.CreateFormFile(key, fileHeader.Filename)
+			if err != nil {
+				_ = file.Close()
+				_ = writer.Close()
+				return body, contentType
+			}
+			if _, err := io.Copy(part, file); err != nil {
+				_ = file.Close()
+				_ = writer.Close()
+				return body, contentType
+			}
+			_ = file.Close()
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return body, contentType
+	}
+	return next.Bytes(), writer.FormDataContentType()
 }
 
 func readAIRequest(r *http.Request) ([]byte, string, string, error) {
