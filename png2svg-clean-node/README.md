@@ -1,58 +1,40 @@
-# PNG2SVG Clean Node Kit
+# PNG2SVG Generic 85
 
-这是给 Go 工程调用的 Node CLI 包，用来复用当前已经调好的 PNG 到 SVG 方案。
+这是 85 分通用版 PNG 转 SVG 方案，适合迁移到 Go 工程里通过命令行调用。
 
-## 能力
+这个版本只包含通用处理：
 
-- 使用 ImageMagick 对 PNG 做本地预处理。
-- 使用 `@neplex/vectorizer` 做 SVG 矢量化。
-- 使用 profile 管理参数。
-- 支持 BLS logo 的 clean ribbon 后处理。
-- 可输出 SVG、预处理 PNG、渲染预览 PNG。
+- ImageMagick 少色预处理
+- `@neplex/vectorizer` 通用矢量化参数
+- SVG safe optimize
+
+它不包含任何单图专用修复，例如 BLS 飘带 path 注入。
 
 ## 依赖
 
 - Node.js 18+
 - ImageMagick 7+，命令名需要是 `magick`
 
-macOS 安装：
+安装：
 
 ```bash
-brew install imagemagick
-```
-
-安装 Node 依赖：
-
-```bash
-cd handoff/png2svg-clean-node
+cd handoff/png2svg-generic-85
 npm install
 ```
 
 ## CLI 用法
 
-通用 logo：
-
 ```bash
-node bin/png2svg-clean.mjs input.png output.svg \
-  --profile generic-clean-logo \
+node bin/png2svg-generic-85.mjs input.png output.svg \
   --optimized-png output.optimized.png \
   --preview output.preview.png
 ```
 
-BLS clean ribbon：
-
-```bash
-node bin/png2svg-clean.mjs input.png output.svg \
-  --profile bls-clean-ribbon \
-  --optimized-png output.optimized.png \
-  --preview output.preview.png
-```
-
-输出成功时会打印 JSON：
+成功时会打印 JSON：
 
 ```json
 {
-  "profile": "bls-clean-ribbon",
+  "profile": "generic-85",
   "input": "input.png",
   "output": "output.svg",
   "optimizedPng": "output.optimized.png",
@@ -60,18 +42,39 @@ node bin/png2svg-clean.mjs input.png output.svg \
 }
 ```
 
-## Profile 说明
+## 85 分参数
 
-`profiles/generic-clean-logo.json`：
+预处理：
 
-- 适合普通 logo。
-- 只做少色预处理和矢量化。
-- 不插入 BLS 飘带。
+```bash
+magick input.png \
+  -alpha off \
+  -fuzz 2% \
+  -fill white \
+  -opaque white \
+  -colors 8 \
+  -dither none \
+  output.optimized.png
+```
 
-`profiles/bls-clean-ribbon.json`：
+矢量化参数见：
 
-- 适合当前 BLS logo 尺寸和构图。
-- 会把原图里脏的浅蓝飘带先清掉。
-- 再插入一条干净 SVG 飘带 path。
+```text
+profiles/generic-85.json
+```
 
-注意：`bls-clean-ribbon` 里的飘带 path 是按 `1672x941` 这张 BLS 图调的。换尺寸或构图时，需要重新调整 path。
+## 适用边界
+
+适合：
+
+- logo
+- 图标
+- 扁平色块插画
+- 背景简单、颜色数量少的 PNG
+
+不适合：
+
+- 照片
+- 复杂渐变
+- 大量纹理
+- 原图文字已经模糊或错误的图片

@@ -17,7 +17,6 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const packageDir = resolve(__dirname, '..');
-const imageMagickCommand = process.env.IMAGE_MAGICK_PATH || process.env.MAGICK_PATH || 'magick';
 
 const enumMaps = {
   colorMode: ColorMode,
@@ -25,9 +24,13 @@ const enumMaps = {
   mode: PathSimplifyMode
 };
 
+const optimizePresetMap = {
+  Safe: OptimizePreset.Safe
+};
+
 function parseArgs(argv) {
   const options = {
-    profile: 'generic-clean-logo',
+    profile: 'generic-85',
     profileDir: join(packageDir, 'profiles'),
     preview: '',
     optimizedPng: '',
@@ -55,7 +58,7 @@ function parseArgs(argv) {
 
   if (positional.length !== 2 || !options.profile) {
     throw new Error(
-      'Usage: node bin/png2svg-clean.mjs input.png output.svg --profile bls-clean-ribbon [--preview output.png] [--optimized-png output.png]'
+      'Usage: node bin/png2svg-generic-85.mjs input.png output.svg [--optimized-png output.png] [--preview output.png]'
     );
   }
 
@@ -87,6 +90,18 @@ function normalizeVectorizerConfig(config) {
     }
   }
 
+  return normalized;
+}
+
+function normalizeOptimizeConfig(config = {}) {
+  const normalized = { ...config };
+  if (typeof normalized.preset === 'string') {
+    const preset = optimizePresetMap[normalized.preset];
+    if (preset === undefined) {
+      throw new Error(`Invalid optimize preset: ${normalized.preset}`);
+    }
+    normalized.preset = preset;
+  }
   return normalized;
 }
 
@@ -123,59 +138,36 @@ function buildMagickPreprocessArgs(inputPath, outputPath, profile) {
   if (preprocess.colors) args.push('-colors', String(preprocess.colors));
   if (preprocess.dither) args.push('-dither', preprocess.dither);
 
-  for (const replacement of preprocess.replacements ?? []) {
-    args.push('-fill', replacement.to, '-opaque', replacement.from);
-  }
-
   args.push(outputPath);
   return args;
 }
 
-function insertCleanRibbon(svg, cleanRibbon) {
-  if (!cleanRibbon) return svg;
-
-  const backgroundPattern = /<path fill="#(?:fff|ffffff|fefefe)" d="M0 0h1672v941H0Z"\/>/i;
-  const background = svg.match(backgroundPattern)?.[0];
-
-  if (!background) {
-    throw new Error('cleanRibbon requires SVG background path M0 0h1672v941H0Z');
-  }
-
-  const ribbonPath = `<path fill="${cleanRibbon.fill}" d="${cleanRibbon.path}"/>`;
-  return svg.replace(background, `${background}${ribbonPath}`);
-}
-
 async function vectorizeSvg(inputPath, outputPath, profile) {
   const image = await readFile(inputPath);
-  const config = normalizeVectorizerConfig(profile.vectorizer);
-  const rawSvg = await vectorize(image, config);
-  const optimizedSvg = await optimize(rawSvg, {
-    preset: OptimizePreset.Safe,
-    multipass: true,
-    multipassIterations: 3
-  });
-  const finalSvg = insertCleanRibbon(optimizedSvg, profile.postprocess?.cleanRibbon);
+  const rawSvg = await vectorize(image, normalizeVectorizerConfig(profile.vectorizer));
+  const optimizedSvg = await optimize(rawSvg, normalizeOptimizeConfig(profile.optimize));
   await ensureParentDir(outputPath);
-  await writeFile(outputPath, finalSvg, 'utf8');
+  await writeFile(outputPath, optimizedSvg, 'utf8');
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const { profile, profilePath } = await loadProfile(options);
-  const tempDir = await mkdtemp(join(tmpdir(), 'png2svg-clean-'));
+  const tempDir = await mkdtemp(join(tmpdir(), 'png2svg-generic-85-'));
   const optimizedPath = join(tempDir, 'source-optimized.png');
 
   try {
-    await runCommand(imageMagickCommand, buildMagickPreprocessArgs(options.inputPath, optimizedPath, profile));
+    await runCommand('magick', buildMagickPreprocessArgs(options.inputPath, optimizedPath, profile));
     await vectorizeSvg(optimizedPath, options.outputPath, profile);
 
     if (options.optimizedPng) {
       await ensureParentDir(options.optimizedPng);
-      await runCommand(imageMagickCommand, [optimizedPath, options.optimizedPng]);
+      await runCommand('magick', [optimizedPath, options.optimizedPng]);
     }
+
     if (options.preview) {
       await ensureParentDir(options.preview);
-      await runCommand(imageMagickCommand, ['-background', 'white', options.outputPath, options.preview]);
+      await runCommand('magick', ['-background', 'white', options.outputPath, options.preview]);
     }
 
     console.log(JSON.stringify({

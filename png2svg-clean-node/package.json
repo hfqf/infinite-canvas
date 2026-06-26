@@ -1,14 +1,14 @@
 {
-  "name": "png2svg-clean-node",
+  "name": "png2svg-generic-85",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Node CLI for clean PNG to SVG conversion used by Go services.",
+  "description": "Generic 85-point PNG to SVG conversion CLI for Go service integration.",
   "bin": {
-    "png2svg-clean": "./bin/png2svg-clean.mjs"
+    "png2svg-generic-85": "./bin/png2svg-generic-85.mjs"
   },
   "scripts": {
-    "convert": "node ./bin/png2svg-clean.mjs"
+    "convert": "node ./bin/png2svg-generic-85.mjs"
   },
   "dependencies": {
     "@neplex/vectorizer": "0.1.0"

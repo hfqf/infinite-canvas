@@ -1,5 +1,5 @@
 {
-  "name": "generic-clean-logo",
+  "name": "generic-85",
   "preprocess": {
     "alphaOff": true,
     "fuzz": "2%",
@@ -24,5 +24,9 @@
     "keyingThreshold": 0.3,
     "smallCircle": 2
   },
-  "postprocess": {}
+  "optimize": {
+    "preset": "Safe",
+    "multipass": true,
+    "multipassIterations": 3
+  }
 }

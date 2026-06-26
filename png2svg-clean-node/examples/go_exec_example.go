@@ -22,18 +22,16 @@ func main() {
 	toolDir := filepath.Dir(filepath.Dir(currentFile))
 	repoDir := filepath.Dir(filepath.Dir(toolDir))
 	inputPNG := filepath.Join(repoDir, "pngs", "bdf825e7c7e63eb5-canvas-image.png")
-	outputSVG := filepath.Join(repoDir, "outputs", "go-integration-example", "bls.svg")
-	optimizedPNG := filepath.Join(repoDir, "outputs", "go-integration-example", "bls.optimized.png")
-	previewPNG := filepath.Join(repoDir, "outputs", "go-integration-example", "bls.preview.png")
+	outputSVG := filepath.Join(repoDir, "outputs", "go-generic-85-example", "result.svg")
+	optimizedPNG := filepath.Join(repoDir, "outputs", "go-generic-85-example", "result.optimized.png")
+	previewPNG := filepath.Join(repoDir, "outputs", "go-generic-85-example", "result.preview.png")
 
 	cmd := exec.CommandContext(
 		ctx,
 		"node",
-		"bin/png2svg-clean.mjs",
+		"bin/png2svg-generic-85.mjs",
 		inputPNG,
 		outputSVG,
-		"--profile",
-		"bls-clean-ribbon",
 		"--optimized-png",
 		optimizedPNG,
 		"--preview",

@@ -1,43 +1,41 @@
 # Go 工程集成文档
 
-## 推荐集成方式
+## 推荐方式
 
-Go 不重写矢量化算法，只调用本目录的 Node CLI：
+Go 工程不重写矢量化算法，直接调用这个 Node CLI：
 
 ```text
 Go service
-  -> exec node bin/png2svg-clean.mjs
-  -> Node CLI 调 magick 预处理
-  -> Node CLI 调 @neplex/vectorizer
-  -> Node CLI 做 SVG 后处理
+  -> exec node bin/png2svg-generic-85.mjs
+  -> CLI 调 ImageMagick 做通用预处理
+  -> CLI 调 @neplex/vectorizer 生成 SVG
   -> Go 读取 output.svg
 ```
 
 ## 目录放置
 
-可以把整个 `png2svg-clean-node` 文件夹复制到 Go 工程，例如：
+建议复制整个目录到 Go 工程：
 
 ```text
 your-go-project/
   tools/
-    png2svg-clean-node/
+    png2svg-generic-85/
       package.json
-      bin/png2svg-clean.mjs
+      package-lock.json
+      bin/
       profiles/
       README.md
       GO_INTEGRATION.md
-  internal/
-  cmd/
 ```
 
 安装依赖：
 
 ```bash
-cd tools/png2svg-clean-node
+cd tools/png2svg-generic-85
 npm install
 ```
 
-服务器上还需要安装 ImageMagick：
+服务器还需要 ImageMagick：
 
 ```bash
 magick -version
@@ -53,6 +51,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 )
 
 type Result struct {
@@ -61,18 +60,17 @@ type Result struct {
 	PreviewPNG   string
 }
 
-func ConvertBLSLogo(ctx context.Context, toolDir, inputPNG, outputSVG string) (Result, error) {
-	optimizedPNG := outputSVG[:len(outputSVG)-4] + ".optimized.png"
-	previewPNG := outputSVG[:len(outputSVG)-4] + ".preview.png"
+func ConvertPNGToSVG(ctx context.Context, toolDir, inputPNG, outputSVG string) (Result, error) {
+	base := strings.TrimSuffix(outputSVG, ".svg")
+	optimizedPNG := base + ".optimized.png"
+	previewPNG := base + ".preview.png"
 
 	cmd := exec.CommandContext(
 		ctx,
 		"node",
-		"bin/png2svg-clean.mjs",
+		"bin/png2svg-generic-85.mjs",
 		inputPNG,
 		outputSVG,
-		"--profile",
-		"bls-clean-ribbon",
 		"--optimized-png",
 		optimizedPNG,
 		"--preview",
@@ -84,7 +82,7 @@ func ConvertBLSLogo(ctx context.Context, toolDir, inputPNG, outputSVG string) (R
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return Result{}, fmt.Errorf("png2svg clean failed: %w: %s", err, stderr.String())
+		return Result{}, fmt.Errorf("png2svg generic 85 failed: %w: %s", err, stderr.String())
 	}
 
 	return Result{
@@ -95,48 +93,15 @@ func ConvertBLSLogo(ctx context.Context, toolDir, inputPNG, outputSVG string) (R
 }
 ```
 
-调用：
-
-```go
-result, err := ConvertBLSLogo(
-	ctx,
-	"tools/png2svg-clean-node",
-	"/absolute/path/input.png",
-	"/absolute/path/output.svg",
-)
-```
-
-## Profile 选择
-
-普通 logo：
-
-```text
---profile generic-clean-logo
-```
-
-当前 BLS 图：
-
-```text
---profile bls-clean-ribbon
-```
-
-## 部署检查清单
-
-上线前确认：
+## 部署检查
 
 ```bash
 node -v
 magick -version
-cd tools/png2svg-clean-node && npm install
-node bin/png2svg-clean.mjs sample.png sample.svg --profile generic-clean-logo
+cd tools/png2svg-generic-85 && npm install
+node bin/png2svg-generic-85.mjs sample.png sample.svg --preview sample.preview.png
 ```
 
-## 错误处理建议
+## 注意
 
-Go 层建议：
-
-- 给 `exec.CommandContext` 设置超时。
-- 捕获 stderr 并写入业务日志。
-- 对上传 PNG 做大小限制。
-- 对输出 SVG 做存在性和大小检查。
-- 如果 profile 是 `bls-clean-ribbon`，只用于同类 BLS 构图，不要泛用到其它 logo。
+这是通用 85 分方案，不包含任何针对单张图片的路径补丁。复杂渐变、纹理背景、小字模糊的图片仍然需要源图预处理质量配合。
