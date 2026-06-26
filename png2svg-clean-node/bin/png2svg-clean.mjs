@@ -17,6 +17,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const packageDir = resolve(__dirname, '..');
+const imageMagickCommand = process.env.IMAGE_MAGICK_PATH || process.env.MAGICK_PATH || 'magick';
 
 const enumMaps = {
   colorMode: ColorMode,
@@ -165,16 +166,16 @@ async function main() {
   const optimizedPath = join(tempDir, 'source-optimized.png');
 
   try {
-    await runCommand('magick', buildMagickPreprocessArgs(options.inputPath, optimizedPath, profile));
+    await runCommand(imageMagickCommand, buildMagickPreprocessArgs(options.inputPath, optimizedPath, profile));
     await vectorizeSvg(optimizedPath, options.outputPath, profile);
 
     if (options.optimizedPng) {
       await ensureParentDir(options.optimizedPng);
-      await runCommand('magick', [optimizedPath, options.optimizedPng]);
+      await runCommand(imageMagickCommand, [optimizedPath, options.optimizedPng]);
     }
     if (options.preview) {
       await ensureParentDir(options.preview);
-      await runCommand('magick', ['-background', 'white', options.outputPath, options.preview]);
+      await runCommand(imageMagickCommand, ['-background', 'white', options.outputPath, options.preview]);
     }
 
     console.log(JSON.stringify({

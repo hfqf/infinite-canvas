@@ -5,19 +5,12 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"image"
-	"image/color"
-	"image/png"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -27,33 +20,7 @@ import (
 const (
 	vectorizeMaxInputBytes = 40 << 20
 	vectorizeMimeType      = "image/svg+xml"
-	logoLayerExcludeRadius = 2
-	logoSmallMaxWidth      = 300
-	logoSmallMaxHeight     = 300
-	logoSmallMaxArea       = 40000
-	logoPotraceScale       = 4
 )
-
-var svgFillHexPattern = regexp.MustCompile(`fill="#([0-9A-Fa-f]{6})"`)
-var svgPathPattern = regexp.MustCompile(`(?s)<path\b[^>]*>`)
-var svgGroupPattern = regexp.MustCompile(`(?s)<g\b.*</g>`)
-
-type logoPaletteColor struct {
-	Count int
-	R     int
-	G     int
-	B     int
-	Hex   string
-}
-
-type logoColorLayer struct {
-	Colors []logoPaletteColor
-	R      int
-	G      int
-	B      int
-	Hex    string
-	Count  int
-}
 
 type VectorizeInput struct {
 	ImageURL string `json:"imageUrl"`
@@ -87,44 +54,23 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 		return VectorizeResult{}, err
 	}
 
-	timeout := time.Duration(config.Cfg.VTracerTimeoutSec) * time.Second
+	timeout := time.Duration(config.Cfg.Png2SVGCleanTimeoutSec) * time.Second
 	if timeout <= 0 {
 		timeout = 90 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	if shouldUseColorMaskVectorize(input.Mode) {
-		if err := vectorizeColorMaskImage(ctx, tempDir, inputPath, outputPath); err != nil {
-			return VectorizeResult{}, err
-		}
-	} else {
-		args := vectorizeArgs(inputPath, outputPath)
-		vtracerPath := strings.TrimSpace(config.Cfg.VTracerPath)
-		if vtracerPath == "" {
-			vtracerPath = "vtracer"
-		}
-		cmd := exec.CommandContext(ctx, vtracerPath, args...)
-		if output, err := cmd.CombinedOutput(); err != nil {
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				return VectorizeResult{}, safeMessageError{message: "VTracer 转换超时，请稍后重试"}
-			}
-			if _, lookErr := exec.LookPath(vtracerPath); lookErr != nil {
-				return VectorizeResult{}, safeMessageError{message: "后端未安装 VTracer，请配置 VTRACER_PATH"}
-			}
-			return VectorizeResult{}, fmt.Errorf("vtracer failed: %w: %s", err, strings.TrimSpace(string(output)))
-		}
+	if err := runPng2SVGClean(ctx, inputPath, outputPath); err != nil {
+		return VectorizeResult{}, err
 	}
 
 	svg, err := os.ReadFile(outputPath)
 	if err != nil {
 		return VectorizeResult{}, err
 	}
-	if isLogoVectorizeMode(input.Mode) {
-		svg = normalizeLogoSVG(svg)
-	}
 	if !strings.Contains(strings.ToLower(string(svg[:min(len(svg), 512)])), "<svg") {
-		return VectorizeResult{}, safeMessageError{message: "VTracer 没有生成有效 SVG"}
+		return VectorizeResult{}, safeMessageError{message: "转 SVG 工具没有生成有效 SVG"}
 	}
 	width, height := readSVGSizeText(string(svg))
 	return VectorizeResult{
@@ -137,644 +83,60 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 	}, nil
 }
 
-func vectorizeArgs(inputPath string, outputPath string) []string {
-	args := []string{
-		"--input", inputPath,
-		"--output", outputPath,
-		"--preset", "poster",
-		"--mode", "spline",
-		"--colormode", "color",
+func runPng2SVGClean(ctx context.Context, inputPath string, outputPath string) error {
+	nodePath := strings.TrimSpace(config.Cfg.Png2SVGCleanNodePath)
+	if nodePath == "" {
+		nodePath = "node"
 	}
-	return append(args,
-		"--hierarchical", "stacked",
-		"--filter_speckle", "4",
-		"--color_precision", "6",
-		"--gradient_step", "16",
-		"--corner_threshold", "60",
-		"--segment_length", "4",
-		"--splice_threshold", "45",
-		"--path_precision", "3",
-	)
+	toolDir, err := resolvePng2SVGCleanToolDir()
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, nodePath, png2SVGCleanArgs(inputPath, outputPath)...)
+	cmd.Dir = toolDir
+	if output, err := cmd.CombinedOutput(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return safeMessageError{message: "转 SVG 超时，请稍后重试"}
+		}
+		if _, lookErr := exec.LookPath(nodePath); lookErr != nil {
+			return safeMessageError{message: "后端未安装 Node.js，请配置 PNG2SVG_CLEAN_NODE_PATH"}
+		}
+		return fmt.Errorf("png2svg clean failed: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
-func isLogoVectorizeMode(mode string) bool {
-	return strings.EqualFold(strings.TrimSpace(mode), "logo")
+func png2SVGCleanArgs(inputPath string, outputPath string) []string {
+	profile := strings.TrimSpace(config.Cfg.Png2SVGCleanProfile)
+	if profile == "" {
+		profile = "generic-clean-logo"
+	}
+	return []string{
+		"bin/png2svg-clean.mjs",
+		inputPath,
+		outputPath,
+		"--profile",
+		profile,
+	}
 }
 
-func shouldUseColorMaskVectorize(mode string) bool {
-	mode = strings.TrimSpace(strings.ToLower(mode))
-	return mode == "" || mode == "general" || mode == "logo" || mode == "colormask" || mode == "color-mask"
+func resolvePng2SVGCleanToolDir() (string, error) {
+	toolDir := strings.TrimSpace(config.Cfg.Png2SVGCleanToolDir)
+	if toolDir == "" {
+		toolDir = "png2svg-clean-node"
+	}
+	if filepath.IsAbs(toolDir) {
+		return toolDir, nil
+	}
+	absolute, err := filepath.Abs(toolDir)
+	if err != nil {
+		return "", err
+	}
+	return absolute, nil
 }
 
 func vectorizeEngine(mode string) string {
-	if shouldUseColorMaskVectorize(mode) {
-		return "colorMask"
-	}
-	return "vtracer"
-}
-
-func vectorizeLogoImage(ctx context.Context, tempDir string, inputPath string, outputPath string) error {
-	return vectorizeLogoGrayStraightImage(ctx, tempDir, inputPath, outputPath)
-}
-
-func vectorizeLogoGrayStraightImage(ctx context.Context, tempDir string, inputPath string, outputPath string) error {
-	imageMagickPath, err := resolveImageMagickPath()
-	if err != nil {
-		return err
-	}
-	vtracerPath := strings.TrimSpace(config.Cfg.VTracerPath)
-	if vtracerPath == "" {
-		vtracerPath = "vtracer"
-	}
-	if _, err := exec.LookPath(vtracerPath); err != nil {
-		return safeMessageError{message: "后端未安装 VTracer，请配置 VTRACER_PATH"}
-	}
-	mkbitmapPath, err := resolveRequiredCommand("mkbitmap", "后端未安装 mkbitmap，请安装 potrace")
-	if err != nil {
-		return err
-	}
-	potracePath, err := resolveRequiredCommand("potrace", "后端未安装 potrace，请安装 potrace")
-	if err != nil {
-		return err
-	}
-
-	quantizedPath := filepath.Join(tempDir, "logo-quantized.png")
-	if err := preprocessLogoImage(ctx, imageMagickPath, inputPath, quantizedPath); err != nil {
-		return err
-	}
-	palette, err := readLogoPalette(ctx, imageMagickPath, quantizedPath)
-	if err != nil {
-		return err
-	}
-	layers := buildLogoColorLayers(palette)
-	if len(layers) == 0 {
-		return safeMessageError{message: "Logo 图片没有可追踪的有效色块"}
-	}
-
-	width, height, err := readPNGSize(quantizedPath)
-	if err != nil {
-		return err
-	}
-	graySourcePath := filepath.Join(tempDir, "logo-source-gray.pgm")
-	if err := createLogoGraySource(ctx, imageMagickPath, inputPath, width, height, graySourcePath); err != nil {
-		return err
-	}
-	sort.SliceStable(layers, func(i, j int) bool {
-		return logoLuma(layers[i].R, layers[i].G, layers[i].B) > logoLuma(layers[j].R, layers[j].G, layers[j].B)
-	})
-	detailFill := layers[len(layers)-1].Hex
-
-	var body strings.Builder
-	body.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
-	body.WriteString(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">`, width, height, width, height) + "\n")
-	body.WriteString(`<rect width="100%" height="100%" fill="#FFFFFF"/>` + "\n")
-	smallMaskPaths := make([]string, 0, len(layers))
-	for index, layer := range layers {
-		maskPath := filepath.Join(tempDir, fmt.Sprintf("logo-layer-%d.png", index))
-		if err := createLogoGrayStraightLayerMask(ctx, imageMagickPath, quantizedPath, layer.Colors, darkerLogoLayerColors(layers[index+1:]), maskPath); err != nil {
-			return err
-		}
-		if index < len(layers)-1 {
-			layerSVGPath := filepath.Join(tempDir, fmt.Sprintf("logo-layer-%d.svg", index))
-			if err := runLogoLayerVTracer(ctx, vtracerPath, maskPath, layerSVGPath); err != nil {
-				return err
-			}
-			paths, err := readLogoLayerPaths(layerSVGPath, layer.Hex)
-			if err != nil {
-				return err
-			}
-			body.WriteString(paths)
-			continue
-		}
-		largeMaskPath := filepath.Join(tempDir, fmt.Sprintf("logo-layer-%d-large.png", index))
-		smallMaskPath := filepath.Join(tempDir, fmt.Sprintf("logo-layer-%d-small.png", index))
-		hasLarge, hasSmall, err := splitLogoLayerComponents(maskPath, largeMaskPath, smallMaskPath)
-		if err != nil {
-			return err
-		}
-		if hasLarge {
-			layerSVGPath := filepath.Join(tempDir, fmt.Sprintf("logo-layer-%d-large.svg", index))
-			if err := runLogoLayerVTracer(ctx, vtracerPath, largeMaskPath, layerSVGPath); err != nil {
-				return err
-			}
-			paths, err := readLogoLayerPaths(layerSVGPath, layer.Hex)
-			if err != nil {
-				return err
-			}
-			body.WriteString(paths)
-		}
-		if hasSmall {
-			smallMaskPaths = append(smallMaskPaths, smallMaskPath)
-		}
-	}
-	if len(smallMaskPaths) > 0 {
-		smallMaskPath := filepath.Join(tempDir, "logo-small-mask.png")
-		smallGrayPath := filepath.Join(tempDir, "logo-small-gray.pgm")
-		smallSVGPath := filepath.Join(tempDir, "logo-small.svg")
-		if err := mergeLogoSmallMasks(ctx, imageMagickPath, smallMaskPaths, width, height, smallMaskPath); err != nil {
-			return err
-		}
-		if err := createLogoSmallGraySource(ctx, imageMagickPath, graySourcePath, smallMaskPath, smallGrayPath); err != nil {
-			return err
-		}
-		if err := runLogoSmallPotraceStraight(ctx, mkbitmapPath, potracePath, smallGrayPath, smallSVGPath, detailFill); err != nil {
-			return err
-		}
-		group, err := readLogoPotraceGroup(smallSVGPath, detailFill, logoPotraceScale)
-		if err != nil {
-			return err
-		}
-		body.WriteString(group)
-	}
-	body.WriteString("</svg>\n")
-	return os.WriteFile(outputPath, []byte(body.String()), 0o600)
-}
-
-func preprocessLogoImage(ctx context.Context, imageMagickPath string, inputPath string, outputPath string) error {
-	maxColors := config.Cfg.LogoVectorizeColors
-	if maxColors < 2 {
-		maxColors = 2
-	}
-	if maxColors > 24 {
-		maxColors = 24
-	}
-	args := []string{
-		inputPath,
-		"-auto-orient",
-		"-background", "white",
-		"-alpha", "remove",
-		"-alpha", "off",
-		// Point resize creates stair-step logo edges that VTracer preserves as jagged paths.
-		"-filter", "Lanczos",
-		"-resize", "400%",
-		"-resize", "4096x4096>",
-		"-colorspace", "sRGB",
-		"-fuzz", "3%",
-		"-fill", "white",
-		"-opaque", "white",
-		"-colors", strconv.Itoa(maxColors),
-		"-dither", "none",
-		"-strip",
-		outputPath,
-	}
-	cmd := exec.CommandContext(ctx, imageMagickPath, args...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return safeMessageError{message: "Logo 图片预处理超时，请稍后重试"}
-		}
-		return fmt.Errorf("imagemagick failed: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	return nil
-}
-
-func createLogoGraySource(ctx context.Context, imageMagickPath string, inputPath string, width int, height int, outputPath string) error {
-	args := []string{
-		inputPath,
-		"-auto-orient",
-		"-background", "white",
-		"-alpha", "remove",
-		"-alpha", "off",
-		"-resize", fmt.Sprintf("%dx%d!", width, height),
-		"-colorspace", "Gray",
-		outputPath,
-	}
-	cmd := exec.CommandContext(ctx, imageMagickPath, args...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return safeMessageError{message: "Logo 灰度源生成超时，请稍后重试"}
-		}
-		return fmt.Errorf("imagemagick gray source failed: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	return nil
-}
-
-func readLogoPalette(ctx context.Context, imageMagickPath string, imagePath string) ([]logoPaletteColor, error) {
-	cmd := exec.CommandContext(ctx, imageMagickPath, imagePath, "-format", "%c", "-depth", "8", "histogram:info:-")
-	output, err := cmd.Output()
-	if err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return nil, safeMessageError{message: "Logo 图片取色超时，请稍后重试"}
-		}
-		return nil, err
-	}
-	lines := strings.Split(string(output), "\n")
-	pattern := regexp.MustCompile(`^\s*(\d+):\s+\((\d+),(\d+),(\d+)`)
-	colors := make([]logoPaletteColor, 0, len(lines))
-	for _, line := range lines {
-		match := pattern.FindStringSubmatch(line)
-		if len(match) != 5 {
-			continue
-		}
-		count, _ := strconv.Atoi(match[1])
-		r, _ := strconv.Atoi(match[2])
-		g, _ := strconv.Atoi(match[3])
-		b, _ := strconv.Atoi(match[4])
-		colors = append(colors, logoPaletteColor{
-			Count: count,
-			R:     r,
-			G:     g,
-			B:     b,
-			Hex:   fmt.Sprintf("#%02X%02X%02X", r, g, b),
-		})
-	}
-	sort.SliceStable(colors, func(i, j int) bool {
-		return colors[i].Count > colors[j].Count
-	})
-	return colors, nil
-}
-
-func buildLogoColorLayers(colors []logoPaletteColor) []logoColorLayer {
-	layers := make([]logoColorLayer, 0, len(colors))
-	for _, color := range colors {
-		if isLogoBackgroundColor(color.R, color.G, color.B) {
-			continue
-		}
-		nearestIndex := -1
-		nearestDistance := math.MaxFloat64
-		for index, layer := range layers {
-			distance := logoColorDistance(color.R, color.G, color.B, layer.R, layer.G, layer.B)
-			if distance < nearestDistance {
-				nearestDistance = distance
-				nearestIndex = index
-			}
-		}
-		if nearestIndex >= 0 && nearestDistance <= 96 {
-			layer := &layers[nearestIndex]
-			layer.Colors = append(layer.Colors, color)
-			layer.Count += color.Count
-			continue
-		}
-		layers = append(layers, logoColorLayer{
-			Colors: []logoPaletteColor{color},
-			R:      color.R,
-			G:      color.G,
-			B:      color.B,
-			Hex:    color.Hex,
-			Count:  color.Count,
-		})
-	}
-	return layers
-}
-
-func darkerLogoLayerColors(layers []logoColorLayer) []logoPaletteColor {
-	colors := make([]logoPaletteColor, 0, len(layers))
-	for _, layer := range layers {
-		colors = append(colors, layer.Colors...)
-	}
-	return colors
-}
-
-func splitLogoLayerComponents(inputPath string, largePath string, smallPath string) (bool, bool, error) {
-	file, err := os.Open(inputPath)
-	if err != nil {
-		return false, false, err
-	}
-	defer file.Close()
-	img, _, err := image.Decode(file)
-	if err != nil {
-		return false, false, err
-	}
-	bounds := img.Bounds()
-	width := bounds.Dx()
-	height := bounds.Dy()
-	visited := make([]bool, width*height)
-	large := image.NewRGBA(image.Rect(0, 0, width, height))
-	small := image.NewRGBA(image.Rect(0, 0, width, height))
-	white := color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	black := color.RGBA{A: 255}
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			large.Set(x, y, white)
-			small.Set(x, y, white)
-		}
-	}
-	hasLarge := false
-	hasSmall := false
-	queue := make([]image.Point, 0, 1024)
-	component := make([]image.Point, 0, 1024)
-	directions := [...]image.Point{{X: 1}, {X: -1}, {Y: 1}, {Y: -1}}
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			index := y*width + x
-			if visited[index] || !isLogoMaskPixel(img.At(bounds.Min.X+x, bounds.Min.Y+y)) {
-				continue
-			}
-			visited[index] = true
-			queue = append(queue[:0], image.Point{X: x, Y: y})
-			component = component[:0]
-			minX, maxX, minY, maxY := x, x, y, y
-			for len(queue) > 0 {
-				point := queue[len(queue)-1]
-				queue = queue[:len(queue)-1]
-				component = append(component, point)
-				if point.X < minX {
-					minX = point.X
-				}
-				if point.X > maxX {
-					maxX = point.X
-				}
-				if point.Y < minY {
-					minY = point.Y
-				}
-				if point.Y > maxY {
-					maxY = point.Y
-				}
-				for _, direction := range directions {
-					next := image.Point{X: point.X + direction.X, Y: point.Y + direction.Y}
-					if next.X < 0 || next.X >= width || next.Y < 0 || next.Y >= height {
-						continue
-					}
-					nextIndex := next.Y*width + next.X
-					if visited[nextIndex] || !isLogoMaskPixel(img.At(bounds.Min.X+next.X, bounds.Min.Y+next.Y)) {
-						continue
-					}
-					visited[nextIndex] = true
-					queue = append(queue, next)
-				}
-			}
-			target := large
-			if maxX-minX+1 <= logoSmallMaxWidth && maxY-minY+1 <= logoSmallMaxHeight && len(component) <= logoSmallMaxArea {
-				target = small
-				hasSmall = true
-			} else {
-				hasLarge = true
-			}
-			for _, point := range component {
-				target.Set(point.X, point.Y, black)
-			}
-		}
-	}
-	if err := writePNG(largePath, large); err != nil {
-		return false, false, err
-	}
-	if err := writePNG(smallPath, small); err != nil {
-		return false, false, err
-	}
-	return hasLarge, hasSmall, nil
-}
-
-func isLogoMaskPixel(c color.Color) bool {
-	r, g, b, _ := c.RGBA()
-	return r < 0x8000 && g < 0x8000 && b < 0x8000
-}
-
-func writePNG(path string, img image.Image) error {
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	return png.Encode(file, img)
-}
-
-func createLogoGrayStraightLayerMask(ctx context.Context, imageMagickPath string, inputPath string, colors []logoPaletteColor, excludeColors []logoPaletteColor, outputPath string) error {
-	const maskMarkerColor = "#010203"
-	args := []string{inputPath}
-	for _, color := range colors {
-		args = append(args, "-fill", maskMarkerColor, "-opaque", color.Hex)
-	}
-	args = append(args,
-		"-fill", "white", "+opaque", maskMarkerColor,
-		"-fill", "black", "-opaque", maskMarkerColor,
-		"-type", "bilevel",
-		"-strip",
-		outputPath,
-	)
-	cmd := exec.CommandContext(ctx, imageMagickPath, args...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return safeMessageError{message: "Logo 色层清理超时，请稍后重试"}
-		}
-		return fmt.Errorf("imagemagick gray-straight mask failed: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	if len(excludeColors) > 0 {
-		excludePath := strings.TrimSuffix(outputPath, filepath.Ext(outputPath)) + "-exclude.png"
-		args = []string{inputPath}
-		for _, color := range excludeColors {
-			args = append(args, "-fill", maskMarkerColor, "-opaque", color.Hex)
-		}
-		args = append(args,
-			"-fill", "black", "+opaque", maskMarkerColor,
-			"-fill", "white", "-opaque", maskMarkerColor,
-			"-type", "bilevel",
-			"-morphology", "Dilate", fmt.Sprintf("Disk:%d", logoLayerExcludeRadius),
-			"-strip",
-			excludePath,
-		)
-		cmd = exec.CommandContext(ctx, imageMagickPath, args...)
-		if output, err := cmd.CombinedOutput(); err != nil {
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				return safeMessageError{message: "Logo 色层贴边清理超时，请稍后重试"}
-			}
-			return fmt.Errorf("imagemagick gray-straight exclude mask failed: %w: %s", err, strings.TrimSpace(string(output)))
-		}
-		cmd = exec.CommandContext(ctx, imageMagickPath, outputPath, excludePath, "-compose", "Lighten", "-composite", "-type", "bilevel", outputPath)
-		if output, err := cmd.CombinedOutput(); err != nil {
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				return safeMessageError{message: "Logo 色层贴边清理超时，请稍后重试"}
-			}
-			return fmt.Errorf("imagemagick gray-straight exclude composite failed: %w: %s", err, strings.TrimSpace(string(output)))
-		}
-	}
-	cmd = exec.CommandContext(ctx, imageMagickPath, outputPath, "-morphology", "Close", "Disk:1", "-morphology", "Open", "Disk:1", "-blur", "0x1.2", "-threshold", "47%", "-type", "bilevel", outputPath)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return safeMessageError{message: "Logo 色层几何平滑超时，请稍后重试"}
-		}
-		return fmt.Errorf("imagemagick gray-straight smooth mask failed: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	return nil
-}
-
-func createLogoSmallGraySource(ctx context.Context, imageMagickPath string, graySourcePath string, maskPath string, outputPath string) error {
-	expandedMaskPath := strings.TrimSuffix(outputPath, filepath.Ext(outputPath)) + "-mask.png"
-	alphaPath := strings.TrimSuffix(outputPath, filepath.Ext(outputPath)) + "-alpha.png"
-	cmd := exec.CommandContext(ctx, imageMagickPath, maskPath, "-negate", "-morphology", "Dilate", "Disk:2", "-negate", expandedMaskPath)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return safeMessageError{message: "Logo 小组件遮罩扩展超时，请稍后重试"}
-		}
-		return fmt.Errorf("imagemagick small mask failed: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	cmd = exec.CommandContext(ctx, imageMagickPath, expandedMaskPath, "-negate", alphaPath)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return safeMessageError{message: "Logo 小组件遮罩扩展超时，请稍后重试"}
-		}
-		return fmt.Errorf("imagemagick small alpha failed: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	cmd = exec.CommandContext(ctx, imageMagickPath, graySourcePath, alphaPath, "-alpha", "off", "-compose", "CopyOpacity", "-composite", "-background", "white", "-alpha", "remove", outputPath)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return safeMessageError{message: "Logo 小组件灰度源生成超时，请稍后重试"}
-		}
-		return fmt.Errorf("imagemagick small gray failed: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	return nil
-}
-
-func mergeLogoSmallMasks(ctx context.Context, imageMagickPath string, maskPaths []string, width int, height int, outputPath string) error {
-	args := []string{"-size", fmt.Sprintf("%dx%d", width, height), "xc:white"}
-	for _, maskPath := range maskPaths {
-		args = append(args, maskPath, "-compose", "Darken", "-composite")
-	}
-	args = append(args, "-type", "bilevel", outputPath)
-	cmd := exec.CommandContext(ctx, imageMagickPath, args...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return safeMessageError{message: "Logo 小组件遮罩合并超时，请稍后重试"}
-		}
-		return fmt.Errorf("imagemagick small mask merge failed: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	return nil
-}
-
-func runLogoSmallPotraceStraight(ctx context.Context, mkbitmapPath string, potracePath string, inputPath string, outputPath string, fill string) error {
-	bitmapPath := strings.TrimSuffix(outputPath, filepath.Ext(outputPath)) + ".pbm"
-	args := []string{"-x", "-n", "-s", strconv.Itoa(logoPotraceScale), "-3", "-t", "0.57", "-o", bitmapPath, inputPath}
-	cmd := exec.CommandContext(ctx, mkbitmapPath, args...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return safeMessageError{message: "mkbitmap 小组件转换超时，请稍后重试"}
-		}
-		return fmt.Errorf("mkbitmap failed: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	args = []string{bitmapPath, "-s", "--group", "--flat", "-t", "10", "-a", "0.60", "-O", "0.95", "-u", "20", "-C", fill, "-o", outputPath}
-	cmd = exec.CommandContext(ctx, potracePath, args...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return safeMessageError{message: "potrace 小组件描摹超时，请稍后重试"}
-		}
-		return fmt.Errorf("potrace failed: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	return nil
-}
-
-func runLogoLayerVTracer(ctx context.Context, vtracerPath string, inputPath string, outputPath string) error {
-	args := []string{
-		"--input", inputPath,
-		"--output", outputPath,
-		"--preset", "bw",
-		"--mode", "spline",
-		"--colormode", "bw",
-		"--filter_speckle", "16",
-		"--corner_threshold", "80",
-		"--segment_length", "8",
-		"--splice_threshold", "75",
-		"--path_precision", "3",
-	}
-	cmd := exec.CommandContext(ctx, vtracerPath, args...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return safeMessageError{message: "VTracer 转换超时，请稍后重试"}
-		}
-		return fmt.Errorf("vtracer layer failed: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	return nil
-}
-
-func readLogoLayerPaths(svgPath string, fill string) (string, error) {
-	data, err := os.ReadFile(svgPath)
-	if err != nil {
-		return "", err
-	}
-	matches := svgPathPattern.FindAllString(string(data), -1)
-	if len(matches) == 0 {
-		return "", nil
-	}
-	var body strings.Builder
-	body.WriteString(fmt.Sprintf(`<g fill="%s">`, fill) + "\n")
-	for _, path := range matches {
-		path = svgFillHexPattern.ReplaceAllString(path, fmt.Sprintf(`fill="%s"`, fill))
-		body.WriteString(path)
-		body.WriteString("\n")
-	}
-	body.WriteString("</g>\n")
-	return body.String(), nil
-}
-
-func readLogoPotraceGroup(svgPath string, fill string, scale int) (string, error) {
-	data, err := os.ReadFile(svgPath)
-	if err != nil {
-		return "", err
-	}
-	group := svgGroupPattern.FindString(string(data))
-	if group == "" {
-		return "", nil
-	}
-	group = svgFillHexPattern.ReplaceAllString(group, fmt.Sprintf(`fill="%s"`, fill))
-	return fmt.Sprintf(`<g transform="scale(%.10f)">`, 1/float64(scale)) + "\n" + group + "\n</g>\n", nil
-}
-
-func readPNGSize(imagePath string) (int, int, error) {
-	file, err := os.Open(imagePath)
-	if err != nil {
-		return 0, 0, err
-	}
-	defer file.Close()
-	config, _, err := image.DecodeConfig(file)
-	if err != nil {
-		return 0, 0, err
-	}
-	return config.Width, config.Height, nil
-}
-
-func isLogoBackgroundColor(r int, g int, b int) bool {
-	maxChannel := max(r, max(g, b))
-	minChannel := min(r, min(g, b))
-	return r >= 248 && g >= 248 && b >= 248 || logoLuma(r, g, b) >= 235 && maxChannel-minChannel <= 35
-}
-
-func logoColorDistance(r1 int, g1 int, b1 int, r2 int, g2 int, b2 int) float64 {
-	dr := float64(r1 - r2)
-	dg := float64(g1 - g2)
-	db := float64(b1 - b2)
-	return math.Sqrt(dr*dr + dg*dg + db*db)
-}
-
-func logoLuma(r int, g int, b int) float64 {
-	return 0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(b)
-}
-
-func normalizeLogoSVG(svg []byte) []byte {
-	return []byte(svgFillHexPattern.ReplaceAllStringFunc(string(svg), func(token string) string {
-		hex := token[len(`fill="#`) : len(token)-1]
-		rgb, err := strconv.ParseUint(hex, 16, 32)
-		if err != nil {
-			return token
-		}
-		r := uint8(rgb >> 16)
-		g := uint8(rgb >> 8)
-		b := uint8(rgb)
-		if r >= 248 && g >= 248 && b >= 248 {
-			return `fill="#FFFFFF"`
-		}
-		return token
-	}))
-}
-
-func resolveImageMagickPath() (string, error) {
-	if configured := strings.TrimSpace(config.Cfg.ImageMagickPath); configured != "" {
-		if _, err := exec.LookPath(configured); err != nil {
-			return "", safeMessageError{message: "后端未找到 ImageMagick，请检查 IMAGE_MAGICK_PATH"}
-		}
-		return configured, nil
-	}
-	if path, err := exec.LookPath("magick"); err == nil {
-		return path, nil
-	}
-	if path, err := exec.LookPath("convert"); err == nil {
-		return path, nil
-	}
-	return "", safeMessageError{message: "后端未安装 ImageMagick，无法执行 Logo 高清放大和限色清理"}
-}
-
-func resolveRequiredCommand(name string, message string) (string, error) {
-	path, err := exec.LookPath(name)
-	if err != nil {
-		return "", safeMessageError{message: message}
-	}
-	return path, nil
+	return "png2svg-clean-node"
 }
 
 func readVectorizeInput(input VectorizeInput) ([]byte, string, error) {

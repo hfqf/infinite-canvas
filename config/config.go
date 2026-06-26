@@ -27,10 +27,10 @@ type Config struct {
 	AliyunOSSAccessKeySecret     string `env:"ALIYUN_OSS_ACCESS_KEY_SECRET"`
 	AliyunOSSPublicBaseURL       string `env:"ALIYUN_OSS_PUBLIC_BASE_URL"`
 	PublicBaseURL                string `env:"PUBLIC_BASE_URL"`
-	VTracerPath                  string `env:"VTRACER_PATH" envDefault:"vtracer"`
-	VTracerTimeoutSec            int    `env:"VTRACER_TIMEOUT_SEC" envDefault:"90"`
-	LogoVectorizeColors          int    `env:"LOGO_VECTORIZE_COLORS" envDefault:"12"`
-	ImageMagickPath              string `env:"IMAGE_MAGICK_PATH"`
+	Png2SVGCleanToolDir          string `env:"PNG2SVG_CLEAN_TOOL_DIR" envDefault:"png2svg-clean-node"`
+	Png2SVGCleanNodePath         string `env:"PNG2SVG_CLEAN_NODE_PATH" envDefault:"node"`
+	Png2SVGCleanProfile          string `env:"PNG2SVG_CLEAN_PROFILE" envDefault:"generic-clean-logo"`
+	Png2SVGCleanTimeoutSec       int    `env:"PNG2SVG_CLEAN_TIMEOUT_SEC" envDefault:"90"`
 	LinuxDoAuthorizeURL          string `env:"LINUX_DO_AUTHORIZE_URL" envDefault:"https://connect.linux.do/oauth2/authorize"`
 	LinuxDoTokenURL              string `env:"LINUX_DO_TOKEN_URL" envDefault:"https://connect.linux.do/oauth2/token"`
 	LinuxDoUserInfoURL           string `env:"LINUX_DO_USERINFO_URL" envDefault:"https://connect.linux.do/api/user"`
