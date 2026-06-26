@@ -107,12 +107,16 @@ func runPng2SVGClean(ctx context.Context, inputPath string, outputPath string) e
 }
 
 func png2SVGCleanArgs(inputPath string, outputPath string) []string {
+	bin := strings.TrimSpace(config.Cfg.Png2SVGCleanBin)
+	if bin == "" {
+		bin = "bin/png2svg-generic-85.mjs"
+	}
 	profile := strings.TrimSpace(config.Cfg.Png2SVGCleanProfile)
 	if profile == "" {
-		profile = "generic-clean-logo"
+		profile = "generic-85"
 	}
 	return []string{
-		"bin/png2svg-clean.mjs",
+		bin,
 		inputPath,
 		outputPath,
 		"--profile",
