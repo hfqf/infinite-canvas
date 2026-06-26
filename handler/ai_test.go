@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -119,6 +120,20 @@ func TestEnsureAsyncTrueOnImagesForcesURLResponseFormat(t *testing.T) {
 	if !strings.Contains(string(body), `"response_format":"url"`) {
 		t.Fatalf("body missing response_format=url: %s", body)
 	}
+	if !strings.Contains(string(body), `"output_format":"png"`) {
+		t.Fatalf("body missing output_format=png: %s", body)
+	}
+}
+
+func TestEnsureAsyncTrueOnImagesAddsPNGOutputFormatToEditsMultipart(t *testing.T) {
+	body, contentType := multipartImageRequestBody(t, 1, "1024x1024")
+	body, contentType = ensureAsyncTrueOnImages("/images/edits", body, contentType)
+	if got := readMultipartTestValue(t, body, contentType, "output_format"); got != "png" {
+		t.Fatalf("output_format = %q, want png", got)
+	}
+	if got := readMultipartTestValue(t, body, contentType, "model"); got != "gpt-image-2" {
+		t.Fatalf("model = %q, want preserved gpt-image-2", got)
+	}
 }
 
 func TestAIImageResponseLimitsAre30MB(t *testing.T) {
@@ -219,4 +234,21 @@ func multipartImageRequestBody(t *testing.T, imageCount int, size string) ([]byt
 		t.Fatal(err)
 	}
 	return body.Bytes(), writer.FormDataContentType()
+}
+
+func readMultipartTestValue(t *testing.T, body []byte, contentType string, name string) string {
+	t.Helper()
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatal(err)
+	}
+	form, err := multipart.NewReader(bytes.NewReader(body), params["boundary"]).ReadForm(32 << 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer form.RemoveAll()
+	if values := form.Value[name]; len(values) > 0 {
+		return values[0]
+	}
+	return ""
 }
