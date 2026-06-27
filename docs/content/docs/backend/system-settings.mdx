@@ -20,7 +20,7 @@ description: settings 表中 public 和 private 配置结构说明
     "availableModels": ["gpt-5.5", "gpt-image-2"],
     "modelCosts": [
       { "model": "gpt-5.5", "credits": 1 },
-      { "model": "gpt-image-2", "credits": 10 }
+      { "model": "gpt-image-2", "credits": 10, "supports4K": true }
     ],
     "defaultModel": "gpt-image-2",
     "defaultImageModel": "gpt-image-2",
@@ -65,7 +65,8 @@ description: settings 表中 public 和 private 配置结构说明
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `model` | string | 模型名称 |
-| `credits` | number | 每次后端模型接口调用前预扣的积分 |
+| `credits` | number | 模型默认积分单价；图片请求中表示非 4K 单张基础积分 |
+| `supports4K` | boolean | 图片模型是否支持 4K，默认 `true`；支持时 4K 单张基础积分为 `credits + 3`，不支持时前端隐藏画布 4K 清晰度按钮 |
 
 用户侧请求模式：
 

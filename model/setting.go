@@ -25,8 +25,9 @@ type ModelChannel struct {
 
 // ModelCost 模型积分配置。
 type ModelCost struct {
-	Model   string `json:"model"`
-	Credits int    `json:"credits"`
+	Model      string `json:"model"`
+	Credits    int    `json:"credits"`
+	Supports4K *bool  `json:"supports4K"`
 }
 
 // PublicModelChannelSetting 公开模型渠道配置。

@@ -192,6 +192,7 @@ export type AdminPublicModelChannelSettings = {
 export type AdminModelCost = {
     model: string;
     credits: number;
+    supports4K?: boolean;
 };
 
 export type AdminPublicSettings = {

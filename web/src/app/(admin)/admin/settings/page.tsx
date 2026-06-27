@@ -465,11 +465,11 @@ export default function AdminSettingsPage() {
                                             rowKey="model"
                                             pagination={false}
                                             size="small"
-                                            dataSource={publicModels.map((model) => ({ model, credits: modelCostCredits(modelCosts, model) }))}
+                                            dataSource={publicModels.map((model) => ({ model, credits: modelCostCredits(modelCosts, model), supports4K: modelCostSupports4K(modelCosts, model) }))}
                                             columns={[
                                                 { title: "模型", dataIndex: "model" },
                                                 {
-                                                    title: "每次调用扣除",
+                                                    title: "非 4K 单张积分",
                                                     dataIndex: "credits",
                                                     width: 220,
                                                     render: (_, item) => (
@@ -483,6 +483,12 @@ export default function AdminSettingsPage() {
                                                             onChange={(value) => setModelCost(form, setModelCosts, item.model, Number(value) || 0)}
                                                         />
                                                     ),
+                                                },
+                                                {
+                                                    title: "支持 4K",
+                                                    dataIndex: "supports4K",
+                                                    width: 120,
+                                                    render: (_, item) => <Switch checked={item.supports4K !== false} onChange={(checked) => setModelSupports4K(form, setModelCosts, item.model, checked)} />,
                                                 },
                                             ]}
                                         />
@@ -878,7 +884,7 @@ function normalizeReferenceCompressionQuality(value: unknown) {
 }
 
 function normalizeModelCosts(items: Partial<AdminSettings["public"]["modelChannel"]["modelCosts"][number]>[]) {
-    return items.filter((item) => item.model).map((item) => ({ model: item.model || "", credits: Math.max(0, Number(item.credits) || 0) }));
+    return items.filter((item) => item.model).map((item) => ({ model: item.model || "", credits: Math.max(0, Number(item.credits) || 0), supports4K: item.supports4K !== false }));
 }
 
 function normalizePrivateSetting(setting: Partial<AdminSettings["private"]> = {}): AdminSettings["private"] {
@@ -916,10 +922,22 @@ function modelCostCredits(items: AdminSettings["public"]["modelChannel"]["modelC
     return items.find((item) => item.model === model)?.credits || 0;
 }
 
+function modelCostSupports4K(items: AdminSettings["public"]["modelChannel"]["modelCosts"], model: string) {
+    return items.find((item) => item.model === model)?.supports4K !== false;
+}
+
 function setModelCost(form: any, setModelCosts: (items: AdminModelCost[]) => void, model: string, credits: number) {
     const current = (form.getFieldValue(["public", "modelChannel", "modelCosts"]) || []) as AdminSettings["public"]["modelChannel"]["modelCosts"];
     const next = current.filter((item) => item.model !== model);
-    next.push({ model, credits: Math.max(0, credits) });
+    next.push({ model, credits: Math.max(0, credits), supports4K: modelCostSupports4K(current, model) });
+    form.setFieldValue(["public", "modelChannel", "modelCosts"], next);
+    setModelCosts(next);
+}
+
+function setModelSupports4K(form: any, setModelCosts: (items: AdminModelCost[]) => void, model: string, supports4K: boolean) {
+    const current = (form.getFieldValue(["public", "modelChannel", "modelCosts"]) || []) as AdminSettings["public"]["modelChannel"]["modelCosts"];
+    const next = current.filter((item) => item.model !== model);
+    next.push({ model, credits: modelCostCredits(current, model), supports4K });
     form.setFieldValue(["public", "modelChannel", "modelCosts"], next);
     setModelCosts(next);
 }

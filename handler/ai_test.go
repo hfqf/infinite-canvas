@@ -95,17 +95,20 @@ func TestReadAIReferenceImageCountFromJSONAliases(t *testing.T) {
 }
 
 func TestImageRequestCreditsAddsReferenceImageSurchargeAfterFirstReference(t *testing.T) {
-	if got := imageRequestCredits(3, false, 2, 3); got != 10 {
-		t.Fatalf("non-4k credits = %d, want (3 + 2*1) * 2 = 10", got)
+	if got := imageRequestCredits(5, true, false, 2, 3); got != 14 {
+		t.Fatalf("non-4k credits = %d, want (5 + 2*1) * 2 = 14", got)
 	}
-	if got := imageRequestCredits(9, false, 1, 0); got != 3 {
-		t.Fatalf("non-4k base credits = %d, want fixed 3", got)
+	if got := imageRequestCredits(9, true, false, 1, 0); got != 9 {
+		t.Fatalf("non-4k base credits = %d, want configured 9", got)
 	}
-	if got := imageRequestCredits(3, true, 1, 3); got != 8 {
-		t.Fatalf("4k credits = %d, want 6 + 2*1 = 8", got)
+	if got := imageRequestCredits(5, true, true, 1, 3); got != 10 {
+		t.Fatalf("4k credits = %d, want 5 + 3 + 2*1 = 10", got)
 	}
-	if got := imageRequestCredits(3, false, 4, 1); got != 12 {
-		t.Fatalf("single reference credits = %d, want 3 * 4 = 12", got)
+	if got := imageRequestCredits(5, false, true, 1, 0); got != 5 {
+		t.Fatalf("unsupported 4k credits = %d, want non-4k configured 5", got)
+	}
+	if got := imageRequestCredits(5, true, false, 4, 1); got != 20 {
+		t.Fatalf("single reference credits = %d, want 5 * 4 = 20", got)
 	}
 }
 

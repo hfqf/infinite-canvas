@@ -84,6 +84,10 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 		if setting.ModelChannel.ModelCosts[i].Credits < 0 {
 			setting.ModelChannel.ModelCosts[i].Credits = 0
 		}
+		if setting.ModelChannel.ModelCosts[i].Supports4K == nil {
+			supports4K := true
+			setting.ModelChannel.ModelCosts[i].Supports4K = &supports4K
+		}
 	}
 	if setting.ModelChannel.AllowCustomChannel == nil {
 		enabled := true
@@ -124,17 +128,26 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 }
 
 func ModelCost(modelName string) (int, error) {
-	settings, err := repository.GetSettings()
+	cost, err := ModelCostConfig(modelName)
 	if err != nil {
 		return 0, err
+	}
+	return cost.Credits, nil
+}
+
+func ModelCostConfig(modelName string) (model.ModelCost, error) {
+	settings, err := repository.GetSettings()
+	if err != nil {
+		return model.ModelCost{}, err
 	}
 	modelName = strings.TrimSpace(modelName)
 	for _, item := range normalizePublicSetting(settings.Public).ModelChannel.ModelCosts {
 		if item.Model == modelName {
-			return item.Credits, nil
+			return item, nil
 		}
 	}
-	return 0, nil
+	supports4K := true
+	return model.ModelCost{Model: modelName, Supports4K: &supports4K}, nil
 }
 
 func normalizePrivateSetting(setting model.PrivateSetting) model.PrivateSetting {

@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { ConfigProvider, Switch } from "antd";
 
 import { type CanvasTheme } from "@/lib/canvas-theme";
@@ -64,9 +64,10 @@ type ImageSettingsPanelProps = {
     maxCount?: number;
     quickCount?: number;
     variant?: "default" | "canvas";
+    allow4K?: boolean;
 };
 
-export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10, variant = "default" }: ImageSettingsPanelProps) {
+export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10, variant = "default", allow4K = true }: ImageSettingsPanelProps) {
     const [snapDimensionToStep, setSnapDimensionToStep] = useState(true);
     const isCanvas = variant === "canvas";
     const quality = config.quality || "auto";
@@ -76,14 +77,16 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
     const dimensions = readSizeDimensions(activeSize, selectedAspect || aspectOptions[0]);
     const activeResolution = readResolution(activeSize, selectedAspect, dimensions);
     const displayedAspectOptions = isCanvas ? canvasAspectOptions : aspectOptions;
+    const displayedResolutionOptions = allow4K ? resolutionOptions : resolutionOptions.filter((item) => item.value !== "4k");
+    const resolutionRatioWidth = selectedAspect?.value === "custom" ? dimensions.width : selectedAspect?.width || dimensions.width || 1;
+    const resolutionRatioHeight = selectedAspect?.value === "custom" ? dimensions.height : selectedAspect?.height || dimensions.height || 1;
     const selectAspect = (value: string) => {
         if (value === "custom") return;
         const option = displayedAspectOptions.find((item) => item.value === value);
         onConfigChange("size", isCanvas && option ? dimensionsForRatio(option.width, option.height, activeResolution) : option?.size || option?.value || "auto");
     };
     const selectResolution = (value: string) => {
-        const ratio = selectedAspect?.value === "custom" ? dimensions : selectedAspect;
-        onConfigChange("size", dimensionsForRatio(ratio?.width || dimensions.width || 1, ratio?.height || dimensions.height || 1, value));
+        onConfigChange("size", dimensionsForRatio(resolutionRatioWidth, resolutionRatioHeight, value));
     };
     const updateDimension = (key: "width" | "height", value: number | null) => {
         const next = Math.max(1, Math.floor(value || dimensions[key] || 1024));
@@ -91,6 +94,10 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
         const height = key === "height" ? next : dimensions.height;
         onConfigChange("size", `${alignDimension(width, snapDimensionToStep)}x${alignDimension(height, snapDimensionToStep)}`);
     };
+
+    useEffect(() => {
+        if (isCanvas && !allow4K && activeResolution === "4k") onConfigChange("size", dimensionsForRatio(resolutionRatioWidth, resolutionRatioHeight, "2k"));
+    }, [activeResolution, allow4K, isCanvas, onConfigChange, resolutionRatioHeight, resolutionRatioWidth]);
 
     return (
         <ImageSettingsTheme theme={theme}>
@@ -135,8 +142,8 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 {isCanvas ? (
                     <div className="space-y-2.5">
                         <SettingTitle color={theme.node.muted}>清晰度</SettingTitle>
-                        <div className="grid grid-cols-3 overflow-hidden rounded-[14px] p-1" style={{ background: theme.node.fill }}>
-                            {resolutionOptions.map((item) => (
+                        <div className={`grid ${allow4K ? "grid-cols-3" : "grid-cols-2"} overflow-hidden rounded-[14px] p-1`} style={{ background: theme.node.fill }}>
+                            {displayedResolutionOptions.map((item) => (
                                 <button
                                     key={item.value}
                                     type="button"

@@ -150,7 +150,6 @@ const (
 	aiImageFailureCooldownSeconds   = 120
 	aiImage4KFailureCooldownSeconds = 180
 	aiImageReferenceTimeoutSeconds  = 60
-	aiImageBaseCredits              = 3
 	aiImageExtraReferenceCredits    = 1
 	aiImageResponseMaxBytes         = 30 << 20
 	aiImageTaskPollResponseMaxBytes = 30 << 20
@@ -874,21 +873,23 @@ func readMultipartModel(body []byte, contentType string) string {
 }
 
 func requestCredits(modelName string, path string, body []byte, contentType string) (int, error) {
-	credits, err := service.ModelCost(modelName)
+	cost, err := service.ModelCostConfig(modelName)
 	if err != nil {
 		return 0, err
 	}
 	count := readAIRequestCount(body, contentType)
 	if isImageRequestPath(path) {
-		return imageRequestCredits(credits, is4KImageRequest(body, contentType), count, readAIReferenceImageCount(body, contentType)), nil
+		return imageRequestCredits(cost.Credits, modelCostSupports4K(cost), is4KImageRequest(body, contentType), count, readAIReferenceImageCount(body, contentType)), nil
 	}
-	return credits * count, nil
+	return cost.Credits * count, nil
 }
 
-func imageRequestCredits(_ int, is4K bool, count int, referenceImages int) int {
-	baseCredits := aiImageBaseCredits
-	if is4K {
-		baseCredits = 6
+func imageRequestCredits(baseCredits int, supports4K bool, is4K bool, count int, referenceImages int) int {
+	if baseCredits < 0 {
+		baseCredits = 0
+	}
+	if is4K && supports4K {
+		baseCredits += 3
 	}
 	if count < 1 {
 		count = 1
@@ -898,6 +899,10 @@ func imageRequestCredits(_ int, is4K bool, count int, referenceImages int) int {
 		extraReferenceCredits = (referenceImages - 1) * aiImageExtraReferenceCredits
 	}
 	return (baseCredits + extraReferenceCredits) * count
+}
+
+func modelCostSupports4K(cost model.ModelCost) bool {
+	return cost.Supports4K == nil || *cost.Supports4K
 }
 
 func isImageRequestPath(path string) bool {
