@@ -1,6 +1,7 @@
 const IMAGE_SIZE_STEP = 16;
-const IMAGE_4K_LONG_EDGE = 3840;
-const IMAGE_2K_PIXELS = 2048 * 2048;
+const IMAGE_MIN_PIXELS = 655360;
+const IMAGE_MAX_PIXELS = 8294400;
+const IMAGE_MAX_LONG_EDGE = 3840;
 const IMAGE_MAX_RATIO = 3;
 
 export function buildCanvasSuperResolvePrompt() {
@@ -10,14 +11,27 @@ export function buildCanvasSuperResolvePrompt() {
 export function resolveCanvasSuperResolveSize(width: number, height: number, supports4K: boolean) {
     const sourceWidth = Math.max(1, Math.round(width));
     const sourceHeight = Math.max(1, Math.round(height));
-    const ratio = Math.max(sourceWidth, sourceHeight) / Math.min(sourceWidth, sourceHeight);
+    const longSide = Math.max(sourceWidth, sourceHeight);
+    const shortSide = Math.min(sourceWidth, sourceHeight);
+    const ratio = longSide / shortSide;
     if (!Number.isFinite(ratio) || ratio > IMAGE_MAX_RATIO) return "auto";
-    const scale = supports4K ? IMAGE_4K_LONG_EDGE / Math.max(sourceWidth, sourceHeight) : Math.sqrt(IMAGE_2K_PIXELS / (sourceWidth * sourceHeight));
-    const targetWidth = roundToStep(sourceWidth * scale);
-    const targetHeight = roundToStep(sourceHeight * scale);
-    return `${targetWidth}x${targetHeight}`;
+
+    const targetPixels = supports4K ? IMAGE_MAX_PIXELS : 2048 * 2048;
+    let scale = supports4K ? IMAGE_MAX_LONG_EDGE / longSide : Math.sqrt(targetPixels / (sourceWidth * sourceHeight));
+    scale = Math.min(scale, IMAGE_MAX_LONG_EDGE / longSide);
+    scale = Math.min(scale, Math.sqrt(IMAGE_MAX_PIXELS / (sourceWidth * sourceHeight)));
+    scale = Math.max(scale, Math.sqrt(IMAGE_MIN_PIXELS / (sourceWidth * sourceHeight)));
+
+    let targetWidth = floorToStep(sourceWidth * scale);
+    let targetHeight = floorToStep(sourceHeight * scale);
+    while (targetWidth * targetHeight > IMAGE_MAX_PIXELS || Math.max(targetWidth, targetHeight) > IMAGE_MAX_LONG_EDGE) {
+        targetWidth = Math.max(IMAGE_SIZE_STEP, targetWidth - IMAGE_SIZE_STEP);
+        targetHeight = Math.max(IMAGE_SIZE_STEP, floorToStep(targetWidth / (sourceWidth / sourceHeight)));
+    }
+    const size = `${targetWidth}x${targetHeight}`;
+    return supports4K ? `4k:${size}` : size;
 }
 
-function roundToStep(value: number) {
+function floorToStep(value: number) {
     return Math.max(IMAGE_SIZE_STEP, Math.floor(value / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP);
 }

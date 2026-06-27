@@ -6,7 +6,7 @@ import { Button } from "antd";
 
 import { ModelPicker } from "@/components/model-picker";
 import { defaultConfig, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
-import { CreditSymbol, requestCreditCost } from "@/constant/credits";
+import { CreditSymbol, canvasGenerationCredits } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
@@ -47,7 +47,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
     const imageReferences = allImageReferences.slice(0, MAX_CANVAS_REFERENCE_IMAGES);
     const hiddenImageReferenceCount = Math.max(0, allImageReferences.length - imageReferences.length);
     const referenceCount = mode === "image" ? (allImageReferences.length ? imageReferences.length : hasImageContent ? 1 : 0) : 0;
-    const credits = requestCreditCost({ channelMode: config.channelMode, modelCosts, model: config.model, count: mode === "image" ? config.count : 1, size: mode === "image" ? config.size : "", quality: mode === "image" ? config.quality : "", referenceCount: mode === "image" ? referenceCount : 0 });
+    const credits = canvasGenerationCredits({ channelMode: config.channelMode, modelCosts, model: config.model, mode, count: config.count, size: config.size, quality: config.quality, imageReferenceCount: referenceCount });
 
     useEffect(() => {
         setPrompt(initialPrompt);

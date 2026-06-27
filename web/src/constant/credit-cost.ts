@@ -23,11 +23,19 @@ export function requestCreditCost(options: { channelMode: string; modelCosts?: M
     return (baseCredits + extraReferenceCredits) * count;
 }
 
+export function canvasGenerationCredits(options: { channelMode: string; modelCosts?: ModelCreditCost[]; model: string; mode: "image" | "text" | "video" | "audio"; count?: string | number; size?: string; quality?: string; imageReferenceCount?: number }) {
+    const count = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(options.count)) || 1)));
+    return requestCreditCost({
+        channelMode: options.channelMode,
+        modelCosts: options.modelCosts,
+        model: options.model,
+        count: options.mode === "image" ? count : 1,
+        size: options.mode === "image" ? options.size || "" : "",
+        quality: options.mode === "image" ? options.quality || "" : "",
+        referenceCount: options.mode === "image" ? options.imageReferenceCount || 0 : 0,
+    });
+}
+
 export function is4KImageRequest(size = "", quality = "") {
-    if (quality.trim().toLowerCase() === "4k") return true;
-    const value = size.trim().toLowerCase();
-    if (value.includes("4k")) return true;
-    const match = value.match(/^(\d+)\s*[x×*]\s*(\d+)$/);
-    if (!match) return false;
-    return Number(match[1]) >= 3840 || Number(match[2]) >= 3840;
+    return quality.trim().toLowerCase() === "4k" || size.trim().toLowerCase().startsWith("4k:");
 }

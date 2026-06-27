@@ -51,8 +51,17 @@ func TestAIImageRequestTimeoutSecondsUsesBaseDuration(t *testing.T) {
 	if got := aiImageRequestTimeoutSeconds([]byte(`{"size":"1024x1024"}`), "application/json"); got != 120 {
 		t.Fatalf("non-4k cooldown = %d, want 120", got)
 	}
-	if got := aiImageRequestTimeoutSeconds([]byte(`{"size":"3840x2160"}`), "application/json"); got != 180 {
-		t.Fatalf("4k cooldown = %d, want 180", got)
+	if got := aiImageRequestTimeoutSeconds([]byte(`{"quality":"4k"}`), "application/json"); got != 180 {
+		t.Fatalf("business 4k cooldown = %d, want 180", got)
+	}
+}
+
+func TestAIImageRequestTimeoutSecondsUsesBusiness4KMarker(t *testing.T) {
+	if got := aiImageRequestTimeoutSeconds([]byte(`{"size":"3840x2160","quality":"medium"}`), "application/json"); got != 120 {
+		t.Fatalf("unmarked 3840 cooldown = %d, want 120", got)
+	}
+	if got := aiImageRequestTimeoutSeconds([]byte(`{"size":"4k:3840x2160","quality":"medium"}`), "application/json"); got != 180 {
+		t.Fatalf("marked 4k cooldown = %d, want 180", got)
 	}
 }
 
@@ -61,7 +70,7 @@ func TestAIImageRequestTimeoutSecondsAddsReferenceImageDuration(t *testing.T) {
 	if got := aiImageRequestTimeoutSeconds(body, contentType); got != 300 {
 		t.Fatalf("non-4k reference timeout = %d, want 300", got)
 	}
-	body, contentType = multipartImageRequestBody(t, 2, "3840x2160")
+	body, contentType = multipartImageRequestBody(t, 2, "4k:3840x2160")
 	if got := aiImageRequestTimeoutSeconds(body, contentType); got != 300 {
 		t.Fatalf("4k reference timeout = %d, want 300", got)
 	}
@@ -113,7 +122,7 @@ func TestImageRequestCreditsAddsReferenceImageSurchargeAfterFirstReference(t *te
 }
 
 func TestEnsureAsyncTrueOnImagesForcesURLResponseFormat(t *testing.T) {
-	body, contentType := ensureAsyncTrueOnImages("/images/generations", []byte(`{"model":"gpt-image-2","prompt":"hi","response_format":"b64_json"}`), "application/json")
+	body, contentType := ensureAsyncTrueOnImages("/images/generations", []byte(`{"model":"gpt-image-2","prompt":"hi","size":"4k:3840x2160","response_format":"b64_json"}`), "application/json")
 	if contentType != "application/json" {
 		t.Fatalf("contentType = %q, want application/json", contentType)
 	}
@@ -126,13 +135,19 @@ func TestEnsureAsyncTrueOnImagesForcesURLResponseFormat(t *testing.T) {
 	if !strings.Contains(string(body), `"output_format":"png"`) {
 		t.Fatalf("body missing output_format=png: %s", body)
 	}
+	if strings.Contains(string(body), `4k:3840x2160`) || !strings.Contains(string(body), `"size":"3840x2160"`) {
+		t.Fatalf("body should strip business 4k marker before upstream: %s", body)
+	}
 }
 
 func TestEnsureAsyncTrueOnImagesAddsPNGOutputFormatToEditsMultipart(t *testing.T) {
-	body, contentType := multipartImageRequestBody(t, 1, "1024x1024")
+	body, contentType := multipartImageRequestBody(t, 1, "4k:3840x2160")
 	body, contentType = ensureAsyncTrueOnImages("/images/edits", body, contentType)
 	if got := readMultipartTestValue(t, body, contentType, "output_format"); got != "png" {
 		t.Fatalf("output_format = %q, want png", got)
+	}
+	if got := readMultipartTestValue(t, body, contentType, "size"); got != "3840x2160" {
+		t.Fatalf("size = %q, want stripped 3840x2160", got)
 	}
 	if got := readMultipartTestValue(t, body, contentType, "model"); got != "gpt-image-2" {
 		t.Fatalf("model = %q, want preserved gpt-image-2", got)

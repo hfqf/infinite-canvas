@@ -19,7 +19,7 @@ import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useThemeStore } from "@/stores/use-theme-store";
-import { modelSupports4K } from "@/constant/credits";
+import { canvasGenerationCredits, modelSupports4K } from "@/constant/credits";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
 import { getClipboardImageFiles } from "../utils/canvas-clipboard";
 import { canvasNodeImageToDataUrlInput } from "../utils/canvas-node-image-source";
@@ -1803,7 +1803,7 @@ function InfiniteCanvasPage() {
             const generationConfig = {
                 ...baseConfig,
                 count: "1",
-                quality: supports4K ? "4k" : "2k",
+                quality: "medium",
                 size: resolveCanvasSuperResolveSize(sourceWidth, sourceHeight, supports4K),
             };
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
@@ -2730,6 +2730,7 @@ function InfiniteCanvasPage() {
                                     <CanvasConfigComposer
                                         value={panelNode.metadata?.composerContent ?? panelNode.metadata?.prompt ?? ""}
                                         inputs={configInputsById.get(panelNode.id) || []}
+                                        credits={configComposerCredits(panelNode, configInputsById.get(panelNode.id) || [], effectiveConfig, modelCosts)}
                                         onChange={(composerContent) => handleConfigNodeChange(panelNode.id, { composerContent })}
                                         onClose={() => setDialogNodeId(null)}
                                     />
@@ -3312,6 +3313,12 @@ function getInputSummary(inputs: NodeGenerationInput[]) {
         videoCount: inputs.filter((input) => input.type === "video").length,
         audioCount: inputs.filter((input) => input.type === "audio").length,
     };
+}
+
+function configComposerCredits(node: CanvasNodeData, inputs: NodeGenerationInput[], effectiveConfig: AiConfig, modelCosts: Parameters<typeof canvasGenerationCredits>[0]["modelCosts"]) {
+    const mode = node.metadata?.generationMode || "image";
+    const config = buildGenerationConfig(effectiveConfig, node, mode);
+    return canvasGenerationCredits({ channelMode: config.channelMode, modelCosts, model: config.model, mode, count: config.count, size: config.size, quality: config.quality, imageReferenceCount: getInputSummary(inputs).imageCount });
 }
 
 function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | undefined, mode: CanvasNodeGenerationMode): AiConfig {

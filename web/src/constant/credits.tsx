@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import { Zap } from "lucide-react";
 
-export { modelCreditCost, modelSupports4K, requestCreditCost, type ModelCreditCost } from "./credit-cost";
+export { canvasGenerationCredits, modelCreditCost, modelSupports4K, requestCreditCost, type ModelCreditCost } from "./credit-cost";
 
 export function CreditSymbol({ className, ...props }: ComponentProps<"span">) {
     return (

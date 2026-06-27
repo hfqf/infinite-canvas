@@ -757,6 +757,13 @@ func ensureAsyncTrueOnImages(path string, body []byte, contentType string) ([]by
 	}
 	outputFormat, _ := json.Marshal("png")
 	payload["output_format"] = outputFormat
+	if rawSize, ok := payload["size"]; ok {
+		var size string
+		if err := json.Unmarshal(rawSize, &size); err == nil {
+			cleanSize, _ := json.Marshal(stripBusiness4KImageSize(size))
+			payload["size"] = cleanSize
+		}
+	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return body, contentType
@@ -782,6 +789,9 @@ func ensureMultipartImageOutputFormat(body []byte, contentType string) ([]byte, 
 			continue
 		}
 		for _, value := range values {
+			if key == "size" {
+				value = stripBusiness4KImageSize(value)
+			}
 			_ = writer.WriteField(key, value)
 		}
 	}
@@ -1000,23 +1010,15 @@ func firstFormValue(values []string) string {
 
 func is4KImageValue(value string) bool {
 	value = strings.ToLower(strings.TrimSpace(value))
-	if strings.Contains(value, "4k") {
-		return true
+	return strings.HasPrefix(value, "4k:")
+}
+
+func stripBusiness4KImageSize(value string) string {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(strings.ToLower(value), "4k:") {
+		return strings.TrimSpace(value[len("4k:"):])
 	}
-	parts := strings.FieldsFunc(value, func(r rune) bool {
-		return r == 'x' || r == '×' || r == '*' || r == ' '
-	})
-	if len(parts) != 2 {
-		return false
-	}
-	var width, height int
-	if _, err := fmt.Sscan(parts[0], &width); err != nil {
-		return false
-	}
-	if _, err := fmt.Sscan(parts[1], &height); err != nil {
-		return false
-	}
-	return width >= 3840 || height >= 3840
+	return value
 }
 
 func readAIRequestCount(body []byte, contentType string) int {

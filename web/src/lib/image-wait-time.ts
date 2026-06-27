@@ -1,3 +1,5 @@
+import { isBusiness4KImageRequest } from "@/constant/image-generation-constraints";
+
 export type ImageWaitInfo = {
     seconds: number;
     baseSeconds: number;
@@ -23,15 +25,5 @@ export function imageWaitDetailText(info: ImageWaitInfo) {
 }
 
 function is4KImageRequest(size: string, quality: string) {
-    return is4KImageValue(size) || quality.trim().toLowerCase() === "4k";
-}
-
-function is4KImageValue(value: string) {
-    const normalized = value.trim().toLowerCase();
-    if (normalized.includes("4k")) return true;
-    const parts = normalized.split(/[x×*\s]+/).filter(Boolean);
-    if (parts.length !== 2) return false;
-    const width = Number(parts[0]);
-    const height = Number(parts[1]);
-    return Number.isFinite(width) && Number.isFinite(height) && (width >= 3840 || height >= 3840);
+    return isBusiness4KImageRequest(size, quality);
 }

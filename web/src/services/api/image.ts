@@ -8,6 +8,7 @@ import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { apiPost } from "@/services/api/request";
 import { imageToDataUrl } from "@/services/image-storage";
 import type { ReferenceImage } from "@/types/image";
+import { IMAGE_MAX_RATIO, IMAGE_SIZE_STEP, mark4KImageSize, parseImageDimensions, stripImageSizeMarker, validateImageGenerationSize } from "@/constant/image-generation-constraints";
 
 export type ChatCompletionMessage = {
     role: "system" | "user" | "assistant";
@@ -49,11 +50,6 @@ const QUALITY_ALIASES: Record<string, string> = {
     "4k": "high",
 };
 const DEFAULT_IMAGE_SHORT_SIDE = 1024;
-const IMAGE_SIZE_STEP = 16;
-const IMAGE_MIN_PIXELS = 655360;
-const IMAGE_MAX_PIXELS = 3840 * 3840;
-const IMAGE_MAX_EDGE = 3840;
-const IMAGE_MAX_RATIO = 3;
 const IMAGE_RESPONSE_FORMAT = "url";
 const IMAGE_OUTPUT_FORMAT = "png";
 const IMAGE_TASK_MAX_POLLS = 90;
@@ -102,28 +98,19 @@ function parseImageRatio(value: string) {
     return { width: w, height: h };
 }
 
-function parseImageDimensions(value: string) {
-    const match = value.match(/^(\d+)x(\d+)$/i);
-    if (!match) return null;
-    return { width: Number(match[1]), height: Number(match[2]) };
-}
-
 function validateImageSize(width: number, height: number) {
-    if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) throw new Error("图像尺寸必须是正整数，例如 1024x1024");
-    if (width % IMAGE_SIZE_STEP !== 0 || height % IMAGE_SIZE_STEP !== 0) throw new Error("图像尺寸的宽高必须是 16 的倍数，请调整尺寸");
-    if (Math.max(width, height) > IMAGE_MAX_EDGE) throw new Error("图像尺寸最长边不能超过 3840px，请调整尺寸");
-    if (Math.max(width, height) / Math.min(width, height) > IMAGE_MAX_RATIO) throw new Error("图像宽高比不能超过 3:1，请调整尺寸");
-    const pixels = width * height;
-    if (pixels < IMAGE_MIN_PIXELS || pixels > IMAGE_MAX_PIXELS) throw new Error("图像总像素需在 655360 到 14745600 之间，请调整尺寸");
+    validateImageGenerationSize(width, height);
 }
 
-function resolveRequestSize(quality: string | undefined, size: string) {
-    const value = size.trim();
+function resolveRequestSize(quality: string | undefined, size: string, keepBusinessMarker = false) {
+    const rawValue = size.trim();
+    const value = stripImageSizeMarker(rawValue);
     if (!value || value.toLowerCase() === "auto") return undefined;
     const dimensions = parseImageDimensions(value);
     if (dimensions) {
         validateImageSize(dimensions.width, dimensions.height);
-        return `${dimensions.width}x${dimensions.height}`;
+        const normalized = `${dimensions.width}x${dimensions.height}`;
+        return keepBusinessMarker && rawValue.toLowerCase().startsWith("4k:") ? mark4KImageSize(normalized) : normalized;
     }
     if (value.includes(":")) return resolveSize(quality, value);
     throw new Error("图像尺寸格式不支持，请使用 auto、9:16 或 1024x1024");
@@ -304,7 +291,7 @@ function withSystemMessage(config: AiConfig, messages: ChatCompletionMessage[]) 
 export async function requestGeneration(config: AiConfig, prompt: string) {
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
     const quality = normalizeQuality(config.quality);
-    const requestSize = resolveRequestSize(quality, config.size);
+    const requestSize = resolveRequestSize(quality, config.size, config.channelMode === "remote");
     try {
         const response = await axios.post<ImageApiResponse>(
             aiApiUrl(config, "/images/generations"),
@@ -332,7 +319,7 @@ export async function requestGeneration(config: AiConfig, prompt: string) {
 
 export async function requestEdit(config: AiConfig, prompt: string, references: ReferenceImage[], mask?: ReferenceImage) {
     const quality = normalizeQuality(config.quality);
-    const requestSize = resolveRequestSize(quality, config.size);
+    const requestSize = resolveRequestSize(quality, config.size, config.channelMode === "remote");
     const requestPrompt = buildImageReferencePromptText(prompt, references);
     const referenceCompressionQuality = resolveReferenceCompressionQuality();
     const formData = new FormData();

@@ -6,6 +6,7 @@ import { ConfigProvider, Switch } from "antd";
 import { type CanvasTheme } from "@/lib/canvas-theme";
 import type { AiConfig } from "@/stores/use-config-store";
 import { visibleImageResolutionOptions } from "./image-settings-options";
+import { IMAGE_MAX_PIXELS, IMAGE_SIZE_STEP, mark4KImageSize, parseImageDimensions } from "@/constant/image-generation-constraints";
 
 const qualityOptions = [
     { value: "auto", label: "自动" },
@@ -13,7 +14,7 @@ const qualityOptions = [
     { value: "medium", label: "中" },
     { value: "low", label: "低" },
 ];
-const DIMENSION_STEP = 16;
+const DIMENSION_STEP = IMAGE_SIZE_STEP;
 
 type AspectOption = { value: string; label: string; width: number; height: number; icon: string; size?: string };
 
@@ -296,11 +297,8 @@ function SettingTitle({ children, color }: { children: string; color: string }) 
 }
 
 function readSizeDimensions(size: string, fallback: { width: number; height: number }) {
-    const match = size?.match(/^(\d+)x(\d+)$/);
-    return {
-        width: match ? Number(match[1]) : fallback.width,
-        height: match ? Number(match[2]) : fallback.height,
-    };
+    const dimensions = parseImageDimensions(size || "");
+    return { width: dimensions?.width || fallback.width, height: dimensions?.height || fallback.height };
 }
 
 function alignDimension(value: number, enabled: boolean) {
@@ -322,7 +320,7 @@ function readResolution(size: string, selectedAspect: { value: string; width: nu
     const legacyOption = aspectOptions.find((item) => item.size === size);
     if (legacyOption?.value.includes("4k")) return "4k";
     if (legacyOption?.value.includes("2k")) return "2k";
-    if (size.toLowerCase().includes("4k") || Math.max(dimensions.width, dimensions.height) >= 3600) return "4k";
+    if (size.toLowerCase().startsWith("4k:")) return "4k";
     if (size.toLowerCase().includes("2k")) return "2k";
     const ratio = selectedAspect?.value === "custom" ? dimensions : selectedAspect;
     if (ratio && size === dimensionsForRatio(ratio.width, ratio.height, "2k")) return "2k";
@@ -336,7 +334,7 @@ function dimensionsForRatio(width: number, height: number, resolution: string) {
         const scale = 1024 / Math.min(ratioWidth, ratioHeight);
         return `${alignDimension(Math.round(ratioWidth * scale), true)}x${alignDimension(Math.round(ratioHeight * scale), true)}`;
     }
-    const maxPixels = 3840 * 3840;
+    const maxPixels = IMAGE_MAX_PIXELS;
     let scale = resolution === "4k" ? 3840 / Math.max(ratioWidth, ratioHeight) : Math.sqrt((2048 * 2048) / (ratioWidth * ratioHeight));
     let nextWidth = alignDimension(Math.round(ratioWidth * scale), true);
     let nextHeight = alignDimension(Math.round(ratioHeight * scale), true);
@@ -345,7 +343,8 @@ function dimensionsForRatio(width: number, height: number, resolution: string) {
         nextWidth = alignDimension(Math.floor((ratioWidth * scale) / DIMENSION_STEP) * DIMENSION_STEP, false);
         nextHeight = alignDimension(Math.floor((ratioHeight * scale) / DIMENSION_STEP) * DIMENSION_STEP, false);
     }
-    return `${nextWidth}x${nextHeight}`;
+    const size = `${nextWidth}x${nextHeight}`;
+    return resolution === "4k" ? mark4KImageSize(size) : size;
 }
 
 function reduceRatio(width: number, height: number) {

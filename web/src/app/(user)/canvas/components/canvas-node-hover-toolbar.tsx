@@ -214,7 +214,7 @@ export function CanvasNodeHoverToolbar({
             const supports4K = modelSupports4K(modelCosts, imageModel);
             const width = node.metadata?.naturalWidth || node.width;
             const height = node.metadata?.naturalHeight || node.height;
-            return imageModelCreditCost(imageModel, supports4K ? "4k" : "2k", resolveCanvasSuperResolveSize(width, height, supports4K), 1);
+            return imageModelCreditCost(imageModel, "medium", resolveCanvasSuperResolveSize(width, height, supports4K), 1);
         }
         if (toolId === "retry" && node.type === CanvasNodeType.Image && node.metadata?.generationType) {
             return imageModelCreditCost(imageModel, quality, node.metadata?.size || effectiveConfig.size, node.metadata.generationType === "edit" ? Math.max(1, node.metadata.references?.length || 1) : 0);
