@@ -21,6 +21,7 @@ import { useAssetStore } from "@/stores/use-asset-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
 import { getClipboardImageFiles } from "../utils/canvas-clipboard";
+import { findPasteImageTargetNodeId } from "../utils/canvas-paste-image";
 import { svgBlob, svgToDataUrl } from "../utils/canvas-svg";
 import { fitNodeSize, nodeSizeFromRatio } from "../utils/canvas-node-size";
 import { App, Button, Dropdown, Modal } from "antd";
@@ -1218,6 +1219,45 @@ function InfiniteCanvasPage() {
         setDialogNodeId(id);
     }, []);
 
+    const replaceImageNodeFromFile = useCallback(async (nodeId: string, file: File) => {
+        const image = await uploadImage(file);
+        const nextSize = fitNodeSize(image.width, image.height);
+        setNodes((prev) =>
+            prev.map((node) => {
+                if (node.id !== nodeId) return node;
+                const center = { x: node.position.x + node.width / 2, y: node.position.y + node.height / 2 };
+                return {
+                    ...node,
+                    type: CanvasNodeType.Image,
+                    position: { x: center.x - nextSize.width / 2, y: center.y - nextSize.height / 2 },
+                    width: nextSize.width,
+                    height: nextSize.height,
+                    metadata: {
+                        ...node.metadata,
+                        ...imageMetadata(image),
+                        errorDetails: undefined,
+                        freeResize: false,
+                        isBatchRoot: undefined,
+                        batchRootId: undefined,
+                        batchChildIds: undefined,
+                        batchUsesReferenceImages: undefined,
+                        generationType: undefined,
+                        model: undefined,
+                        size: undefined,
+                        quality: undefined,
+                        count: undefined,
+                        references: undefined,
+                        primaryImageId: undefined,
+                        imageBatchExpanded: undefined,
+                    },
+                };
+            }),
+        );
+        setSelectedNodeIds(new Set([nodeId]));
+        setSelectedConnectionId(null);
+        setDialogNodeId(nodeId);
+    }, []);
+
     const createVideoFileNode = useCallback(async (file: File, position: Position) => {
         const video = await uploadMediaFile(file, "video");
         const size = fitNodeSize(video.width || 1280, video.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
@@ -1281,11 +1321,18 @@ function InfiniteCanvasPage() {
 
     const pasteImageFiles = useCallback(
         (files: File[]) => {
+            const targetNodeId = files.length === 1 ? findPasteImageTargetNodeId(nodesRef.current, selectedNodeIdsRef.current) : null;
+            if (targetNodeId) {
+                void replaceImageNodeFromFile(targetNodeId, files[0]);
+                message.success("已替换选中图片节点");
+                return;
+            }
+
             const center = getCanvasCenter();
             files.forEach((file, index) => void createImageFileNode(file, { x: center.x + index * 28, y: center.y + index * 28 }));
             message.success(files.length > 1 ? `已从剪切板添加 ${files.length} 张图片` : "已从剪切板添加图片");
         },
-        [createImageFileNode, getCanvasCenter, message],
+        [createImageFileNode, getCanvasCenter, message, replaceImageNodeFromFile],
     );
 
     useEffect(() => {

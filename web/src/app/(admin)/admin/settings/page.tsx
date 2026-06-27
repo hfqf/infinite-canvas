@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { EditorView } from "@uiw/react-codemirror";
 
 import { fetchAdminSettings, fetchChannelModels, saveAdminSettings, testChannelModel, type AdminModelChannel, type AdminModelCost, type AdminSettings } from "@/services/api/admin";
+import { useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 
 const CodeMirror = dynamic(() => import("@uiw/react-codemirror"), { ssr: false });
@@ -129,6 +130,7 @@ export default function AdminSettingsPage() {
             form.setFieldsValue(merged);
             setChannels(merged.private.channels);
             setModelCosts(merged.public.modelChannel.modelCosts);
+            useConfigStore.setState({ publicSettings: merged.public });
             rememberKnownModels(merged);
             setJsonText({
                 public: JSON.stringify(merged.public, null, 2),
@@ -349,6 +351,7 @@ export default function AdminSettingsPage() {
         const merged = mergeChannelApiKeys(nextChannels, saved);
         setChannels(merged.private.channels);
         setModelCosts(merged.public.modelChannel.modelCosts);
+        useConfigStore.setState({ publicSettings: merged.public });
         rememberKnownModels(merged);
         form.setFieldsValue(merged);
         setJsonText({

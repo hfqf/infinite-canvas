@@ -5,6 +5,7 @@ import { ConfigProvider, Switch } from "antd";
 
 import { type CanvasTheme } from "@/lib/canvas-theme";
 import type { AiConfig } from "@/stores/use-config-store";
+import { visibleImageResolutionOptions } from "./image-settings-options";
 
 const qualityOptions = [
     { value: "auto", label: "自动" },
@@ -49,12 +50,6 @@ const canvasAspectOptions: AspectOption[] = [
     { value: "3:1", label: "3:1", width: 3, height: 1, icon: "landscape" },
     { value: "1:3", label: "1:3", width: 1, height: 3, icon: "portrait" },
 ];
-const resolutionOptions = [
-    { value: "1k", label: "1K" },
-    { value: "2k", label: "2K" },
-    { value: "4k", label: "4K" },
-];
-
 type ImageSettingsPanelProps = {
     config: AiConfig;
     onConfigChange: (key: "quality" | "size" | "count", value: string) => void;
@@ -77,7 +72,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
     const dimensions = readSizeDimensions(activeSize, selectedAspect || aspectOptions[0]);
     const activeResolution = readResolution(activeSize, selectedAspect, dimensions);
     const displayedAspectOptions = isCanvas ? canvasAspectOptions : aspectOptions;
-    const displayedResolutionOptions = allow4K ? resolutionOptions : resolutionOptions.filter((item) => item.value !== "4k");
+    const displayedResolutionOptions = visibleImageResolutionOptions(allow4K);
     const resolutionRatioWidth = selectedAspect?.value === "custom" ? dimensions.width : selectedAspect?.width || dimensions.width || 1;
     const resolutionRatioHeight = selectedAspect?.value === "custom" ? dimensions.height : selectedAspect?.height || dimensions.height || 1;
     const selectAspect = (value: string) => {
