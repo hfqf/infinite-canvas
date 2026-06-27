@@ -20,6 +20,7 @@ import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
+import { getClipboardImageFiles } from "../utils/canvas-clipboard";
 import { svgBlob, svgToDataUrl } from "../utils/canvas-svg";
 import { fitNodeSize, nodeSizeFromRatio } from "../utils/canvas-node-size";
 import { App, Button, Dropdown, Modal } from "antd";
@@ -1278,24 +1279,38 @@ function InfiniteCanvasPage() {
         [getCanvasCenter],
     );
 
-    const pasteSystemClipboard = useCallback(async () => {
-        if (!navigator.clipboard) return;
+    const pasteImageFiles = useCallback(
+        (files: File[]) => {
+            const center = getCanvasCenter();
+            files.forEach((file, index) => void createImageFileNode(file, { x: center.x + index * 28, y: center.y + index * 28 }));
+            message.success(files.length > 1 ? `已从剪切板添加 ${files.length} 张图片` : "已从剪切板添加图片");
+        },
+        [createImageFileNode, getCanvasCenter, message],
+    );
 
-        const items = await navigator.clipboard.read();
-        const imageItem = items.find((item) => item.types.some((type) => type.startsWith("image/")));
-        if (imageItem) {
-            const imageType = imageItem.types.find((type) => type.startsWith("image/"));
-            if (!imageType) return;
-            const blob = await imageItem.getType(imageType);
-            const file = new File([blob], "clipboard-image.png", { type: imageType });
-            void createImageFileNode(file, getCanvasCenter());
-            message.success("已从剪切板添加图片");
-            return;
-        }
+    useEffect(() => {
+        const handlePaste = (event: ClipboardEvent) => {
+            if (event.defaultPrevented || !event.clipboardData) return;
 
-        const text = await navigator.clipboard.readText();
-        if (createTextNodeFromClipboard(text)) message.success("已从剪切板添加文本");
-    }, [createImageFileNode, createTextNodeFromClipboard, getCanvasCenter, message]);
+            const imageFiles = getClipboardImageFiles(event.clipboardData);
+            if (imageFiles.length) {
+                event.preventDefault();
+                pasteImageFiles(imageFiles);
+                return;
+            }
+
+            const target = event.target instanceof Element ? event.target : null;
+            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || target?.closest("[contenteditable='true'],[data-canvas-no-zoom]")) return;
+
+            if (createTextNodeFromClipboard(event.clipboardData.getData("text/plain"))) {
+                event.preventDefault();
+                message.success("已从剪切板添加文本");
+            }
+        };
+
+        window.addEventListener("paste", handlePaste);
+        return () => window.removeEventListener("paste", handlePaste);
+    }, [createTextNodeFromClipboard, message, pasteImageFiles]);
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -1334,8 +1349,7 @@ function InfiniteCanvasPage() {
             }
 
             if (isModifierShortcut && !event.altKey && key === "v") {
-                event.preventDefault();
-                if (!pasteCopiedNodes()) void pasteSystemClipboard();
+                if (pasteCopiedNodes()) event.preventDefault();
                 return;
             }
 
@@ -1366,7 +1380,7 @@ function InfiniteCanvasPage() {
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [copySelectedNodes, deleteConnection, deleteNodes, pasteCopiedNodes, pasteSystemClipboard, redoCanvas, selectedConnectionId, setConnecting, undoCanvas]);
+    }, [copySelectedNodes, deleteConnection, deleteNodes, pasteCopiedNodes, redoCanvas, selectedConnectionId, setConnecting, undoCanvas]);
 
     const handleConnectStart = useCallback(
         (event: ReactMouseEvent, nodeId: string, handleType: "source" | "target") => {
