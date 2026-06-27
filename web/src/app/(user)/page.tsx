@@ -40,11 +40,11 @@ export default function IndexPage() {
                 <div className="pointer-events-none absolute right-[23%] top-[48%] size-20 rounded-full border border-dashed border-stone-200 dark:border-stone-800" />
 
                 <div className="relative flex min-h-[620px] flex-col items-center justify-center pt-10 text-center">
-                    <h1 className="ai-title-aurora max-w-5xl text-balance text-5xl font-semibold tracking-normal sm:text-7xl lg:text-8xl">好图秀</h1>
+                    <h1 className="ai-title-aurora max-w-5xl text-balance text-5xl font-semibold tracking-normal sm:text-7xl lg:text-8xl">无限画布</h1>
                     <p className="mt-8 max-w-3xl text-balance text-lg leading-8 text-stone-500 dark:text-stone-400">
                         在
                         <Highlighter action="underline" color="#FF9800">
-                            好图秀画布
+                            好图秀AI画布
                         </Highlighter>
                         中生成、连接和重组
                         <Highlighter action="highlight" color="#87CEFA">
@@ -89,7 +89,7 @@ function SiteFooter() {
         <footer className="border-t border-stone-200 py-8 dark:border-stone-800">
             <div className="flex flex-col items-center justify-center gap-4 text-sm text-stone-500 md:flex-row dark:text-stone-400">
                 <div className="flex flex-wrap items-center justify-center gap-1">
-                    <span>© 2026 好图秀 haotushow.com</span>
+                    <span>© 2026 好图秀AI haotushow.com</span>
                     <span className="mx-2 text-stone-300 dark:text-stone-700">|</span>
                     <span>Made with Pure Joy</span>
                 </div>

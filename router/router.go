@@ -37,6 +37,7 @@ func New() *gin.Engine {
 	v1.POST("/images/uploads", gin.WrapF(handler.UploadImage))
 	v1.GET("/oss-image", gin.WrapF(handler.GetOSSImage))
 	v1.GET("/deduction-logs", gin.WrapF(handler.UserAIDeductionLogs))
+	v1.POST("/canvas/tool-credits/consume", gin.WrapF(handler.ConsumeCanvasToolCredits))
 	v1.GET("/invitations", gin.WrapF(handler.UserInvitationRecords))
 	v1.GET("/image-tasks", gin.WrapF(handler.UserAIImageTasks))
 	v1.POST("/images/vectorize", gin.WrapF(handler.VectorizeImage))

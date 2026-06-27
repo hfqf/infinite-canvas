@@ -75,7 +75,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <Layout hasSider style={{ height: "100vh", overflow: "hidden", background: antToken.colorBgLayout }}>
             <Layout.Sider width={adminLayoutStyle.siderWidth} style={{ height: "100vh", overflow: "hidden", background: antToken.colorBgContainer, borderRight: `1px solid ${antToken.colorBorder}` }}>
                 <Flex align="center" gap={12} style={{ height: adminLayoutStyle.brandHeight, padding: "0 20px", borderBottom: `1px solid ${antToken.colorBorderSecondary}` }}>
-                    <img src="/haotushow-logo.png" alt="好图秀" style={{ width: 34, height: 34, objectFit: "contain", borderRadius: 8 }} />
+                    <img src="/haotushow-logo.png" alt="好图秀AI" style={{ width: 34, height: 34, objectFit: "contain", borderRadius: 8 }} />
                     <Typography.Text strong style={{ fontSize: 18, letterSpacing: 0 }}>
                         好图秀
                     </Typography.Text>

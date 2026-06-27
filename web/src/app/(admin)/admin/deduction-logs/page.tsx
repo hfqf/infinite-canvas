@@ -173,6 +173,7 @@ function deductionTypeLabel(type: string) {
     if (type === "ai_freeze") return "冻结";
     if (type === "ai_freeze_release") return "释放";
     if (type === "ai_consume") return "扣款";
+    if (type === "canvas_tool_consume") return "画布工具";
     if (type === "invite_register_bonus") return "邀请赠送";
     if (type === "invite_reward") return "邀请奖励";
     return type || "-";
@@ -182,6 +183,7 @@ function deductionTypeColor(type: string) {
     if (type === "ai_freeze") return "gold";
     if (type === "ai_freeze_release") return "green";
     if (type === "ai_consume") return "red";
+    if (type === "canvas_tool_consume") return "volcano";
     if (type === "invite_register_bonus") return "cyan";
     if (type === "invite_reward") return "blue";
     return "default";

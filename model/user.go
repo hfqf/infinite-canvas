@@ -153,6 +153,7 @@ const (
 	CreditLogTypeAIFreezeRelease     CreditLogType = "ai_freeze_release"
 	CreditLogTypeAIConsume           CreditLogType = "ai_consume"
 	CreditLogTypeAIRefund            CreditLogType = "ai_refund"
+	CreditLogTypeCanvasToolConsume   CreditLogType = "canvas_tool_consume"
 	CreditLogTypeRegisterGift        CreditLogType = "register_gift"
 	CreditLogTypeInviteRegisterBonus CreditLogType = "invite_register_bonus"
 	CreditLogTypeInviteReward        CreditLogType = "invite_reward"

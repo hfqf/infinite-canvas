@@ -37,6 +37,12 @@ description: settings 表中 public 和 private 配置结构说明
   },
   "image": {
     "referenceCompressionQuality": 0.8
+  },
+  "canvas": {
+    "toolCosts": [
+      { "tool": "superResolve", "credits": 3 },
+      { "tool": "crop", "credits": 0 }
+    ]
   }
 }
 ```
@@ -46,6 +52,7 @@ description: settings 表中 public 和 private 配置结构说明
 | `modelChannel` | object | 模型渠道公开配置组 |
 | `auth` | object | 认证相关公开配置 |
 | `image` | object | 图片处理公开配置 |
+| `canvas` | object | 画布相关公开配置 |
 
 `modelChannel` 字段：
 
@@ -88,6 +95,19 @@ description: settings 表中 public 和 private 配置结构说明
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `referenceCompressionQuality` | number | 编辑图参考图转 JPEG 时使用的压缩质量系数，默认 `0.8`，范围 `0.1` 到 `1` |
+
+`canvas` 字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `toolCosts` | object[] | 画布工具栏功能积分配置，未配置的工具默认 `0` 积分；点击工具时按该配置扣费 |
+
+`toolCosts` 每项字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `tool` | string | 工具 ID，例如 `crop`、`split`、`upscale`、`superResolve` |
+| `credits` | number | 使用该工具消耗的积分，最小为 `0`；设为 `0` 时不扣费 |
 
 ## private.value
 

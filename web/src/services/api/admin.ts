@@ -207,6 +207,14 @@ export type AdminPublicSettings = {
     image: {
         referenceCompressionQuality: number;
     };
+    canvas: {
+        toolCosts: AdminCanvasToolCost[];
+    };
+};
+
+export type AdminCanvasToolCost = {
+    tool: string;
+    credits: number;
 };
 
 export type AdminPrivateSettings = {

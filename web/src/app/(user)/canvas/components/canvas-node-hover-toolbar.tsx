@@ -8,6 +8,12 @@ import { canvasThemes } from "@/lib/canvas-theme";
 import { formatBytes, getDataUrlByteSize } from "@/lib/image-utils";
 import { useCopyText } from "@/hooks/use-copy-text";
 import { useThemeStore } from "@/stores/use-theme-store";
+import { useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
+import { useUserStore } from "@/stores/use-user-store";
+import { modelSupports4K, requestCreditCost } from "@/constant/credits";
+import { canvasToolCostCredits, canvasToolTooltipTitle } from "@/constant/canvas-tool-cost";
+import { consumeCanvasToolCredits } from "@/services/api/canvas-tools";
+import { resolveCanvasSuperResolveSize } from "../utils/canvas-super-resolve";
 import type { CanvasImagePresetEditId } from "../constants";
 import { CanvasNodeType, type CanvasNodeData, type ViewportTransform } from "../types";
 import { ImageToolSettingsModal, type ImageToolbarSettingsTool } from "./canvas-image-toolbar-settings-modal";
@@ -46,7 +52,7 @@ type ToolbarTool = {
     title: string;
     label: string;
     icon: ReactNode;
-    onClick: () => void;
+    onClick: () => void | Promise<void>;
     active?: boolean;
     danger?: boolean;
 };
@@ -83,6 +89,12 @@ export function CanvasNodeHoverToolbar({
     const [draftImageToolIds, setDraftImageToolIds] = useState<ImageQuickToolId[]>(defaultImageQuickToolIds);
     const [draftShowImageToolLabels, setDraftShowImageToolLabels] = useState(true);
     const [imageToolSettingsOpen, setImageToolSettingsOpen] = useState(false);
+    const [chargingToolId, setChargingToolId] = useState<string | null>(null);
+    const toolCosts = useConfigStore((state) => state.publicSettings?.canvas?.toolCosts);
+    const modelCosts = useConfigStore((state) => state.publicSettings?.modelChannel?.modelCosts);
+    const effectiveConfig = useEffectiveConfig();
+    const token = useUserStore((state) => state.token);
+    const setSession = useUserStore((state) => state.setSession);
     const { message } = App.useApp();
     const copyText = useCopyText();
 
@@ -156,7 +168,16 @@ export function CanvasNodeHoverToolbar({
         ...(isAudio ? [{ id: "uploadAudio", title: hasAudio ? "替换音频" : "上传音频", label: hasAudio ? "替换音频" : "上传音频", icon: <Music2 className="size-4" />, onClick: () => onUpload(node) }] : []),
         ...(hasImage ? imageTools.map((tool) => ({ id: tool.id, title: tool.title, label: tool.label, icon: tool.icon, active: tool.active, onClick: tool.onClick })) : []),
     ];
-    const toolbarTools = hasImage ? [...baseToolbarTools, ...nodeToolbarTools].filter((tool) => quickImageToolIdSet.has(tool.id as ImageQuickToolId)) : [...baseToolbarTools, ...nodeToolbarTools];
+    const toolbarTools = (hasImage ? [...baseToolbarTools, ...nodeToolbarTools].filter((tool) => quickImageToolIdSet.has(tool.id as ImageQuickToolId)) : [...baseToolbarTools, ...nodeToolbarTools]).map((tool) => {
+        const credits = canvasToolCostCredits(toolCosts, tool.id);
+        const modelCredits = canvasToolModelCredits(tool.id);
+        return {
+            ...tool,
+            title: canvasToolTooltipTitle(tool.title, credits, modelCredits),
+            onClick: () => runToolbarTool(tool, credits),
+            active: tool.active || chargingToolId === tool.id,
+        };
+    });
     const selectableImageToolbarTools = [...baseToolbarTools, ...nodeToolbarTools].filter((tool) => tool.id !== "retry") as ImageToolbarSettingsTool[];
     const visibleToolCount = toolbarTools.length + (hasImage ? 1 : 0);
     const toolbarColumnCount = Math.min(visibleToolCount, 5);
@@ -182,6 +203,50 @@ export function CanvasNodeHoverToolbar({
         window.localStorage.setItem(IMAGE_QUICK_TOOLS_STORAGE_KEY, JSON.stringify(config));
         closeImageToolSettings();
     };
+
+    function canvasToolModelCredits(toolId: string) {
+        if (!hasImage && toolId !== "retry") return 0;
+        const imageModel = node.metadata?.model || effectiveConfig.imageModel || effectiveConfig.model;
+        const quality = node.metadata?.quality || effectiveConfig.quality;
+        const editSize = node.metadata?.size || "auto";
+        if (["maskEdit", "angle", "decompose", "clarify"].includes(toolId)) return imageModelCreditCost(imageModel, quality, toolId === "angle" ? node.metadata?.size || effectiveConfig.size : editSize, 1);
+        if (toolId === "superResolve") {
+            const supports4K = modelSupports4K(modelCosts, imageModel);
+            const width = node.metadata?.naturalWidth || node.width;
+            const height = node.metadata?.naturalHeight || node.height;
+            return imageModelCreditCost(imageModel, supports4K ? "4k" : "2k", resolveCanvasSuperResolveSize(width, height, supports4K), 1);
+        }
+        if (toolId === "retry" && node.type === CanvasNodeType.Image && node.metadata?.generationType) {
+            return imageModelCreditCost(imageModel, quality, node.metadata?.size || effectiveConfig.size, node.metadata.generationType === "edit" ? Math.max(1, node.metadata.references?.length || 1) : 0);
+        }
+        return 0;
+    }
+
+    function imageModelCreditCost(model: string, quality: string | undefined, size: string | undefined, referenceCount: number) {
+        return requestCreditCost({ channelMode: effectiveConfig.channelMode, modelCosts, model, count: 1, size: size || "", quality: quality || "", referenceCount });
+    }
+
+    async function runToolbarTool(tool: ToolbarTool, credits: number) {
+        if (chargingToolId) return;
+        if (credits <= 0) {
+            await tool.onClick();
+            return;
+        }
+        if (!token) {
+            message.error("请先登录");
+            return;
+        }
+        setChargingToolId(tool.id);
+        try {
+            const user = await consumeCanvasToolCredits(token, tool.id);
+            setSession(token, user);
+            await tool.onClick();
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "积分扣除失败");
+        } finally {
+            setChargingToolId(null);
+        }
+    }
 
     return (
         <>

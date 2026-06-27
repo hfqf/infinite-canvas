@@ -10,6 +10,7 @@ import { EditorView } from "@uiw/react-codemirror";
 import { fetchAdminSettings, fetchChannelModels, saveAdminSettings, testChannelModel, type AdminModelChannel, type AdminModelCost, type AdminSettings } from "@/services/api/admin";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
+import { canvasToolbarToolOptions } from "@/constant/canvas-tool-cost";
 
 const CodeMirror = dynamic(() => import("@uiw/react-codemirror"), { ssr: false });
 const jsonEditorTheme = EditorView.theme({
@@ -39,6 +40,7 @@ const emptySettings: AdminSettings = {
         },
         auth: { allowRegister: true, inviteRewardCredits: 20, linuxDo: { enabled: false } },
         image: { referenceCompressionQuality: 0.8 },
+        canvas: { toolCosts: [] },
     },
     private: { channels: [], promptSync: { enabled: true, cron: "*/5 * * * *" }, auth: { linuxDo: { clientId: "", clientSecret: "" } } },
 };
@@ -77,6 +79,7 @@ export default function AdminSettingsPage() {
     const [modelCosts, setModelCosts] = useState<AdminModelCost[]>([]);
     const [knownModels, setKnownModels] = useState<string[]>([]);
     const publicModels = Form.useWatch(["public", "modelChannel", "availableModels"], form) || [];
+    const canvasToolCosts = Form.useWatch(["public", "canvas", "toolCosts"], form) || [];
     const channelModels = useMemo(() => collectChannelModels(channels), [channels]);
     const channelTableData = useMemo(() => channels.map((channel, index) => ({ ...channel, _index: index, _rowKey: `${index}-${channel.name}-${channel.baseUrl}` })), [channels]);
     const activeMode = editorMode[activeTab];
@@ -496,6 +499,35 @@ export default function AdminSettingsPage() {
                                             ]}
                                         />
                                     </Col>
+                                    <Col span={24}>
+                                        <Typography.Title level={5}>画布工具栏积分</Typography.Title>
+                                        <Table
+                                            rowKey="id"
+                                            pagination={false}
+                                            size="small"
+                                            dataSource={canvasToolbarToolOptions.map((tool) => ({ ...tool, credits: canvasToolCostCredits(canvasToolCosts, tool.id) }))}
+                                            columns={[
+                                                { title: "功能", dataIndex: "label" },
+                                                { title: "工具 ID", dataIndex: "id" },
+                                                {
+                                                    title: "消耗积分",
+                                                    dataIndex: "credits",
+                                                    width: 220,
+                                                    render: (_, item) => (
+                                                        <InputNumber
+                                                            min={0}
+                                                            step={1}
+                                                            precision={0}
+                                                            className="!w-full"
+                                                            value={item.credits}
+                                                            addonAfter="点"
+                                                            onChange={(value) => setCanvasToolCost(form, item.id, Number(value) || 0)}
+                                                        />
+                                                    ),
+                                                },
+                                            ]}
+                                        />
+                                    </Col>
                                 </Row>
                             </Form>
                         ) : (
@@ -877,6 +909,9 @@ function normalizePublicSetting(setting: Partial<AdminSettings["public"]> = {}):
         image: {
             referenceCompressionQuality: normalizeReferenceCompressionQuality(setting.image?.referenceCompressionQuality),
         },
+        canvas: {
+            toolCosts: normalizeCanvasToolCosts(setting.canvas?.toolCosts || []),
+        },
     };
 }
 
@@ -888,6 +923,10 @@ function normalizeReferenceCompressionQuality(value: unknown) {
 
 function normalizeModelCosts(items: Partial<AdminSettings["public"]["modelChannel"]["modelCosts"][number]>[]) {
     return items.filter((item) => item.model).map((item) => ({ model: item.model || "", credits: Math.max(0, Number(item.credits) || 0), supports4K: item.supports4K !== false }));
+}
+
+function normalizeCanvasToolCosts(items: Partial<AdminSettings["public"]["canvas"]["toolCosts"][number]>[]) {
+    return items.filter((item) => item.tool).map((item) => ({ tool: item.tool || "", credits: Math.max(0, Number(item.credits) || 0) }));
 }
 
 function normalizePrivateSetting(setting: Partial<AdminSettings["private"]> = {}): AdminSettings["private"] {
@@ -943,6 +982,17 @@ function setModelSupports4K(form: any, setModelCosts: (items: AdminModelCost[]) 
     next.push({ model, credits: modelCostCredits(current, model), supports4K });
     form.setFieldValue(["public", "modelChannel", "modelCosts"], next);
     setModelCosts(next);
+}
+
+function canvasToolCostCredits(items: AdminSettings["public"]["canvas"]["toolCosts"], tool: string) {
+    return items.find((item) => item.tool === tool)?.credits || 0;
+}
+
+function setCanvasToolCost(form: any, tool: string, credits: number) {
+    const current = (form.getFieldValue(["public", "canvas", "toolCosts"]) || []) as AdminSettings["public"]["canvas"]["toolCosts"];
+    const next = current.filter((item) => item.tool !== tool);
+    next.push({ tool, credits: Math.max(0, credits) });
+    form.setFieldValue(["public", "canvas", "toolCosts"], next);
 }
 
 function mergeChannelApiKeys(currentChannels: AdminModelChannel[], saved: AdminSettings): AdminSettings {

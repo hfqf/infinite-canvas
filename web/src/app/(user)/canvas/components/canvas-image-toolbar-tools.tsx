@@ -120,7 +120,7 @@ export const imageToolDefinitions: ImageToolDefinition[] = [
     },
     {
         id: "superResolve",
-        defaultVisible: false,
+        defaultVisible: true,
         panelLabel: "超分",
         label: "超分",
         title: "AI 超分",

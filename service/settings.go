@@ -114,6 +114,7 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 		maxQuality := 1.0
 		setting.Image.ReferenceCompressionQuality = &maxQuality
 	}
+	setting.Canvas.ToolCosts = normalizeCanvasToolCosts(setting.Canvas.ToolCosts)
 	enabledModels := enabledChannelModels(channels)
 	if len(enabledModels) > 0 {
 		setting.ModelChannel.AvailableModels = enabledModels
@@ -125,6 +126,35 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 	setting.ModelChannel.DefaultVideoModel = repairDefaultModel(setting.ModelChannel.DefaultVideoModel, setting.ModelChannel.AvailableModels, isVideoModelName)
 	setting.ModelChannel.DefaultModel = repairDefaultModel(setting.ModelChannel.DefaultModel, setting.ModelChannel.AvailableModels, isTextModelName)
 	return setting
+}
+
+func normalizeCanvasToolCosts(items []model.CanvasToolCost) []model.CanvasToolCost {
+	result := make([]model.CanvasToolCost, 0, len(items))
+	for _, item := range items {
+		item.Tool = strings.TrimSpace(item.Tool)
+		if item.Tool == "" {
+			continue
+		}
+		if item.Credits < 0 {
+			item.Credits = 0
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+func CanvasToolCost(tool string) (int, error) {
+	settings, err := repository.GetSettings()
+	if err != nil {
+		return 0, err
+	}
+	tool = strings.TrimSpace(tool)
+	for _, item := range normalizePublicSetting(settings.Public).Canvas.ToolCosts {
+		if item.Tool == tool {
+			return item.Credits, nil
+		}
+	}
+	return 0, nil
 }
 
 func ModelCost(modelName string) (int, error) {

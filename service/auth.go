@@ -479,6 +479,46 @@ func ConsumeUserCredits(userID string, modelName string, credits int, path strin
 	return err
 }
 
+func ConsumeCanvasToolCredits(userID string, tool string) (model.AuthUser, error) {
+	tool = strings.TrimSpace(tool)
+	credits, err := CanvasToolCost(tool)
+	if err != nil {
+		return model.AuthUser{}, err
+	}
+	if credits <= 0 {
+		user, ok, err := repository.GetUserByID(userID)
+		if err != nil {
+			return model.AuthUser{}, err
+		}
+		if !ok {
+			return model.AuthUser{}, safeMessageError{message: "用户不存在"}
+		}
+		return model.PublicUser(user), nil
+	}
+	user, ok, err := repository.ConsumeUserCredits(userID, credits, now())
+	if err != nil {
+		return model.AuthUser{}, err
+	}
+	if !ok {
+		return model.AuthUser{}, safeMessageError{message: "积分不足"}
+	}
+	extra, _ := json.Marshal(map[string]string{"tool": tool})
+	_, err = repository.SaveCreditLog(model.CreditLog{
+		ID:        newID("credit"),
+		UserID:    userID,
+		Type:      model.CreditLogTypeCanvasToolConsume,
+		Amount:    -credits,
+		Balance:   user.Credits - user.FrozenCredits,
+		Remark:    "画布工具 " + tool,
+		Extra:     string(extra),
+		CreatedAt: now(),
+	})
+	if err != nil {
+		return model.AuthUser{}, err
+	}
+	return model.PublicUser(user), nil
+}
+
 func EnsureUserCredits(userID string, credits int) error {
 	if credits <= 0 {
 		return nil
@@ -831,7 +871,7 @@ func ListUserAIDeductionLogs(userID string, q model.Query) (model.CreditLogList,
 }
 
 func deductionLogTypes() []model.CreditLogType {
-	return []model.CreditLogType{model.CreditLogTypeAIFreeze, model.CreditLogTypeAIConsume, model.CreditLogTypeAIFreezeRelease, model.CreditLogTypeInviteRegisterBonus, model.CreditLogTypeInviteReward}
+	return []model.CreditLogType{model.CreditLogTypeAIFreeze, model.CreditLogTypeAIConsume, model.CreditLogTypeAIFreezeRelease, model.CreditLogTypeCanvasToolConsume, model.CreditLogTypeInviteRegisterBonus, model.CreditLogTypeInviteReward}
 }
 
 func ListUserAIImageTasks(userID string, q model.Query) (model.AIImageTaskList, error) {

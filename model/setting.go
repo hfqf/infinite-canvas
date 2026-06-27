@@ -47,6 +47,7 @@ type PublicSetting struct {
 	ModelChannel PublicModelChannelSetting `json:"modelChannel"`
 	Auth         PublicAuthSetting         `json:"auth"`
 	Image        PublicImageSetting        `json:"image"`
+	Canvas       PublicCanvasSetting       `json:"canvas"`
 }
 
 type PublicAuthSetting struct {
@@ -61,6 +62,15 @@ type PublicLinuxDoAuthSetting struct {
 
 type PublicImageSetting struct {
 	ReferenceCompressionQuality *float64 `json:"referenceCompressionQuality"`
+}
+
+type CanvasToolCost struct {
+	Tool    string `json:"tool"`
+	Credits int    `json:"credits"`
+}
+
+type PublicCanvasSetting struct {
+	ToolCosts []CanvasToolCost `json:"toolCosts"`
 }
 
 // PrivateSetting 私有配置。

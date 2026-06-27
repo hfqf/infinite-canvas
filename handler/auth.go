@@ -46,6 +46,10 @@ type updateAIImageTaskFeaturedRequest struct {
 	Featured bool `json:"featured"`
 }
 
+type consumeCanvasToolCreditsRequest struct {
+	Tool string `json:"tool"`
+}
+
 func Register(w http.ResponseWriter, r *http.Request) {
 	var request registerRequest
 	_ = json.NewDecoder(r.Body).Decode(&request)
@@ -211,6 +215,22 @@ func UserAIDeductionLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	OK(w, logs)
+}
+
+func ConsumeCanvasToolCredits(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok || user.ID == "" {
+		Fail(w, "请先登录")
+		return
+	}
+	var request consumeCanvasToolCreditsRequest
+	_ = json.NewDecoder(r.Body).Decode(&request)
+	result, err := service.ConsumeCanvasToolCredits(user.ID, request.Tool)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, result)
 }
 
 func UserAIImageTasks(w http.ResponseWriter, r *http.Request) {

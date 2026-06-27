@@ -7,7 +7,7 @@ import "./globals.css";
 import React from "react";
 
 export const metadata: Metadata = {
-    title: "好图秀",
+    title: "好图秀AI",
     description: "好图秀 AI 创作平台",
     icons: {
         icon: "/haotushow-logo.png",
