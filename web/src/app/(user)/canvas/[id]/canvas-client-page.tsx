@@ -21,6 +21,7 @@ import { useAssetStore } from "@/stores/use-asset-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
 import { getClipboardImageFiles } from "../utils/canvas-clipboard";
+import { canvasNodeImageToDataUrlInput } from "../utils/canvas-node-image-source";
 import { findPasteImageTargetNodeId } from "../utils/canvas-paste-image";
 import { svgBlob, svgToDataUrl } from "../utils/canvas-svg";
 import { fitNodeSize, nodeSizeFromRatio } from "../utils/canvas-node-size";
@@ -1649,7 +1650,9 @@ function InfiniteCanvasPage() {
 
     const cropImageNode = useCallback(async (node: CanvasNodeData, crop: CanvasImageCropRect) => {
         if (!node.metadata?.content) return;
-        const cropped = await cropDataUrl(node.metadata.content, crop);
+        const sourceDataUrl = await imageToDataUrl(canvasNodeImageToDataUrlInput(node));
+        if (!sourceDataUrl) throw new Error("读取图片失败");
+        const cropped = await cropDataUrl(sourceDataUrl, crop);
         const image = await uploadImage(cropped);
         const width = Math.min(node.width, Math.max(220, image.width));
         const childId = nanoid();
@@ -1676,7 +1679,9 @@ function InfiniteCanvasPage() {
         async (node: CanvasNodeData, params: CanvasImageSplitParams) => {
             if (!node.metadata?.content) return;
             setSplitNodeId(null);
-            const pieces = await splitDataUrl(node.metadata.content, params);
+            const sourceDataUrl = await imageToDataUrl(canvasNodeImageToDataUrlInput(node));
+            if (!sourceDataUrl) throw new Error("读取图片失败");
+            const pieces = await splitDataUrl(sourceDataUrl, params);
             const gap = 16;
             const cellWidth = node.width / params.columns;
             const cellHeight = node.height / params.rows;
@@ -1762,7 +1767,9 @@ function InfiniteCanvasPage() {
     const upscaleImageNode = useCallback(async (node: CanvasNodeData, params: CanvasImageUpscaleParams) => {
         if (!node.metadata?.content) return;
         setUpscaleNodeId(null);
-        const upscaled = await upscaleDataUrl(node.metadata.content, params);
+        const sourceDataUrl = await imageToDataUrl(canvasNodeImageToDataUrlInput(node));
+        if (!sourceDataUrl) throw new Error("读取图片失败");
+        const upscaled = await upscaleDataUrl(sourceDataUrl, params);
         const image = await uploadImage(upscaled);
         const size = fitNodeSize(image.width, image.height);
         const childId = nanoid();
