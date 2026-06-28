@@ -644,6 +644,25 @@ func CompleteAIImageTaskSuccess(taskID string, userID string, status string, ima
 	return err
 }
 
+func ArchiveAIImageTaskResultAsync(taskID string, userID string, imageURL string) {
+	imageURL = strings.TrimSpace(imageURL)
+	if taskID == "" || userID == "" || imageURL == "" || imageURL == "[b64_json]" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		uploaded, err := SaveRemoteImage(ctx, imageURL)
+		if err != nil {
+			log.Printf("archive AI image result to OSS failed: task=%s url=%s err=%v", taskID, imageURL, err)
+			return
+		}
+		if err := repository.UpdateAIImageTaskImageURL(taskID, userID, imageURL, uploaded.URL, now()); err != nil {
+			log.Printf("update archived AI image url failed: task=%s url=%s oss=%s err=%v", taskID, imageURL, uploaded.URL, err)
+		}
+	}()
+}
+
 func ReleaseAIImageTask(taskID string, userID string, status string) error {
 	_, _, err := repository.ReleaseAIImageTask(taskID, userID, status, now())
 	return err
@@ -689,12 +708,11 @@ func checkFrozenAIImageTask(task model.AIImageTask) error {
 		return ReleaseAIImageTask(task.TaskID, task.UserID, firstNonEmpty(status, "failed"))
 	}
 	if strings.TrimSpace(imageURL) != "" {
-		ossURL, err := saveAIImageTaskResultToOSS(imageURL)
-		if err != nil {
-			log.Printf("save scheduled AI image result to OSS failed: task=%s url=%s err=%v", task.TaskID, imageURL, err)
-			return ReleaseAIImageTask(task.TaskID, task.UserID, "oss_upload_failed")
+		if err := CompleteAIImageTaskSuccess(task.TaskID, task.UserID, firstNonEmpty(status, "succeeded"), imageURL); err != nil {
+			return err
 		}
-		return CompleteAIImageTaskSuccess(task.TaskID, task.UserID, firstNonEmpty(status, "succeeded"), ossURL)
+		ArchiveAIImageTaskResultAsync(task.TaskID, task.UserID, imageURL)
+		return nil
 	}
 	if status != "" {
 		return ReleaseAIImageTask(task.TaskID, task.UserID, "response_unrecognized")
@@ -751,17 +769,6 @@ func fetchAIImageTaskState(channel model.ModelChannel, task model.AIImageTask) (
 		return "", "", fmt.Errorf("upstream task status=%d body=%s", response.StatusCode, safeUpstreamTaskText(body))
 	}
 	return parseAIImageTaskState(body), parseAIImageTaskImageURL(body), nil
-}
-
-func saveAIImageTaskResultToOSS(imageURL string) (string, error) {
-	if strings.TrimSpace(imageURL) == "" || imageURL == "[b64_json]" {
-		return imageURL, nil
-	}
-	uploaded, err := SaveRemoteImage(context.Background(), imageURL)
-	if err != nil {
-		return "", err
-	}
-	return uploaded.URL, nil
 }
 
 func parseAIImageTaskState(body []byte) string {

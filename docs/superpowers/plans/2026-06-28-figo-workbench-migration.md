@@ -66,6 +66,8 @@
 - 2026-06-28: Re-reviewed the plan for omissions; added real front-end test command shape, database docs, WebDAV snapshot sync, login/remote-only assumptions, and task ID propagation.
 - 2026-06-28: Confirmed deployment direction: same Next.js project, multiple domain entry points; `workbench.haotushow.com` should serve the workbench frontend while keeping the same backend.
 - 2026-06-28: Confirmed `haotushow.com` marketing homepage should also migrate into this same Next.js project for a complete multi-domain product surface.
+- 2026-06-29: Changed AI image result persistence strategy: generation success now writes the upstream/relay image URL immediately for history and deduction logs, then archives to OSS asynchronously and updates the task/log URL after OSS succeeds. OSS archive failure no longer releases credits or blocks the front-end result.
+- 2026-06-29: Updated the current `/image` workbench log flow to keep generated result URLs directly instead of synchronously calling `/api/v1/images/uploads`; explicit user actions such as adding references or saving to assets still use the unified upload path.
 
 ## File Structure
 

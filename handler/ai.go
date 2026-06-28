@@ -168,7 +168,7 @@ func copyAIImageResponseWithFallback(ctx context.Context, w http.ResponseWriter,
 		}
 		result := fetchAIImageResponse(request, time.Duration(timeoutSeconds)*time.Second)
 		if result.statusCode < http.StatusBadRequest && result.message == "" {
-			if err := handleAIImageBilling(ctx, imageTask, channel, result.body); err != nil {
+			if err := handleAIImageBilling(imageTask, channel, result.body); err != nil {
 				FailError(w, err)
 				return
 			}
@@ -302,7 +302,7 @@ func proxyAIImageTaskGetRequest(w http.ResponseWriter, r *http.Request, path str
 		return
 	}
 	if ok {
-		if err := handleAIImageBilling(r.Context(), task, channel, result.body); err != nil {
+		if err := handleAIImageBilling(task, channel, result.body); err != nil {
 			FailError(w, err)
 			return
 		}
@@ -310,23 +310,13 @@ func proxyAIImageTaskGetRequest(w http.ResponseWriter, r *http.Request, path str
 	writeAIProxySuccess(w, result)
 }
 
-func handleAIImageBilling(ctx context.Context, imageTask model.AIImageTask, channel model.ModelChannel, body []byte) error {
+func handleAIImageBilling(imageTask model.AIImageTask, channel model.ModelChannel, body []byte) error {
 	if imageTask.Credits <= 0 {
 		return nil
 	}
 	status := imagePayloadStatus(body)
 	taskID := imagePayloadTaskID(body)
 	imageURL := imagePayloadImageURL(body)
-	if imageBillingOutcome(status, imageURL) == imageBillingCharge {
-		ossURL, err := saveAIImageResultToOSS(ctx, imageURL)
-		if err != nil {
-			if releaseErr := service.ReleaseAIImageTask(imageTask.TaskID, imageTask.UserID, "oss_upload_failed"); releaseErr != nil {
-				return releaseErr
-			}
-			return safeHandlerError{message: "图片保存 OSS 失败，已释放冻结积分"}
-		}
-		imageURL = ossURL
-	}
 	if taskID != "" {
 		attached, err := service.AttachAIImageTask(imageTask.TaskID, taskID, status, imageURL, channel)
 		if err != nil {
@@ -346,20 +336,13 @@ func handleAIImageBilling(ctx context.Context, imageTask model.AIImageTask, chan
 		}
 		return nil
 	case imageBillingCharge:
-		return service.CompleteAIImageTaskSuccess(imageTask.TaskID, imageTask.UserID, firstNonEmpty(status, "succeeded"), imageURL)
+		if err := service.CompleteAIImageTaskSuccess(imageTask.TaskID, imageTask.UserID, firstNonEmpty(status, "succeeded"), imageURL); err != nil {
+			return err
+		}
+		service.ArchiveAIImageTaskResultAsync(imageTask.TaskID, imageTask.UserID, imageURL)
+		return nil
 	}
 	return nil
-}
-
-func saveAIImageResultToOSS(ctx context.Context, imageURL string) (string, error) {
-	if strings.TrimSpace(imageURL) == "" || imageURL == "[b64_json]" {
-		return imageURL, nil
-	}
-	uploaded, err := service.SaveRemoteImage(ctx, imageURL)
-	if err != nil {
-		return "", err
-	}
-	return uploaded.URL, nil
 }
 
 type imageBillingState string

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -105,6 +106,71 @@ func TestCompleteAIImageTaskSuccessChargesOnce(t *testing.T) {
 	}
 	if logs[0].Amount != -6 || logs[0].RelatedID != task.TaskID || !strings.Contains(logs[0].Extra, "blue cat") || !strings.Contains(logs[0].Extra, "https://cdn.example.com/cat.png") {
 		t.Fatalf("log=%#v, want -6 related task with prompt and image url in extra", logs[0])
+	}
+}
+
+func TestUpdateAIImageTaskImageURLAlsoUpdatesConsumeLogExtra(t *testing.T) {
+	resetDBForTest(t)
+	user, err := SaveUser(model.User{ID: "user_ai_task_archive_001", Username: "ai-task-archive-user", Role: model.UserRoleUser, Status: model.UserStatusActive, Credits: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := model.AIImageTask{
+		ID:        "ai_image_task_archive_001",
+		TaskID:    "task_archive_001",
+		UserID:    user.ID,
+		Model:     "gpt-image-2",
+		Path:      "/images/generations",
+		Prompt:    "archive cat",
+		Credits:   3,
+		Status:    "running",
+		CreatedAt: "created",
+		UpdatedAt: "created",
+	}
+	if _, err = SaveAIImageTask(task); err != nil {
+		t.Fatal(err)
+	}
+	relayURL := "https://relay.example.com/cat.png"
+	ossURL := "https://oss.example.com/cat.png"
+	if _, _, err := CompleteAIImageTaskSuccess(task.TaskID, user.ID, "succeeded", relayURL, "done"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := UpdateAIImageTaskImageURL(task.TaskID, user.ID, relayURL, ossURL, "archived"); err != nil {
+		t.Fatal(err)
+	}
+
+	completed, ok, err := GetAIImageTaskByTaskID(task.TaskID)
+	if err != nil || !ok {
+		t.Fatalf("load task ok=%v err=%v", ok, err)
+	}
+	if completed.ImageURL != ossURL || completed.UpdatedAt != "archived" {
+		t.Fatalf("task image url=%q updatedAt=%q, want archived oss url", completed.ImageURL, completed.UpdatedAt)
+	}
+	logs, total, err := ListCreditLogs(model.Query{Keyword: task.TaskID, Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(logs) != 1 {
+		t.Fatalf("logs=%#v total=%d, want one consume log", logs, total)
+	}
+	var extra map[string]any
+	if err := json.Unmarshal([]byte(logs[0].Extra), &extra); err != nil {
+		t.Fatal(err)
+	}
+	if extra["imageUrl"] != ossURL {
+		t.Fatalf("extra imageUrl=%v, want oss url", extra["imageUrl"])
+	}
+
+	if err := UpdateAIImageTaskImageURL(task.TaskID, user.ID, relayURL, "https://oss.example.com/new.png", "archived-again"); err != nil {
+		t.Fatal(err)
+	}
+	completed, ok, err = GetAIImageTaskByTaskID(task.TaskID)
+	if err != nil || !ok {
+		t.Fatalf("load task ok=%v err=%v", ok, err)
+	}
+	if completed.ImageURL != ossURL {
+		t.Fatalf("task image url after stale archive=%q, want original oss url", completed.ImageURL)
 	}
 }
 

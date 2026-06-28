@@ -537,6 +537,49 @@ func CompleteAIImageTaskSuccess(taskID string, userID string, status string, ima
 	return task, charged, err
 }
 
+func UpdateAIImageTaskImageURL(taskID string, userID string, currentImageURL string, imageURL string, now string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	currentImageURL = strings.TrimSpace(currentImageURL)
+	imageURL = strings.TrimSpace(imageURL)
+	if taskID == "" || userID == "" || currentImageURL == "" || imageURL == "" || currentImageURL == imageURL {
+		return nil
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		task := model.AIImageTask{}
+		if err := tx.Where("task_id = ? AND user_id = ?", taskID, userID).First(&task).Error; err != nil {
+			return err
+		}
+		if task.ImageURL != currentImageURL {
+			return nil
+		}
+		if err := tx.Model(&model.AIImageTask{}).
+			Where("id = ? AND image_url = ?", task.ID, currentImageURL).
+			Updates(map[string]any{"image_url": imageURL, "updated_at": now}).Error; err != nil {
+			return err
+		}
+		if task.ChargedAt == "" {
+			return nil
+		}
+		creditLog := model.CreditLog{}
+		if err := tx.Where("id = ?", "credit_"+task.ID).First(&creditLog).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+		extra := map[string]any{}
+		if err := json.Unmarshal([]byte(creditLog.Extra), &extra); err != nil {
+			extra = map[string]any{}
+		}
+		extra["imageUrl"] = imageURL
+		nextExtra, _ := json.Marshal(extra)
+		return tx.Model(&model.CreditLog{}).Where("id = ?", creditLog.ID).Update("extra", string(nextExtra)).Error
+	})
+}
+
 func ReleaseAIImageTask(taskID string, userID string, status string, now string) (model.AIImageTask, bool, error) {
 	db, err := DB()
 	if err != nil {

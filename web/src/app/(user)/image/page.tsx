@@ -175,12 +175,6 @@ export default function ImagePage() {
         const failed = result.find((item): item is PromiseRejectedResult => item.status === "rejected");
 
         try {
-            const logImages = await Promise.all(
-                successImages.map(async (image) => {
-                    const stored = await uploadImage(image.dataUrl);
-                    return { ...image, dataUrl: stored.url, storageKey: stored.storageKey, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType };
-                }),
-            );
             saveLog(
                 buildLog({
                     prompt: text,
@@ -191,7 +185,7 @@ export default function ImagePage() {
                     successCount,
                     failCount,
                     status: successCount ? "成功" : "失败",
-                    images: logImages,
+                    images: successImages,
                 }),
             );
             successCount ? message.success("图片已生成") : message.error(failed?.reason instanceof Error ? failed.reason.message : "生成失败");
