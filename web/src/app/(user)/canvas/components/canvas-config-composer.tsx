@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, MouseEvent, PointerEvent } from "react";
 import { Button, Image } from "antd";
 import { FileText, Image as ImageIcon, Music2, Video, X } from "lucide-react";
@@ -35,6 +35,7 @@ export function CanvasConfigComposer({ value, inputs, credits, onChange, onClose
     const [mention, setMention] = useState<MentionState | null>(null);
     const [activeIndex, setActiveIndex] = useState(0);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [editorHeight, setEditorHeight] = useState(128);
     const tokens = useMemo(() => parseComposerTokens(value), [value]);
     const referenceById = useMemo(() => new Map(inputs.map((input) => [input.nodeId, input])), [inputs]);
     const candidates = useMemo(() => {
@@ -44,7 +45,7 @@ export function CanvasConfigComposer({ value, inputs, credits, onChange, onClose
         return inputs.filter((input) => `${resourceLabel(input, inputs)} ${input.title} ${input.text || ""}`.toLowerCase().includes(query));
     }, [inputs, mention]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (document.activeElement === editorRef.current) return;
         const editor = editorRef.current;
         if (!editor) return;
@@ -58,6 +59,13 @@ export function CanvasConfigComposer({ value, inputs, credits, onChange, onClose
             if (input) editor.append(createReferenceChip(input, inputs, theme, setImagePreview));
         });
     }, [inputs, referenceById, theme, tokens]);
+
+    useLayoutEffect(() => {
+        const editor = editorRef.current;
+        if (!editor) return;
+        const nextHeight = Math.min(Math.max(editor.scrollHeight, 128), 520);
+        setEditorHeight(nextHeight);
+    }, [inputs.length, value]);
 
     const syncFromEditor = () => {
         const editor = editorRef.current;
@@ -111,7 +119,7 @@ export function CanvasConfigComposer({ value, inputs, credits, onChange, onClose
     return (
         <div
             data-canvas-no-zoom
-            className="flex h-[360px] min-h-[260px] w-[560px] min-w-[400px] max-w-[min(820px,calc(100vw-32px))] resize flex-col overflow-auto rounded-2xl border p-3 shadow-2xl backdrop-blur"
+            className="flex min-h-[260px] w-[560px] min-w-[400px] max-w-[min(820px,calc(100vw-32px))] resize flex-col overflow-auto rounded-2xl border p-3 shadow-2xl backdrop-blur"
             style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
             onMouseDown={stopCanvasInteraction}
             onPointerDown={stopCanvasInteraction}
@@ -132,14 +140,14 @@ export function CanvasConfigComposer({ value, inputs, credits, onChange, onClose
                     <Button size="small" type="text" className="!h-7 !w-7 !min-w-7 !p-0" icon={<X className="size-3.5" />} onClick={onClose} />
                 </div>
             </div>
-            <div className="relative min-h-0 flex-1 rounded-xl border" style={{ background: theme.node.fill, borderColor: theme.node.stroke }}>
+            <div className="relative min-h-0 rounded-xl border" style={{ background: theme.node.fill, borderColor: theme.node.stroke }}>
                 {!value.trim() ? <div className="pointer-events-none absolute left-3 top-2 text-sm leading-7" style={{ color: theme.node.placeholder }}>输入提示词，按 @ 引用连接的图片或文本</div> : null}
                 <div
                     ref={editorRef}
                     contentEditable
                     suppressContentEditableWarning
-                    className="thin-scrollbar h-full min-h-32 w-full overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 text-sm leading-7 outline-none"
-                    style={{ color: theme.node.text }}
+                    className="thin-scrollbar min-h-32 w-full overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 text-sm leading-7 outline-none"
+                    style={{ height: editorHeight, color: theme.node.text }}
                     onInput={() => {
                         if (!composingRef.current) syncFromEditor();
                     }}

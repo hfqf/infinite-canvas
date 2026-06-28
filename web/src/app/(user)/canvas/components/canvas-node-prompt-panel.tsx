@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowUp, LoaderCircle, X } from "lucide-react";
 import { Button } from "antd";
 
@@ -43,7 +43,9 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
     const isEditingExistingContent = hasTextContent || hasImageContent;
     const initialPrompt = hasImageContent || !isEditingExistingContent ? node.metadata?.prompt || "" : "";
     const [prompt, setPrompt] = useState(initialPrompt);
+    const [textareaHeight, setTextareaHeight] = useState(128);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const syncedNodeIdRef = useRef(node.id);
     const allImageReferences = mentionReferences.filter((item) => item.kind === "image");
     const imageReferences = allImageReferences.slice(0, MAX_CANVAS_REFERENCE_IMAGES);
     const hiddenImageReferenceCount = Math.max(0, allImageReferences.length - imageReferences.length);
@@ -51,6 +53,8 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
     const credits = canvasGenerationCredits({ channelMode: config.channelMode, modelCosts, model: config.model, mode, count: config.count, size: config.size, quality: config.quality, imageReferenceCount: referenceCount });
 
     useEffect(() => {
+        if (syncedNodeIdRef.current === node.id) return;
+        syncedNodeIdRef.current = node.id;
         setPrompt(initialPrompt);
     }, [initialPrompt, node.id]);
 
@@ -62,6 +66,13 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
             textarea.setSelectionRange(textarea.value.length, textarea.value.length);
         });
     }, [node.id]);
+
+    useLayoutEffect(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        const nextHeight = Math.min(Math.max(textarea.scrollHeight, 128), 520);
+        setTextareaHeight(nextHeight);
+    }, [prompt, mentionReferences.length, node.id]);
 
     const updatePrompt = (value: string) => {
         setPrompt(value);
@@ -77,7 +88,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
 
     return (
         <div
-            className="flex h-[360px] min-h-[260px] w-[520px] min-w-[380px] max-w-[min(760px,calc(100vw-32px))] resize flex-col overflow-auto rounded-2xl border p-3 shadow-2xl backdrop-blur"
+            className="flex min-h-[260px] w-[520px] min-w-[380px] max-w-[min(760px,calc(100vw-32px))] resize flex-col overflow-auto rounded-2xl border p-3 shadow-2xl backdrop-blur"
             style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
             onMouseDown={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
@@ -135,9 +146,9 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                 value={prompt}
                 references={mentionReferences}
                 onChange={updatePrompt}
-                containerClassName="min-h-0 flex-1"
-                className="thin-scrollbar h-full min-h-32 w-full resize-none overflow-y-auto rounded-xl border px-3 py-2 text-sm leading-5 outline-none"
-                style={{ background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.text, caretColor: theme.node.text }}
+                containerClassName="min-h-0"
+                className="thin-scrollbar min-h-32 w-full resize-none overflow-y-auto rounded-xl border px-3 py-2 text-sm leading-5 outline-none"
+                style={{ height: textareaHeight, background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.text, caretColor: theme.node.text }}
                 placeholder={promptPlaceholder(mode, hasImageContent, hasTextContent)}
             />
 
