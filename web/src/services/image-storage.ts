@@ -67,6 +67,16 @@ export async function imageToDataUrl(image: { url?: string; dataUrl?: string; st
     return blobToDataUrl(await fetchImageBlob(url));
 }
 
+export async function imageToBlob(image: { url?: string; dataUrl?: string; storageKey?: string }) {
+    let url = image.dataUrl;
+    if (url && url.startsWith("oss:")) {
+        url = image.url || (await resolveImageUrl(image.storageKey, "")) || "";
+    }
+    url = url || (await resolveImageUrl(image.storageKey, image.url || ""));
+    if (!url) throw new Error("图片不存在");
+    return fetchImageBlob(url);
+}
+
 export async function deleteStoredImages(keys: Iterable<string>) {
     await Promise.all(
         Array.from(new Set(keys)).map(async (key) => {

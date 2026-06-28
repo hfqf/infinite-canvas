@@ -10,7 +10,7 @@ import { requestEdit, requestGeneration, requestImageQuestion, requestVectorizeI
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { requestVideoGeneration, storeGeneratedVideo } from "@/services/api/video";
 import { defaultConfig, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
-import { imageToDataUrl, resolveImageUrl, uploadImage, type UploadedImage } from "@/services/image-storage";
+import { imageToBlob, imageToDataUrl, resolveImageUrl, uploadImage, type UploadedImage } from "@/services/image-storage";
 import { saveImageGenerationLog } from "@/services/image-generation-logs";
 import { resolveMediaUrl, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { nanoid } from "nanoid";
@@ -1534,14 +1534,24 @@ function InfiniteCanvasPage() {
         setNodes((prev) => prev.map((node) => (node.id === nodeId ? applyNodeConfigPatch(node, patch) : node)));
     }, []);
 
-    const downloadNodeImage = useCallback((node: CanvasNodeData) => {
+    const downloadNodeImage = useCallback(async (node: CanvasNodeData) => {
         if ((node.type !== CanvasNodeType.Image && node.type !== CanvasNodeType.Svg && node.type !== CanvasNodeType.Video && node.type !== CanvasNodeType.Audio) || !node.metadata?.content) return;
         if (node.type === CanvasNodeType.Svg) {
             saveAs(svgBlob(node.metadata.content), `canvas-svg-${node.id}.svg`);
             return;
         }
-        saveAs(node.metadata.content, `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(node.metadata.content)}`);
-    }, []);
+        const fileName = `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(node.metadata.mimeType || node.metadata.content)}`;
+        try {
+            if (node.type === CanvasNodeType.Image) {
+                const blob = await imageToBlob({ dataUrl: node.metadata.content, url: node.metadata.content, storageKey: node.metadata.storageKey });
+                saveAs(blob, fileName);
+                return;
+            }
+            saveAs(node.metadata.content, fileName);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "下载失败");
+        }
+    }, [message]);
 
     const saveNodeAsset = useCallback(
         async (node: CanvasNodeData) => {

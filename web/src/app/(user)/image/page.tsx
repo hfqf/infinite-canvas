@@ -20,7 +20,7 @@ import { useThemeStore } from "@/stores/use-theme-store";
 import { nanoid } from "nanoid";
 import { formatBytes, formatDuration, getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
 import { requestEdit, requestGeneration } from "@/services/api/image";
-import { deleteStoredImages, resolveImageUrl, uploadImage } from "@/services/image-storage";
+import { deleteStoredImages, imageToBlob, resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { useAssetStore } from "@/stores/use-asset-store";
 import type { ReferenceImage } from "@/types/image";
 
@@ -194,8 +194,12 @@ export default function ImagePage() {
         }
     };
 
-    const downloadImage = (image: GeneratedImage, index: number) => {
-        saveAs(image.dataUrl, `image-${index + 1}.png`);
+    const downloadImage = async (image: GeneratedImage, index: number) => {
+        try {
+            saveAs(await imageToBlob({ dataUrl: image.dataUrl, storageKey: image.storageKey }), `image-${index + 1}.png`);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "下载失败");
+        }
     };
 
     const addResultToReferences = async (image: GeneratedImage, index: number) => {
@@ -514,7 +518,7 @@ function ResultImageCard({
     image: GeneratedImage;
     index: number;
     onEdit: (image: GeneratedImage, index: number) => void;
-    onDownload: (image: GeneratedImage, index: number) => void;
+    onDownload: (image: GeneratedImage, index: number) => void | Promise<void>;
     onSaveAsset: (image: GeneratedImage, index: number) => void;
 }) {
     return (
@@ -540,7 +544,7 @@ function ResultImageCard({
                         </Button>
                     </Tooltip>
                     <Tooltip title="下载">
-                        <Button className={RESULT_ACTION_BUTTON_CLASS} size="small" icon={<Download className="size-3.5" />} onClick={() => onDownload(image, index)}>
+                        <Button className={RESULT_ACTION_BUTTON_CLASS} size="small" icon={<Download className="size-3.5" />} onClick={() => void onDownload(image, index)}>
                             下载
                         </Button>
                     </Tooltip>
