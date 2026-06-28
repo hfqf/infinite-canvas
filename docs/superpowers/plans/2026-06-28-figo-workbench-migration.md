@@ -66,6 +66,15 @@
 - 2026-06-28: Re-reviewed the plan for omissions; added real front-end test command shape, database docs, WebDAV snapshot sync, login/remote-only assumptions, and task ID propagation.
 - 2026-06-28: Confirmed deployment direction: same Next.js project, multiple domain entry points; `workbench.haotushow.com` should serve the workbench frontend while keeping the same backend.
 - 2026-06-28: Confirmed `haotushow.com` marketing homepage should also migrate into this same Next.js project for a complete multi-domain product surface.
+- 2026-06-28: Task 1 implementation completed without running tests per `AGENTS.md`: added `AIImageTask` source metadata fields, request parsing for JSON/multipart image calls, credit log extra metadata, frontend task type fields, repository test coverage, and database documentation. Handoff verification command: `go test ./...`.
+- 2026-06-28: Task 2 implementation completed without running tests per `AGENTS.md`: added first-scope workbench scene types, scene presets, reference slot instructions, prompt builder, node test coverage, and `web` test script. Handoff verification command: `cd web && node --test test/workbench-prompt-builder.test.ts`.
+- 2026-06-28: Task 3 implementation completed without running tests per `AGENTS.md`: added remote-only workbench config, generation wrapper, optional image request metadata, and task-aware image API result helpers while keeping existing image array APIs compatible. Handoff verification command: `cd web && node --test test/workbench-generation.test.ts`.
+- 2026-06-28: Task 4 implementation completed without running tests per `AGENTS.md`: added workbench task snapshots keyed by canvas image task ID, snapshot serialization that strips inline reference blobs when `storageKey` exists, local snapshot test coverage, cleanup helper, and WebDAV `image-workbench` sync support for snapshots. Handoff verification command: `cd web && node --test test/workbench-log-store.test.ts`.
+- 2026-06-28: Task 5 implementation completed without running browser verification per `AGENTS.md`: added `/site` route and figo-style marketing homepage sections for hero, first-scope scene cards, strengths, static gallery, unified-account pricing copy, and footer. CTA routes now point to canvas/workbench/account pages instead of figo mock behavior. Manual responsive check remains for user/dev-server verification.
+- 2026-06-28: Task 6 implementation completed without browser verification per `AGENTS.md`: added `/workbench` route, figo-style dark workspace, scene rail, first three scene forms, reference slots, remote-only model/parameter controls, login/balance hints, generation flow, result actions, local task snapshots, and snapshot restore. Manual responsive and live generation checks remain for user/dev-server verification.
+- 2026-06-28: Task 7 implementation completed without browser verification per `AGENTS.md`: image history now displays workbench source/scene/template metadata, user/admin deduction logs parse and show workbench metadata from `extra`, and no new filters were added for the first release. Page verification remains for user/dev-server verification.
+- 2026-06-28: Task 8 implementation completed without build/browser verification per `AGENTS.md`: added top-nav `商业工作台` entry and Next.js middleware for `haotushow.com` root to `/site` plus `workbench.haotushow.com` to `/workbench` while bypassing API/static/proxy paths. Verification commands and domain/browser checks remain for user/deployment verification.
+- 2026-06-28: Shared-auth implementation completed without running tests per `AGENTS.md`: added simple Cookie JWT support using `infinite_canvas_session` with parent-domain `.haotushow.com`, kept Bearer token compatibility, added logout cookie clearing, allowed API/image/video/audio requests to use Cookie credentials, and added targeted backend/frontend tests. Handoff verification commands: `go test ./service -run 'TestAuthCookie|TestAuthToken' -v` and `cd web && node --test test/auth-token.test.ts`.
 
 ## File Structure
 
@@ -224,7 +233,7 @@ Credit log `extra` should include these fields alongside the existing model, pat
 - Consumes: optional request fields `source`, `sceneId`, `sceneName`, `templateName`.
 - Produces: `AIImageTask.source`, `AIImageTask.sceneId`, `AIImageTask.sceneName`, `AIImageTask.templateName`; matching fields in credit log `extra`.
 
-- [ ] **Step 1: Add a failing repository test for source metadata**
+- [x] **Step 1: Add a failing repository test for source metadata**
 
 Add a test in `repository/user_test.go` that freezes and completes a workbench image task, then asserts the task and consume log preserve source fields.
 
@@ -232,27 +241,27 @@ Run: `go test ./repository -run TestCompleteAIImageTaskSuccessPreservesWorkbench
 
 Expected: FAIL before fields exist.
 
-- [ ] **Step 2: Add fields to `model.AIImageTask`**
+- [x] **Step 2: Add fields to `model.AIImageTask`**
 
 Add `Source`, `SceneID`, `SceneName`, and `TemplateName` fields to `model/user.go`.
 
-- [ ] **Step 3: Thread metadata through service and repository**
+- [x] **Step 3: Thread metadata through service and repository**
 
 Extend `FreezeAIImageCredits` to accept source metadata or an options struct. Keep existing call sites readable.
 
-- [ ] **Step 4: Parse metadata from JSON and multipart image requests**
+- [x] **Step 4: Parse metadata from JSON and multipart image requests**
 
 In `handler/ai.go`, read optional fields from both `/images/generations` JSON and `/images/edits` multipart requests.
 
-- [ ] **Step 5: Add metadata to credit log extra**
+- [x] **Step 5: Add metadata to credit log extra**
 
 Update `aiImageCreditLogExtra` so freeze, consume, and release logs can identify workbench source and scene.
 
-- [ ] **Step 6: Update TypeScript task type**
+- [x] **Step 6: Update TypeScript task type**
 
 Add optional `source`, `sceneId`, `sceneName`, and `templateName` fields to `AIImageTask` in `web/src/services/api/image-tasks.ts`.
 
-- [ ] **Step 7: Update database documentation**
+- [x] **Step 7: Update database documentation**
 
 Add the new `ai_image_tasks` metadata fields to `docs/content/docs/backend/backend-database.mdx`.
 
@@ -275,7 +284,7 @@ Expected: PASS.
 **Interfaces:**
 - Produces: `WORKBENCH_SCENES`, `WORKBENCH_PRESETS`, `REFERENCE_SLOT_INSTRUCTIONS`, `buildWorkbenchPrompt(input)`.
 
-- [ ] **Step 1: Write prompt-builder tests**
+- [x] **Step 1: Write prompt-builder tests**
 
 Cover `STOREFRONT`, `POSTER`, and `MENU`. Assert scene fields, reference roles, additional prompt, negative prompt, and unified text requirements are present.
 
@@ -283,19 +292,19 @@ Run: `cd web && node --test test/workbench-prompt-builder.test.ts`
 
 Expected: FAIL before implementation.
 
-- [ ] **Step 2: Port first three scene definitions**
+- [x] **Step 2: Port first three scene definitions**
 
 Move only `STOREFRONT`, `POSTER`, and `MENU` from `figo` into `scenes.ts`.
 
-- [ ] **Step 3: Port first three reference slot definitions**
+- [x] **Step 3: Port first three reference slot definitions**
 
 Move the corresponding reference slot labels and roles into `reference-slots.ts`.
 
-- [ ] **Step 4: Implement `buildWorkbenchPrompt`**
+- [x] **Step 4: Implement `buildWorkbenchPrompt`**
 
 Keep output canvas-compatible: final result is a plain prompt string plus metadata, not a figo backend payload.
 
-- [ ] **Step 5: Add or reuse a front-end test script**
+- [x] **Step 5: Add or reuse a front-end test script**
 
 If `web/package.json` still has no test script, add `"test": "node --test"` so future agents can run targeted tests consistently.
 
@@ -318,23 +327,23 @@ Expected: PASS.
 - Consumes: canvas `AiConfig`, prompt, references, workbench metadata.
 - Produces: generation/edit calls that always use `channelMode: "remote"` and include source metadata; returns generated images plus `taskId` when available.
 
-- [ ] **Step 1: Write tests for remote-only config**
+- [x] **Step 1: Write tests for remote-only config**
 
 Assert local/global mode is ignored and output config always has `channelMode: "remote"` with the selected image model.
 
-- [ ] **Step 2: Add optional metadata to `requestGeneration` and `requestEdit`**
+- [x] **Step 2: Add optional metadata to `requestGeneration` and `requestEdit`**
 
 The request body/form should include `source`, `sceneId`, `sceneName`, and `templateName` when provided.
 
-- [ ] **Step 3: Preserve task IDs from image responses**
+- [x] **Step 3: Preserve task IDs from image responses**
 
 Extend the image API helpers so callers can opt into a richer result shape containing generated images and `taskId`. Do not break existing call sites that expect only image arrays.
 
-- [ ] **Step 4: Implement workbench generation wrapper**
+- [x] **Step 4: Implement workbench generation wrapper**
 
 Choose `requestEdit` when references exist, otherwise `requestGeneration`.
 
-- [ ] **Step 5: Refresh remote user after generation**
+- [x] **Step 5: Refresh remote user after generation**
 
 Reuse existing `requestGeneration` / `requestEdit` behavior so balance updates through `hydrateUser`.
 
@@ -355,19 +364,19 @@ Expected when run: PASS.
 - Consumes: workbench form state and canvas `taskId`.
 - Produces: local snapshots used to restore figo-style form state from a history item.
 
-- [ ] **Step 1: Write local snapshot tests**
+- [x] **Step 1: Write local snapshot tests**
 
 Assert snapshots are saved by task ID, restored by task ID, and serialized without large inline image blobs when storage keys exist.
 
-- [ ] **Step 2: Implement localforage store**
+- [x] **Step 2: Implement localforage store**
 
 Use a store name under the existing app namespace, for example `workbench_generation_snapshots`.
 
-- [ ] **Step 3: Include snapshots in WebDAV sync**
+- [x] **Step 3: Include snapshots in WebDAV sync**
 
 Extend the existing `image-workbench` domain in `web/src/services/app-sync.ts` so workbench form snapshots can sync with image workbench records, unless product direction changes to local-only snapshots. Keep existing image-generation logs compatible.
 
-- [ ] **Step 4: Add cleanup helper**
+- [x] **Step 4: Add cleanup helper**
 
 Provide a helper to delete snapshots for removed history items if the UI supports deletion.
 
@@ -395,23 +404,23 @@ Expected: PASS.
 - Consumes: figo homepage visual/content reference, canvas featured image tasks when practical, canvas public routes.
 - Produces: `/site` internal route for `haotushow.com`.
 
-- [ ] **Step 1: Create homepage route shell**
+- [x] **Step 1: Create homepage route shell**
 
 Create `/site` as the internal route for `haotushow.com`. Do not replace the existing canvas `/` route.
 
-- [ ] **Step 2: Port figo homepage visual language**
+- [x] **Step 2: Port figo homepage visual language**
 
 Migrate the figo homepage look and copy structure: hero, scene cards, product strengths, gallery, pricing explanation, and footer.
 
-- [ ] **Step 3: Replace figo tab actions with real routes**
+- [x] **Step 3: Replace figo tab actions with real routes**
 
 Route primary CTA actions to `/workbench`; route designer/canvas actions to `/canvas`; route account/recharge actions to the existing canvas account/recharge flow.
 
-- [ ] **Step 4: Remove figo mock-only behavior**
+- [x] **Step 4: Remove figo mock-only behavior**
 
 Do not port mock recharge, local credit mutation, or old figo auth modal behavior. Use canvas account entry points only.
 
-- [ ] **Step 5: Decide gallery data source**
+- [x] **Step 5: Decide gallery data source**
 
 Prefer canvas featured image tasks through `fetchFeaturedImageTasks`. If this introduces too much first-release coupling, use static figo-style visual cards and record a follow-up to switch to live featured records.
 
@@ -436,35 +445,35 @@ Verify mobile and desktop hero, CTA, scene cards, gallery, pricing, and footer d
 - Consumes: scene core, remote generation adapter, canvas image storage, canvas user/config stores.
 - Produces: `/workbench` route with figo-style visual layout.
 
-- [ ] **Step 1: Create route shell**
+- [x] **Step 1: Create route shell**
 
 Render the workbench as the first screen, not a marketing landing page.
 
-- [ ] **Step 2: Port figo visual style**
+- [x] **Step 2: Port figo visual style**
 
 Use `figo` workbench layout, palette, cards, dark/light theme toggle, scene rail, form panel, result canvas, and history panel as visual reference.
 
-- [ ] **Step 3: Add first three scene forms**
+- [x] **Step 3: Add first three scene forms**
 
 Support `STOREFRONT`, `POSTER`, and `MENU` with their required fields and reference slots.
 
-- [ ] **Step 4: Add remote model selector and image parameters**
+- [x] **Step 4: Add remote model selector and image parameters**
 
 Use canvas remote image models and model cost data; do not show local channel controls.
 
-- [ ] **Step 5: Add login and balance handling**
+- [x] **Step 5: Add login and balance handling**
 
 If no canvas user token exists, guide the user to log in before generation. Show current credits and frozen credits using the existing user store, and rely on backend errors for final balance enforcement.
 
-- [ ] **Step 6: Add generation flow**
+- [x] **Step 6: Add generation flow**
 
 Upload/resolve references through canvas image storage, build prompt, call workbench generation wrapper, display pending state, then show results.
 
-- [ ] **Step 7: Save result actions**
+- [x] **Step 7: Save result actions**
 
 Support download, use-as-reference, and save-to-assets through canvas utilities.
 
-- [ ] **Step 8: Restore from history**
+- [x] **Step 8: Restore from history**
 
 When a workbench snapshot exists for a task, restore scene, fields, references, model, size, quality, and result preview.
 
@@ -485,19 +494,19 @@ Verify desktop and mobile layouts for text overflow, control sizing, and result 
 - Consumes: `AIImageTask` source metadata and `CreditLog.Extra` metadata.
 - Produces: user/admin pages that visibly identify workbench source and scene.
 
-- [ ] **Step 1: Add source/scene display to image history**
+- [x] **Step 1: Add source/scene display to image history**
 
 Show a compact label such as `工作台 · 门头招牌` when metadata exists.
 
-- [ ] **Step 2: Add source/scene display to deduction logs**
+- [x] **Step 2: Add source/scene display to deduction logs**
 
 Parse `extra.source`, `extra.sceneName`, and `extra.templateName` and show them without breaking existing rows.
 
-- [ ] **Step 3: Add optional filtering only if cheap**
+- [x] **Step 3: Add optional filtering only if cheap**
 
 If existing query filtering can use keyword search, do not add new filters in first release.
 
-- [ ] **Step 4: Verify WebDAV sync still covers image history**
+- [x] **Step 4: Verify WebDAV sync still covers image history**
 
 If workbench snapshots are synced through `image-workbench`, run through sync mentally or manually with one saved workbench snapshot and confirm it does not break existing image generation logs.
 
@@ -517,15 +526,15 @@ Open `/image-history`, `/deduction-logs`, `/admin/image-history`, and `/admin/de
 - Consumes: completed `/workbench` route.
 - Produces: visible navigation entry and updated progress log.
 
-- [ ] **Step 1: Add navigation entry**
+- [x] **Step 1: Add navigation entry**
 
 Add `工作台` linking to `/workbench`.
 
-- [ ] **Step 2: Add domain entry handling**
+- [x] **Step 2: Add domain entry handling**
 
 Either configure deployment routing so `haotushow.com` serves `/site` and `workbench.haotushow.com` serves `/workbench`, or add Next.js middleware that rewrites only host page requests and leaves API/static/proxy routes untouched.
 
-- [ ] **Step 3: Check shared-auth deployment settings**
+- [x] **Step 3: Check shared-auth deployment settings**
 
 Confirm whether production auth cookies need `.haotushow.com` domain support so `canvas.haotushow.com` and `workbench.haotushow.com` share login state.
 
@@ -541,6 +550,8 @@ cd web && npm run build
 
 Expected when run: all commands pass.
 
+Status: not run per `AGENTS.md`; left as handoff commands.
+
 - [ ] **Step 5: Browser verification**
 
 Start the dev server only if the user asks for verification. Open `/workbench`, generate one image for each first-scope scene, then verify history, deduction logs, and user balance.
@@ -549,7 +560,7 @@ Start the dev server only if the user asks for verification. Open `/workbench`, 
 
 After deployment routing exists, open `haotushow.com`, `canvas.haotushow.com`, and `workbench.haotushow.com`; confirm each lands in the correct frontend experience, confirm API requests still hit the unified backend, and confirm cross-links still work.
 
-- [ ] **Step 7: Update this document**
+- [x] **Step 7: Update this document**
 
 Mark completed tasks, add the exact verification commands and results to the Progress Log, and record any follow-up tasks.
 

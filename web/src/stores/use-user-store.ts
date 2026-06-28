@@ -3,7 +3,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-import { AUTH_TOKEN_KEY, fetchCurrentUser, login, register, type AuthPayload, type AuthUser } from "@/services/api/auth";
+import { AUTH_TOKEN_KEY, fetchCurrentUser, login, logout, register, type AuthPayload, type AuthUser } from "@/services/api/auth";
+import { COOKIE_AUTH_TOKEN } from "@/services/api/auth-token";
 
 type UserStore = {
     token: string;
@@ -25,13 +26,12 @@ export const useUserStore = create<UserStore>()(
             isReady: false,
             isLoading: false,
             setSession: (token, user) => set({ token, user, isReady: true }),
-            clearSession: () => set({ token: "", user: null, isReady: true }),
+            clearSession: () => {
+                set({ token: "", user: null, isReady: true });
+                void logout();
+            },
             hydrateUser: async () => {
                 const token = get().token;
-                if (!token) {
-                    set({ user: null, isReady: true });
-                    return;
-                }
                 set({ isLoading: true });
                 try {
                     const user = await fetchCurrentUser(token);
@@ -39,7 +39,7 @@ export const useUserStore = create<UserStore>()(
                         set({ token: "", user: null, isReady: true, isLoading: false });
                         return;
                     }
-                    set({ user, isReady: true, isLoading: false });
+                    set({ token: token || COOKIE_AUTH_TOKEN, user, isReady: true, isLoading: false });
                 } catch {
                     set({ token: "", user: null, isReady: true, isLoading: false });
                 }

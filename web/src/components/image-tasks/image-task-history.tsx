@@ -38,6 +38,10 @@ type GenerationLog = {
     quality: string;
     status: "成功" | "失败";
     featured: boolean;
+    source?: string;
+    sceneId?: string;
+    sceneName?: string;
+    templateName?: string;
     image: GeneratedImage | null;
 };
 
@@ -268,6 +272,7 @@ function HistoryCard({ item, userName, marking, onDetail, onCopyPrompt, onToggle
                 <Tag className="m-0 rounded-full px-3">{statusValue(log.status)}</Tag>
                 <Tag className="m-0 rounded-full px-3">{itemSize(item)}</Tag>
                 <Tag className="m-0 rounded-full px-3">{log.credits ? `${log.credits} 积分` : "-"}</Tag>
+                {sourceLabel(log) ? <Tag color="blue" className="m-0 rounded-full px-3">{sourceLabel(log)}</Tag> : null}
                 {log.featured ? <Tag color="gold" className="m-0 rounded-full px-3">首页展示</Tag> : null}
             </div>
             <Space.Compact block className="mt-3">
@@ -294,7 +299,8 @@ function HistoryDetail({ item, userName, onCopyPrompt, onClose }: { item: Histor
         ["目标尺寸", log.size || log.config.size || "-"],
         ["尺寸状态", sizeHitLabel(item)],
         ["参考图", `${log.referenceCount} 张${log.referenceCount > 1 ? ` / 附加 ${log.referenceCount - 1} 张` : ""}`],
-        ["来源", "platform"],
+        ["来源", sourceLabel(log) || "platform"],
+        ["模板", log.templateName || "-"],
         ["任务", log.taskId],
         ["更新", formatDate(log.updatedAt || log.createdAt)],
         ["模型", log.model || log.config.imageModel || log.config.model || "-"],
@@ -362,6 +368,10 @@ function taskToLog(task: AIImageTask): GenerationLog {
         quality: task.quality,
         status: isSuccessStatus(task.status) ? "成功" : "失败",
         featured: task.featured === true,
+        source: task.source,
+        sceneId: task.sceneId,
+        sceneName: task.sceneName,
+        templateName: task.templateName,
         image,
     };
 }
@@ -414,6 +424,11 @@ function sizeHitLabel(item: HistoryItem) {
 
 function statusValue(status: GenerationLog["status"]) {
     return status === "失败" ? "failed" : "success";
+}
+
+function sourceLabel(log: Pick<GenerationLog, "source" | "sceneName" | "templateName">) {
+    if (log.source !== "workbench") return "";
+    return ["工作台", log.sceneName, log.templateName].filter(Boolean).join(" · ");
 }
 
 function formatDate(value: number) {

@@ -5,6 +5,9 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # 待测试
 
+- figo 风格首页和商业工作台已迁入同一个 Next.js 项目：新增 `/site` 作为 `haotushow.com` 内部首页，新增 `/workbench` 作为 `workbench.haotushow.com` 工作台入口，导航新增“商业工作台”，middleware 会把 `haotushow.com/` 重写到 `/site`、`workbench.haotushow.com/` 重写到 `/workbench`，并跳过 API、`/_next`、图片代理和 WebDAV 代理路径；需要验证三个域名入口、站内跳转、静态资源、API 请求和移动端/桌面端布局。
+- 商业工作台首版支持门头招牌、海报设计、菜单设计三个场景，使用 canvas 远程云端生图服务和统一账号，不保留 figo 后台；生成请求会写入 `source/sceneId/sceneName/templateName`，生图历史、用户/管理端扣款流水会展示工作台来源和场景，生成结果可下载、转参考图、保存到我的素材，并按 canvas taskId 保存本地表单快照参与 WebDAV `image-workbench` 同步；需要登录后分别生成三个场景，验证余额冻结/扣款/释放、4K 加价、参考图加价、历史记录、扣款流水、素材保存、快照恢复和 WebDAV 同步。
+- 登录态新增父域 `.haotushow.com` Cookie JWT 简单方案：登录、注册、管理员登录和 Linux.do 回调会写入 HttpOnly Cookie，后端鉴权兼容 `Authorization: Bearer` 和 Cookie，退出登录会清 Cookie；前端 API、生图、视频、音频和 OSS 上传请求允许携带 Cookie，localStorage token 仍保留兼容旧会话。需要验证在 `haotushow.com` 登录后打开 `canvas.haotushow.com` 和 `workbench.haotushow.com` 可自动恢复用户，退出后三个域名都变为未登录，并验证旧 Bearer token 登录、管理员后台、图片/视频/音频生成、素材上传仍正常。
 - 网站首页首屏大标题从“好图秀”改为“无限画布”；需要验证首页大屏标题展示正确，导航、按钮和页脚品牌文案保持原样。
 - 画布粘贴图片改为优先读取浏览器 `paste` 事件里的图片文件；从系统文件管理器复制图片后，即使当前焦点在画布编辑框里，粘贴也会创建图片节点，不再把图片文件名写进输入框；普通文本粘贴仍保留输入框默认行为。需要验证复制本地图片文件、复制网页图片、复制普通文本、画布内部节点复制粘贴和助手输入框粘贴图片都符合预期。
 - 画布粘贴单张图片时，如果当前只选中了一个图片节点，会直接替换该节点图片内容并保留节点连线和选中状态；没有选中图片节点、选中非图片节点或多选时仍按原逻辑新建图片节点。需要验证单选图片节点替换、空画布新建、多选新建、非图片节点新建和多张图片粘贴新建。

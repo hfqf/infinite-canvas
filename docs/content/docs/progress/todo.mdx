@@ -7,5 +7,7 @@ description: 当前项目后续值得处理的事项
 
 本文档用来记录当前项目后续比较值得处理的事项。
 
+- 好图秀商业工作台后续扩展：首版只迁移 `门头招牌`、`海报设计`、`菜单设计`，后续再按同一套 scene/preset/reference/prompt/snapshot 接口迁移 figo 的其他商业场景。
+- 好图秀首页画廊数据源：首版 `/site` 为了降低耦合使用静态 figo 风格视觉卡，后续可改成读取 canvas 精选生图记录并按工作台场景展示真实案例。
 - 转矢量后续增强：继续围绕 `png2svg-clean-node` 输出做通用效果评估，例如路径数量、颜色保真、透明图边界和小图形识别；不默认走 OCR、字体匹配或文字重排，避免改造字体和定制字形被错误替换。
 - 本地 Agent 接入后续：按[本地 Agent 接入规划](/docs/progress/local-agent-integration-plan)把 Claude Code CLI Adapter 升级为 Claude Agent SDK Adapter，并完善工具队列体验。

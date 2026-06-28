@@ -51,6 +51,10 @@ export async function register(payload: AuthPayload) {
     return apiPost<AuthSession>("/api/auth/register", payload);
 }
 
+export async function logout() {
+    return apiPost<boolean>("/api/auth/logout");
+}
+
 export async function requestVerificationCode(email: string, purpose = "register") {
     return apiPost<VerificationCodeResult>("/api/auth/verification-code", { email, purpose });
 }

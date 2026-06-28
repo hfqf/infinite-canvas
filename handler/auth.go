@@ -58,6 +58,7 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		FailError(w, err)
 		return
 	}
+	service.SetAuthSessionCookie(w, r, session)
 	OK(w, session)
 }
 
@@ -80,6 +81,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		FailError(w, err)
 		return
 	}
+	service.SetAuthSessionCookie(w, r, session)
 	OK(w, session)
 }
 
@@ -98,6 +100,7 @@ func LinuxDoCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, loginRedirect(r, redirect, "", err.Error()), http.StatusFound)
 		return
 	}
+	service.SetAuthSessionCookie(w, r, session)
 	http.Redirect(w, r, loginRedirect(r, redirect, session.Token, ""), http.StatusFound)
 }
 
@@ -113,7 +116,13 @@ func AdminLogin(w http.ResponseWriter, r *http.Request) {
 		Fail(w, "需要管理员权限")
 		return
 	}
+	service.SetAuthSessionCookie(w, r, session)
 	OK(w, session)
+}
+
+func Logout(w http.ResponseWriter, r *http.Request) {
+	service.ClearAuthSessionCookie(w, r)
+	OK(w, true)
 }
 
 func CurrentUser(w http.ResponseWriter, r *http.Request) {

@@ -3,6 +3,7 @@ import axios from "axios";
 import { audioMimeType, normalizeAudioFormatValue, normalizeAudioSpeedValue, normalizeAudioVoiceValue } from "@/lib/audio-generation";
 import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { buildApiUrl, type AiConfig } from "@/stores/use-config-store";
+import { authHeaderForToken } from "@/services/api/auth-token";
 import { useUserStore } from "@/stores/use-user-store";
 
 function aiApiUrl(config: AiConfig, path: string) {
@@ -13,7 +14,7 @@ function aiHeaders(config: AiConfig) {
     const token = useUserStore.getState().token;
     return config.channelMode === "remote"
         ? {
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              ...authHeaderForToken(token),
               "Content-Type": "application/json",
           }
         : {
@@ -43,7 +44,7 @@ export async function requestAudioGeneration(config: AiConfig, prompt: string): 
                 speed: Number(normalizeAudioSpeedValue(config.audioSpeed)),
                 ...(instructions ? { instructions } : {}),
             },
-            { headers: aiHeaders(config), responseType: "blob" },
+            { headers: aiHeaders(config), responseType: "blob", withCredentials: config.channelMode === "remote" },
         );
         await assertAudioBlob(response.data);
         refreshRemoteUser(config);

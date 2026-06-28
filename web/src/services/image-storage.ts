@@ -4,6 +4,7 @@ import localforage from "localforage";
 
 import { nanoid } from "nanoid";
 import { readImageMeta } from "@/lib/image-utils";
+import { authHeaderForToken } from "@/services/api/auth-token";
 import { useUserStore } from "@/stores/use-user-store";
 
 export type UploadedImage = {
@@ -110,14 +111,15 @@ async function fetchImageBlob(url: string) {
 }
 
 async function uploadImageToOSS(blob: Blob): Promise<Omit<UploadedImage, "width" | "height"> | null> {
-    const token = useUserStore.getState().token;
-    if (!token) return null;
+    const { token, user } = useUserStore.getState();
+    if (!token && !user) return null;
     const formData = new FormData();
     const ext = imageFileExtension(blob.type);
     formData.set("file", new File([blob], `canvas-image.${ext}`, { type: blob.type || "image/png" }));
     const response = await fetch("/api/v1/images/uploads", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: authHeaderForToken(token),
+        credentials: "include",
         body: formData,
     });
     const payload = (await response.json().catch(() => null)) as { code?: number; data?: Omit<UploadedImage, "width" | "height">; msg?: string } | null;

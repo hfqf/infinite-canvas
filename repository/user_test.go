@@ -108,6 +108,56 @@ func TestCompleteAIImageTaskSuccessChargesOnce(t *testing.T) {
 	}
 }
 
+func TestCompleteAIImageTaskSuccessPreservesWorkbenchMetadata(t *testing.T) {
+	resetDBForTest(t)
+	user, err := SaveUser(model.User{ID: "user_workbench_task_001", Username: "workbench-task-user", Role: model.UserRoleUser, Status: model.UserStatusActive, Credits: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := model.AIImageTask{
+		ID:           "ai_image_task_workbench_001",
+		TaskID:       "task_workbench_001",
+		UserID:       user.ID,
+		Model:        "gpt-image-2",
+		Path:         "/images/edits",
+		Prompt:       "restaurant menu",
+		Credits:      5,
+		Status:       "running",
+		Source:       "workbench",
+		SceneID:      "MENU",
+		SceneName:    "菜单设计",
+		TemplateName: "黑底高奢西餐",
+		CreatedAt:    "created",
+		UpdatedAt:    "created",
+	}
+	if _, err = SaveAIImageTask(task); err != nil {
+		t.Fatal(err)
+	}
+
+	completed, charged, err := CompleteAIImageTaskSuccess(task.TaskID, user.ID, "succeeded", "https://cdn.example.com/menu.png", "done")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !charged {
+		t.Fatal("completion charged=false, want true")
+	}
+	if completed.Source != task.Source || completed.SceneID != task.SceneID || completed.SceneName != task.SceneName || completed.TemplateName != task.TemplateName {
+		t.Fatalf("completed metadata=%#v, want workbench source metadata", completed)
+	}
+	logs, total, err := ListCreditLogs(model.Query{Keyword: task.TaskID, Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(logs) != 1 {
+		t.Fatalf("logs=%#v total=%d, want one consume log", logs, total)
+	}
+	for _, want := range []string{`"source":"workbench"`, `"sceneId":"MENU"`, `"sceneName":"菜单设计"`, `"templateName":"黑底高奢西餐"`} {
+		if !strings.Contains(logs[0].Extra, want) {
+			t.Fatalf("log extra=%s, want %s", logs[0].Extra, want)
+		}
+	}
+}
+
 func TestFreezeAIImageTaskPreventsOverspendingAndCanRelease(t *testing.T) {
 	resetDBForTest(t)
 	user, err := SaveUser(model.User{ID: "user_ai_freeze_001", Username: "ai-freeze-user", Role: model.UserRoleUser, Status: model.UserStatusActive, Credits: 10})

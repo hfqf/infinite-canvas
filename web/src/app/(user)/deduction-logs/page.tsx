@@ -17,6 +17,10 @@ type DeductionExtra = {
     imageUrl?: string;
     taskId?: string;
     frozenCredits?: number;
+    source?: string;
+    sceneId?: string;
+    sceneName?: string;
+    templateName?: string;
 };
 
 type DeductionRow = CreditLog & { parsedExtra: DeductionExtra };
@@ -72,6 +76,11 @@ export default function MyDeductionLogsPage() {
             title: "模型",
             width: 150,
             render: (_, item) => <Tag>{item.parsedExtra.model || "-"}</Tag>,
+        },
+        {
+            title: "来源",
+            width: 180,
+            render: (_, item) => sourceCell(item.parsedExtra),
         },
         {
             title: "任务 ID",
@@ -216,6 +225,17 @@ function imageCell(imageUrl?: string) {
             <Typography.Link href={imageUrl} target="_blank" rel="noreferrer">
                 <LinkOutlined />
             </Typography.Link>
+        </Space>
+    );
+}
+
+function sourceCell(extra: DeductionExtra) {
+    if (extra.source !== "workbench") return <Typography.Text type="secondary">platform</Typography.Text>;
+    return (
+        <Space size={4} wrap>
+            <Tag color="blue">工作台</Tag>
+            {extra.sceneName ? <Tag>{extra.sceneName}</Tag> : null}
+            {extra.templateName ? <Tag>{extra.templateName}</Tag> : null}
         </Space>
     );
 }

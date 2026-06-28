@@ -270,6 +270,10 @@ description: 当前后端主要数据表与字段说明
 | `reference_count` | number | 参考图数量 |
 | `status` | string | 上游任务状态 |
 | `image_url` | text | 成功结果图 URL，优先保存后端转存后的阿里云 OSS 链接；仅返回 base64 时记录为 `[b64_json]` |
+| `source` | string | 任务来源，如 `workbench` 表示好图秀工作台 |
+| `scene_id` | string | 工作台场景 ID，如 `STOREFRONT`、`POSTER`、`MENU` |
+| `scene_name` | string | 工作台场景名称，如 `门头招牌`、`海报设计`、`菜单设计` |
+| `template_name` | string | 工作台预设或模板名称 |
 | `featured` | bool | 是否展示到网站首页精选瀑布流 |
 | `featured_at` | string | 管理员设置首页展示的时间 |
 | `channel_name` | string | 创建任务时使用的渠道名称 |

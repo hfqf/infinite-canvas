@@ -1,0 +1,11 @@
+.site-page {
+    color-scheme: light;
+}
+
+.site-page * {
+    letter-spacing: 0;
+}
+
+.site-page img {
+    background: #e2e8f0;
+}

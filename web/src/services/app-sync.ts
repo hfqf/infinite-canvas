@@ -17,6 +17,7 @@ type DomainKey = AppSyncDomainKey;
 type CanvasDomainData = { projects: CanvasProject[] };
 type AssetDomainData = { assets: Asset[] };
 type LogDomainData = { logs: StoredLog[] };
+type ImageWorkbenchDomainData = { logs: StoredLog[]; workbenchSnapshots: StoredLog[] };
 
 type AppSyncFile = {
     storageKey: string;
@@ -78,6 +79,7 @@ export type AppSyncProgress = (event: AppSyncProgressEvent) => void;
 
 const FILE_CONCURRENCY = 3;
 const imageLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_generation_logs" });
+const workbenchSnapshotStore = localforage.createInstance({ name: "infinite-canvas", storeName: "workbench_generation_snapshots" });
 const videoLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: "video_generation_logs" });
 type LogStore = typeof imageLogStore;
 const storageKeyPattern = /^(image|video|audio|file|video-reference|audio-reference):/;
@@ -103,13 +105,19 @@ export async function syncAppDataToWebdav(config: WebdavSyncConfig, onProgress?:
             mergeData: (local, remote) => ({ assets: mergeById(local.assets, remote.assets, "updatedAt") }),
             applyData: async (data) => useAssetStore.getState().replaceAssets(await Promise.all(data.assets.map(hydrateAsset))),
         }),
-        syncDomain<LogDomainData>(config, onProgress, {
+        syncDomain<ImageWorkbenchDomainData>(config, onProgress, {
             key: "image-workbench",
             label: "生图工作台",
-            emptyData: { logs: [] },
-            localData: async () => ({ logs: await readStoredLogs(imageLogStore) }),
-            mergeData: (local, remote) => ({ logs: mergeById(local.logs, remote.logs, "createdAt") }),
-            applyData: async (data) => replaceStoredLogs(imageLogStore, data.logs),
+            emptyData: { logs: [], workbenchSnapshots: [] },
+            localData: async () => ({ logs: await readStoredLogs(imageLogStore), workbenchSnapshots: await readStoredLogs(workbenchSnapshotStore) }),
+            mergeData: (local, remote) => ({
+                logs: mergeById(local.logs, remote.logs || [], "createdAt"),
+                workbenchSnapshots: mergeById(local.workbenchSnapshots, remote.workbenchSnapshots || [], "updatedAt"),
+            }),
+            applyData: async (data) => {
+                await replaceStoredLogs(imageLogStore, data.logs || []);
+                await replaceStoredLogs(workbenchSnapshotStore, data.workbenchSnapshots || []);
+            },
         }),
         syncDomain<LogDomainData>(config, onProgress, {
             key: "video-workbench",

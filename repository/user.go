@@ -609,6 +609,10 @@ func aiImageCreditLogExtra(task model.AIImageTask, imageURL string) string {
 		"imageUrl":      imageURL,
 		"taskId":        task.TaskID,
 		"frozenCredits": task.Credits,
+		"source":        task.Source,
+		"sceneId":       task.SceneID,
+		"sceneName":     task.SceneName,
+		"templateName":  task.TemplateName,
 	})
 	return string(extra)
 }

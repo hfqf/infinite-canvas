@@ -15,6 +15,10 @@ export type AIImageTask = {
     referenceCount: number;
     status: string;
     imageUrl: string;
+    source?: string;
+    sceneId?: string;
+    sceneName?: string;
+    templateName?: string;
     featured: boolean;
     featuredAt: string;
     channelName: string;

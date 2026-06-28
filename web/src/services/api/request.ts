@@ -1,5 +1,7 @@
 import axios from "axios";
 
+import { authHeaderForToken } from "@/services/api/auth-token";
+
 export type ApiParams = Record<string, string | string[] | number | number[] | undefined>;
 
 type ApiResponse<T> = {
@@ -27,7 +29,7 @@ export async function apiGet<T>(url: string, params?: ApiParams, token?: string)
         url,
         method: "GET",
         params: params || undefined,
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        headers: authHeaderForToken(token),
     });
 }
 
@@ -38,7 +40,7 @@ export async function apiPost<T>(url: string, body?: unknown, token?: string) {
         data: body ?? {},
         headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...authHeaderForToken(token),
         },
     });
 }
@@ -47,7 +49,7 @@ export async function apiDelete<T>(url: string, token?: string) {
     return apiRequest<T>({
         url,
         method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        headers: authHeaderForToken(token),
     });
 }
 
@@ -61,6 +63,7 @@ async function apiRequest<T>(config: { url: string; method: "GET" | "POST" | "DE
             paramsSerializer: { serialize: (params) => serializeApiParams(params as ApiParams).toString() },
             data: config.data,
             headers: config.headers,
+            withCredentials: true,
             validateStatus: () => true,
         });
     } catch {

@@ -6,6 +6,7 @@ import { nanoid } from "nanoid";
 import { dataUrlToJpegFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { apiPost } from "@/services/api/request";
+import { authHeaderForToken } from "@/services/api/auth-token";
 import { imageToDataUrl } from "@/services/image-storage";
 import type { ReferenceImage } from "@/types/image";
 import { IMAGE_MAX_RATIO, IMAGE_SIZE_STEP, mark4KImageSize, parseImageDimensions, stripImageSizeMarker, validateImageGenerationSize } from "@/constant/image-generation-constraints";
@@ -35,6 +36,18 @@ export type VectorizeImageResult = {
     bytes: number;
     mimeType: string;
     engine?: string;
+};
+
+export type ImageRequestMetadata = {
+    source?: string;
+    sceneId?: string;
+    sceneName?: string;
+    templateName?: string;
+};
+
+export type ImageRequestResult = {
+    images: Array<{ id: string; dataUrl: string }>;
+    taskId?: string;
 };
 
 const QUALITY_BASE: Record<string, number> = {
@@ -151,11 +164,11 @@ function parseImagePayload(payload: ImageApiResponse) {
     return images;
 }
 
-async function resolveImagePayload(config: AiConfig, payload: ImageApiResponse, retryAfter?: string | number) {
-    if (!isPendingImagePayload(payload)) return parseImagePayload(payload);
-    const taskId = imageTaskId(payload);
-    if (!taskId) return parseImagePayload(payload);
-    return pollImageTask(config, taskId, retryAfter || payload.retry_after);
+async function resolveImagePayloadWithTask(config: AiConfig, payload: ImageApiResponse, retryAfter?: string | number): Promise<ImageRequestResult> {
+    const taskId = imageTaskId(payload) || undefined;
+    if (!isPendingImagePayload(payload)) return { images: parseImagePayload(payload), taskId };
+    if (!taskId) return { images: parseImagePayload(payload), taskId };
+    return { images: await pollImageTask(config, taskId, retryAfter || payload.retry_after), taskId };
 }
 
 async function pollImageTask(config: AiConfig, taskId: string, retryAfter?: string | number) {
@@ -258,7 +271,7 @@ function aiHeaders(config: AiConfig, contentType?: string) {
     const token = useUserStore.getState().token;
     return config.channelMode === "remote"
         ? {
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              ...authHeaderForToken(token),
               ...(contentType ? { "Content-Type": contentType } : {}),
           }
         : {
@@ -288,7 +301,11 @@ function withSystemMessage(config: AiConfig, messages: ChatCompletionMessage[]) 
     return systemPrompt ? [{ role: "system" as const, content: systemPrompt }, ...messages] : messages;
 }
 
-export async function requestGeneration(config: AiConfig, prompt: string) {
+export async function requestGeneration(config: AiConfig, prompt: string, metadata?: ImageRequestMetadata) {
+    return (await requestGenerationWithTask(config, prompt, metadata)).images;
+}
+
+export async function requestGenerationWithTask(config: AiConfig, prompt: string, metadata?: ImageRequestMetadata): Promise<ImageRequestResult> {
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
     const quality = normalizeQuality(config.quality);
     const requestSize = resolveRequestSize(quality, config.size, config.channelMode === "remote");
@@ -304,20 +321,26 @@ export async function requestGeneration(config: AiConfig, prompt: string) {
                 response_format: IMAGE_RESPONSE_FORMAT,
                 output_format: IMAGE_OUTPUT_FORMAT,
                 async: true,
+                ...compactImageRequestMetadata(metadata),
             },
             {
                 headers: aiHeaders(config, "application/json"),
+                withCredentials: config.channelMode === "remote",
             },
         );
-        const images = await resolveImagePayload(config, response.data, retryAfterHeader(response.headers["retry-after"]));
+        const result = await resolveImagePayloadWithTask(config, response.data, retryAfterHeader(response.headers["retry-after"]));
         refreshRemoteUser(config);
-        return images;
+        return result;
     } catch (error) {
         throw new Error(readAxiosError(error, "请求失败"));
     }
 }
 
-export async function requestEdit(config: AiConfig, prompt: string, references: ReferenceImage[], mask?: ReferenceImage) {
+export async function requestEdit(config: AiConfig, prompt: string, references: ReferenceImage[], mask?: ReferenceImage, metadata?: ImageRequestMetadata) {
+    return (await requestEditWithTask(config, prompt, references, mask, metadata)).images;
+}
+
+export async function requestEditWithTask(config: AiConfig, prompt: string, references: ReferenceImage[], mask?: ReferenceImage, metadata?: ImageRequestMetadata): Promise<ImageRequestResult> {
     const quality = normalizeQuality(config.quality);
     const requestSize = resolveRequestSize(quality, config.size, config.channelMode === "remote");
     const requestPrompt = buildImageReferencePromptText(prompt, references);
@@ -328,6 +351,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     formData.set("response_format", IMAGE_RESPONSE_FORMAT);
     formData.set("output_format", IMAGE_OUTPUT_FORMAT);
     formData.set("async", "true");
+    appendImageRequestMetadata(formData, metadata);
     if (quality) {
         formData.set("quality", quality);
     }
@@ -339,12 +363,22 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     if (mask) formData.set("mask", await dataUrlToJpegFile({ ...mask, dataUrl: await imageToDataUrl(mask) }, referenceCompressionQuality));
 
     try {
-        const response = await axios.post<ImageApiResponse>(aiApiUrl(config, "/images/edits"), formData, { headers: aiHeaders(config) });
-        const images = await resolveImagePayload(config, response.data, retryAfterHeader(response.headers["retry-after"]));
+        const response = await axios.post<ImageApiResponse>(aiApiUrl(config, "/images/edits"), formData, { headers: aiHeaders(config), withCredentials: config.channelMode === "remote" });
+        const result = await resolveImagePayloadWithTask(config, response.data, retryAfterHeader(response.headers["retry-after"]));
         refreshRemoteUser(config);
-        return images;
+        return result;
     } catch (error) {
         throw new Error(readAxiosError(error, "请求失败"));
+    }
+}
+
+function compactImageRequestMetadata(metadata?: ImageRequestMetadata) {
+    return Object.fromEntries(Object.entries(metadata || {}).filter(([, value]) => typeof value === "string" && value.trim()).map(([key, value]) => [key, String(value).trim()])) as ImageRequestMetadata;
+}
+
+function appendImageRequestMetadata(formData: FormData, metadata?: ImageRequestMetadata) {
+    for (const [key, value] of Object.entries(compactImageRequestMetadata(metadata))) {
+        formData.set(key, value);
     }
 }
 
@@ -371,6 +405,7 @@ export async function requestImageQuestion(config: AiConfig, messages: ChatCompl
                 headers: {
                     ...aiHeaders(config, "application/json"),
                 } as Record<string, string>,
+                withCredentials: config.channelMode === "remote",
                 responseType: "text",
                 onDownloadProgress: (event) => {
                     const responseText = String(event.event?.target?.responseText || "");

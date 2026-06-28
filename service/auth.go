@@ -36,6 +36,7 @@ type userExtra struct {
 const (
 	registerGiftCredits     = 30
 	inviteRegisterBonusRate = 10
+	AuthCookieName          = "infinite_canvas_session"
 )
 
 func EnsureDefaultAdmin() error {
@@ -327,6 +328,31 @@ func CurrentAuthUser(tokenText string) (model.AuthUser, bool) {
 	return model.PublicUser(user), true
 }
 
+func AuthTokenFromRequest(r *http.Request) string {
+	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		if token := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer ")); token != "" {
+			return token
+		}
+	}
+	cookie, err := r.Cookie(AuthCookieName)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(cookie.Value)
+}
+
+func SetAuthSessionCookie(w http.ResponseWriter, r *http.Request, session model.AuthSession) {
+	if strings.TrimSpace(session.Token) == "" {
+		return
+	}
+	http.SetCookie(w, authCookie(r, session.Token, authCookieMaxAge()))
+}
+
+func ClearAuthSessionCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, authCookie(r, "", -1))
+}
+
 func ListUsers(q model.Query) (model.UserList, error) {
 	users, total, err := repository.ListUsers(q)
 	if err != nil {
@@ -536,7 +562,18 @@ func EnsureUserCredits(userID string, credits int) error {
 	return nil
 }
 
+type AIImageTaskSourceMetadata struct {
+	Source       string
+	SceneID      string
+	SceneName    string
+	TemplateName string
+}
+
 func FreezeAIImageCredits(userID string, modelName string, credits int, path string, prompt string, size string, quality string, count int, referenceCount int) (model.AIImageTask, error) {
+	return FreezeAIImageCreditsWithMetadata(userID, modelName, credits, path, prompt, size, quality, count, referenceCount, AIImageTaskSourceMetadata{})
+}
+
+func FreezeAIImageCreditsWithMetadata(userID string, modelName string, credits int, path string, prompt string, size string, quality string, count int, referenceCount int, metadata AIImageTaskSourceMetadata) (model.AIImageTask, error) {
 	current := now()
 	task := model.AIImageTask{
 		ID:             newID("ai_image_task"),
@@ -550,6 +587,10 @@ func FreezeAIImageCredits(userID string, modelName string, credits int, path str
 		Count:          count,
 		ReferenceCount: referenceCount,
 		Status:         "reserved",
+		Source:         strings.TrimSpace(metadata.Source),
+		SceneID:        strings.TrimSpace(metadata.SceneID),
+		SceneName:      strings.TrimSpace(metadata.SceneName),
+		TemplateName:   strings.TrimSpace(metadata.TemplateName),
 		CreatedAt:      current,
 		UpdatedAt:      current,
 	}
@@ -953,6 +994,52 @@ func newToken(user model.User) (string, error) {
 		},
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(config.Cfg.JWTSecret))
+}
+
+func authCookie(r *http.Request, value string, maxAge int) *http.Cookie {
+	return &http.Cookie{
+		Name:     AuthCookieName,
+		Value:    value,
+		Path:     "/",
+		Domain:   authCookieDomain(r),
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   authCookieSecure(r),
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
+func authCookieMaxAge() int {
+	expireHours := config.Cfg.JWTExpireHours
+	if expireHours <= 0 {
+		expireHours = 168
+	}
+	return expireHours * 60 * 60
+}
+
+func authCookieDomain(r *http.Request) string {
+	host := forwardedHost(r)
+	if host == "haotushow.com" || strings.HasSuffix(host, ".haotushow.com") {
+		return ".haotushow.com"
+	}
+	return ""
+}
+
+func authCookieSecure(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(r.Header.Get("x-forwarded-proto"), "https") || authCookieDomain(r) != ""
+}
+
+func forwardedHost(r *http.Request) string {
+	host := strings.TrimSpace(r.Header.Get("x-forwarded-host"))
+	if host == "" {
+		host = r.Host
+	}
+	if strings.Contains(host, ":") {
+		if parsed, _, ok := strings.Cut(host, ":"); ok {
+			host = parsed
+		}
+	}
+	return strings.ToLower(strings.TrimSpace(host))
 }
 
 func hashPassword(password string) (string, error) {

@@ -103,7 +103,7 @@ func proxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 			return
 		}
 		size, quality := readAIImageRequestSizeQuality(body, contentType)
-		imageTask, err = service.FreezeAIImageCredits(user.ID, modelName, credits, path, readAIRequestPrompt(body, contentType), size, quality, readAIRequestCount(body, contentType), readAIReferenceImageCount(body, contentType))
+		imageTask, err = service.FreezeAIImageCreditsWithMetadata(user.ID, modelName, credits, path, readAIRequestPrompt(body, contentType), size, quality, readAIRequestCount(body, contentType), readAIReferenceImageCount(body, contentType), readAIRequestSourceMetadata(body, contentType))
 		if err != nil {
 			FailError(w, err)
 			return
@@ -863,6 +863,39 @@ func readAIRequestPrompt(body []byte, contentType string) string {
 	}
 	_ = json.Unmarshal(body, &payload)
 	return payload.Prompt
+}
+
+func readAIRequestSourceMetadata(body []byte, contentType string) service.AIImageTaskSourceMetadata {
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		_, params, err := mime.ParseMediaType(contentType)
+		if err != nil {
+			return service.AIImageTaskSourceMetadata{}
+		}
+		form, err := multipart.NewReader(bytes.NewReader(body), params["boundary"]).ReadForm(32 << 20)
+		if err != nil {
+			return service.AIImageTaskSourceMetadata{}
+		}
+		defer form.RemoveAll()
+		return service.AIImageTaskSourceMetadata{
+			Source:       firstFormValue(form.Value["source"]),
+			SceneID:      firstFormValue(form.Value["sceneId"]),
+			SceneName:    firstFormValue(form.Value["sceneName"]),
+			TemplateName: firstFormValue(form.Value["templateName"]),
+		}
+	}
+	var payload struct {
+		Source       string `json:"source"`
+		SceneID      string `json:"sceneId"`
+		SceneName    string `json:"sceneName"`
+		TemplateName string `json:"templateName"`
+	}
+	_ = json.Unmarshal(body, &payload)
+	return service.AIImageTaskSourceMetadata{
+		Source:       payload.Source,
+		SceneID:      payload.SceneID,
+		SceneName:    payload.SceneName,
+		TemplateName: payload.TemplateName,
+	}
 }
 
 func readMultipartModel(body []byte, contentType string) string {

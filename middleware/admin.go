@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/basketikun/infinite-canvas/handler"
 	"github.com/basketikun/infinite-canvas/model"
@@ -44,8 +43,8 @@ func NotFoundJSON(c *gin.Context) {
 }
 
 func authUser(c *gin.Context) (model.AuthUser, bool) {
-	token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-	if strings.TrimSpace(token) == "" {
+	token := service.AuthTokenFromRequest(c.Request)
+	if token == "" {
 		return model.AuthUser{}, false
 	}
 	return service.CurrentAuthUser(token)
