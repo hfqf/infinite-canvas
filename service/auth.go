@@ -176,12 +176,12 @@ func Register(username string, password string, email string, verificationCode s
 }
 
 func Login(username string, password string) (model.AuthSession, error) {
-	user, ok, err := repository.GetUserByUsername(strings.TrimSpace(username))
+	user, ok, err := findLoginUser(strings.TrimSpace(username))
 	if err != nil {
 		return model.AuthSession{}, err
 	}
 	if !ok || bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)) != nil {
-		return model.AuthSession{}, safeMessageError{message: "用户名或密码错误"}
+		return model.AuthSession{}, safeMessageError{message: "用户名/邮箱或密码错误"}
 	}
 	if user.Status == model.UserStatusBan {
 		return model.AuthSession{}, safeMessageError{message: "账号已被禁用"}
@@ -194,6 +194,15 @@ func Login(username string, password string) (model.AuthSession, error) {
 		return model.AuthSession{}, err
 	}
 	return newSession(user)
+}
+
+func findLoginUser(account string) (model.User, bool, error) {
+	if strings.Contains(account, "@") {
+		if user, ok, err := repository.GetUserByEmail(strings.ToLower(account)); err != nil || ok {
+			return user, ok, err
+		}
+	}
+	return repository.GetUserByUsername(account)
 }
 
 func LinuxDoAuthorizeURL(r *http.Request, redirect string) (string, error) {

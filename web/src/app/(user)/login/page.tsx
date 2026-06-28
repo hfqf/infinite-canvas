@@ -45,7 +45,6 @@ function LoginContent() {
     const register = useUserStore((state) => state.register);
     const setSession = useUserStore((state) => state.setSession);
     const isLoading = useUserStore((state) => state.isLoading);
-    const linuxDoEnabled = useConfigStore((state) => state.publicSettings?.auth?.linuxDo?.enabled === true);
     const allowRegister = useConfigStore((state) => state.publicSettings?.auth?.allowRegister !== false);
     const [mode, setMode] = useState<"login" | "register">("login");
     const [codeLoading, setCodeLoading] = useState(false);
@@ -126,7 +125,7 @@ function LoginContent() {
                 <div className="mb-7 text-center">
                     <img src="/haotushow-logo.png" alt="好图秀AI" className="mx-auto mb-4 block size-14 rounded-xl object-contain" />
                     <h1 className="text-3xl font-semibold tracking-normal text-stone-950 dark:text-stone-100">账号登录</h1>
-                    <p className="mt-3 text-base leading-7 text-stone-500 dark:text-stone-400">支持账号密码和 Linux.do 登录。</p>
+                    <p className="mt-3 text-base leading-7 text-stone-500 dark:text-stone-400">使用账号密码登录好图秀。</p>
                 </div>
 
                 <Form<LoginFormValues> form={form} layout="vertical" size="large" requiredMark={false} onFinish={submit}>
@@ -138,8 +137,8 @@ function LoginContent() {
                             options={allowRegister ? [{ label: "登录", value: "login" }, { label: "注册", value: "register" }] : [{ label: "登录", value: "login" }]}
                         />
                     </Form.Item>
-                    <Form.Item name="username" label={<span className="font-medium text-stone-800 dark:text-stone-200">用户名</span>} rules={[{ required: true, message: "请输入用户名" }]}>
-                        <Input prefix={<UserOutlined />} autoComplete="username" />
+                    <Form.Item name="username" label={<span className="font-medium text-stone-800 dark:text-stone-200">用户名/邮箱</span>} rules={[{ required: true, message: "请输入用户名或邮箱" }]}>
+                        <Input prefix={<UserOutlined />} autoComplete="username" placeholder="请输入用户名或邮箱" />
                     </Form.Item>
                     {mode === "register" ? (
                         <>
@@ -181,11 +180,6 @@ function LoginContent() {
                         <Button block type="primary" htmlType="submit" loading={isLoading}>
                             {mode === "register" ? "注册" : "登录"}
                         </Button>
-                        {linuxDoEnabled ? (
-                            <Button block href={`/api/auth/linux-do/authorize?redirect=${encodeURIComponent(redirect)}`} icon={<img src="/icons/linuxdo.svg" alt="" width={18} height={18} />}>
-                                使用 Linux.do 登录
-                            </Button>
-                        ) : null}
                     </Space>
                 </Form>
             </section>

@@ -60,7 +60,7 @@ description: 当前后端主要数据表与字段说明
 | `aff_count` | number | 已邀请用户数量，冗余统计字段 |
 | `inviter_id` | string | 邀请人用户 ID |
 | `github_id` | string | GitHub 用户 ID |
-| `linux_do_id` | string | Linux.do 用户 ID |
+| `linux_do_id` | string | 第三方登录用户 ID |
 | `wechat_id` | string | 微信用户 ID |
 | `status` | string | 用户状态：`active`、`ban` |
 | `last_login_at` | string | 最近登录时间 |
@@ -195,12 +195,6 @@ description: 当前后端主要数据表与字段说明
 | --- | --- | --- |
 | `referenceCompressionQuality` | number | 编辑图参考图转 JPEG 时使用的压缩质量系数，默认 `0.8`，范围 `0.1` 到 `1` |
 
-`auth.linuxDo` 当前字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `enabled` | bool | 是否开启 Linux.do 登录 |
-
 `private.value` 当前字段：
 
 | 字段 | 类型 | 说明 |
@@ -230,13 +224,6 @@ description: 当前后端主要数据表与字段说明
 | --- | --- | --- |
 | `enabled` | bool | 是否开启定时同步，默认开启 |
 | `cron` | string | Cron 表达式，默认每 5 分钟 |
-
-`auth.linuxDo` 当前字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `clientId` | string | Linux.do OAuth App Client ID |
-| `clientSecret` | string | Linux.do OAuth App Client Secret，后台返回时隐藏 |
 
 后端请求模型时，先按模型名筛选启用且包含该模型的渠道，再按 `weight` 加权随机选择一个渠道。图片生成和图片编辑请求遇到网络错误、`429` 或 `5xx` 时，会在同一次请求内尝试同模型的其他可用渠道；达到连续失败阈值的渠道会按本次图片请求超时时长临时跳过，超时时长为 `参考图数量 * 60 + 基础秒数`，基础秒数非 4K 为 `120`、4K 为 `180`。4K 判断按业务清晰度选择，不按裸 API 尺寸推断。
 

@@ -89,7 +89,7 @@ export default function AdminUsersPage() {
             ),
         },
         {
-            title: "Linux.do",
+            title: "第三方 ID",
             dataIndex: "linuxDoId",
             width: 140,
             render: (_, item) => <Typography.Text type="secondary">{item.linuxDoId || "-"}</Typography.Text>,
@@ -128,7 +128,7 @@ export default function AdminUsersPage() {
                                 <Form.Item label="关键词">
                                     <Input.Search
                                         value={keywordText}
-                                        placeholder="搜索用户名、昵称、邮箱或 Linux.do ID"
+                                        placeholder="搜索用户名、昵称、邮箱或第三方 ID"
                                         allowClear
                                         enterButton={<SearchOutlined />}
                                         onSearch={() => searchUsers(keywordText)}

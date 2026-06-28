@@ -88,7 +88,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
 
     return (
         <div
-            className="flex min-h-[260px] w-[520px] min-w-[380px] max-w-[min(760px,calc(100vw-32px))] resize flex-col overflow-auto rounded-2xl border p-3 shadow-2xl backdrop-blur"
+            className="flex min-h-[260px] w-[520px] min-w-[380px] max-w-[min(760px,calc(100vw-32px))] resize flex-col overflow-hidden rounded-2xl border p-3 shadow-2xl backdrop-blur"
             style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
             onMouseDown={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
@@ -146,13 +146,16 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                 value={prompt}
                 references={mentionReferences}
                 onChange={updatePrompt}
-                containerClassName="min-h-0"
-                className="thin-scrollbar min-h-32 w-full resize-none overflow-y-auto rounded-xl border px-3 py-2 text-sm leading-5 outline-none"
+                containerClassName="min-h-0 flex-1"
+                className="thin-scrollbar h-full min-h-32 w-full resize-none overflow-y-auto rounded-t-xl border border-b-0 px-3 py-2 text-sm leading-5 outline-none"
                 style={{ height: textareaHeight, background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.text, caretColor: theme.node.text }}
                 placeholder={promptPlaceholder(mode, hasImageContent, hasTextContent)}
             />
 
-            <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
+            <div
+                className="-mx-3 -mb-3 flex min-w-0 shrink-0 items-center justify-between gap-2 rounded-b-2xl border-t px-3 py-2 backdrop-blur"
+                style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border }}
+            >
                 <div className="flex min-w-0 items-center gap-2">
                     <CanvasPromptLibrary onSelect={updatePrompt} />
                     <SaveUserPromptButton prompt={prompt} source={`canvas-${mode}`} className="!h-10 !rounded-full">

@@ -1,8 +1,9 @@
 "use client";
 
 import { Copy, Download, PencilLine, Search, Trash2, Upload } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { App, Button, Card, Drawer, Empty, Form, Image, Input, Modal, Pagination, Select, Space, Tag, Typography } from "antd";
+import { App, Button, Card, Drawer, Empty, Form, Image, Input, Modal, Pagination, Select, Space, Spin, Tag, Typography } from "antd";
 import { saveAs } from "file-saver";
 
 import { useCopyText } from "@/hooks/use-copy-text";
@@ -10,6 +11,7 @@ import { formatBytes, readFileAsDataUrl } from "@/lib/image-utils";
 import { uploadImage } from "@/services/image-storage";
 import { cn } from "@/lib/utils";
 import { useAssetStore, type Asset, type AssetKind, type ImageAsset } from "@/stores/use-asset-store";
+import { useUserStore } from "@/stores/use-user-store";
 import { exportAssets, readAssetPackage } from "./asset-transfer";
 
 type AssetFormValues = {
@@ -38,6 +40,8 @@ export default function AssetsPage() {
     const coverInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const assetInputRef = useRef<HTMLInputElement>(null);
+    const token = useUserStore((state) => state.token);
+    const isUserReady = useUserStore((state) => state.isReady);
     const assets = useAssetStore((state) => state.assets);
     const addAsset = useAssetStore((state) => state.addAsset);
     const updateAsset = useAssetStore((state) => state.updateAsset);
@@ -76,6 +80,14 @@ export default function AssetsPage() {
         const maxPage = Math.max(1, Math.ceil(filteredAssets.length / pageSize));
         setPage((value) => Math.min(value, maxPage));
     }, [filteredAssets.length, pageSize]);
+
+    useEffect(() => {
+        if (token) return;
+        setIsAssetOpen(false);
+        setPreviewAsset(null);
+        setDeletingAsset(null);
+        setEditingAsset(null);
+    }, [token]);
 
     const openCreate = () => {
         setEditingAsset(null);
@@ -186,6 +198,37 @@ export default function AssetsPage() {
         message.success("素材已删除");
         setDeletingAsset(null);
     };
+
+    if (!isUserReady) {
+        return (
+            <div className="flex h-full items-center justify-center bg-background">
+                <Spin />
+            </div>
+        );
+    }
+
+    if (!token) {
+        return (
+            <div className="flex h-full flex-col overflow-hidden bg-background text-stone-900 dark:text-stone-100">
+                <main className="min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] px-6 py-8 [background-size:16px_16px] dark:bg-[radial-gradient(rgba(245,245,244,.14)_1px,transparent_1px)]">
+                    <div className="mx-auto flex min-h-[60vh] max-w-3xl items-center justify-center">
+                        <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description={
+                                <span className="text-stone-500 dark:text-stone-400">
+                                    请先登录后查看和管理我的素材
+                                </span>
+                            }
+                        >
+                            <Link href="/login">
+                                <Button type="primary">去登录</Button>
+                            </Link>
+                        </Empty>
+                    </div>
+                </main>
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-full flex-col overflow-hidden bg-background text-stone-900 dark:text-stone-100">

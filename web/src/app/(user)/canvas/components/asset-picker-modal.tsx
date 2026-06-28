@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { App, Empty, Input, Modal, Pagination, Spin, Tabs, Tag } from "antd";
+import { App, Button, Empty, Input, Modal, Pagination, Spin, Tabs, Tag } from "antd";
+import Link from "next/link";
 import { Search } from "lucide-react";
 import axios from "axios";
 
 import { cn } from "@/lib/utils";
 import { useAssetStore, type Asset } from "@/stores/use-asset-store";
+import { useUserStore } from "@/stores/use-user-store";
 import { fetchAssetLibrary, type AssetLibraryItem } from "@/services/api/assets";
 
 export type AssetPickerTab = "my-assets" | "library";
@@ -183,6 +185,8 @@ async function remoteImageToDataUrl(url: string) {
 }
 
 function MyAssetsTab({ onInsert }: { onInsert: (payload: InsertAssetPayload) => void }) {
+    const token = useUserStore((state) => state.token);
+    const isUserReady = useUserStore((state) => state.isReady);
     const assets = useAssetStore((state) => state.assets);
     const [keyword, setKeyword] = useState("");
     const [kindFilter, setKindFilter] = useState("all");
@@ -210,6 +214,24 @@ function MyAssetsTab({ onInsert }: { onInsert: (payload: InsertAssetPayload) => 
             onInsert(asset.kind === "video" ? { kind: "video", url: asset.data.url, storageKey: asset.data.storageKey, title: asset.title, width: asset.data.width, height: asset.data.height } : { kind: "image", dataUrl: asset.data.dataUrl, storageKey: asset.data.storageKey, title: asset.title });
         }
     };
+
+    if (!isUserReady) {
+        return (
+            <div className="flex justify-center py-16">
+                <Spin />
+            </div>
+        );
+    }
+
+    if (!token) {
+        return (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请先登录后使用我的素材" className="py-12">
+                <Link href="/login">
+                    <Button type="primary">去登录</Button>
+                </Link>
+            </Empty>
+        );
+    }
 
     return (
         <div className="space-y-4">
