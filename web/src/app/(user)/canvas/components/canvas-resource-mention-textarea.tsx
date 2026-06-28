@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent, PointerEvent, TextareaHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Image as ImageIcon, Music2, Video } from "lucide-react";
@@ -95,8 +95,23 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
     } as CSSProperties;
     const menu = mention && candidates.length && textareaRef.current ? <MentionMenu textarea={textareaRef.current} references={candidates} activeIndex={Math.min(activeIndex, candidates.length - 1)} theme={theme} onSelect={insertReference} /> : null;
 
+    useEffect(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        const handleWheel = (event: WheelEvent) => {
+            const scrollHost = textarea.parentElement;
+            if (scrollHost && scrollHost.scrollHeight > scrollHost.clientHeight) {
+                scrollHost.scrollTop += event.deltaY;
+                event.preventDefault();
+            }
+            event.stopPropagation();
+        };
+        textarea.addEventListener("wheel", handleWheel, { passive: false });
+        return () => textarea.removeEventListener("wheel", handleWheel);
+    }, []);
+
     return (
-        <div className={`relative h-full w-full ${containerClassName || ""}`}>
+        <div className={`relative h-full w-full ${containerClassName || ""}`} data-canvas-no-zoom>
             {showOverlay ? (
                 <div ref={overlayRef} className={`${className || ""} pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words`} style={{ ...style, color: theme.node.text }}>
                     <MentionHighlightText value={value || props.placeholder?.toString() || ""} labels={activeLabels} placeholder={!value} />

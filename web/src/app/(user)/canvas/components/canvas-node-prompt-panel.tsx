@@ -70,7 +70,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
     useLayoutEffect(() => {
         const textarea = textareaRef.current;
         if (!textarea) return;
-        const nextHeight = Math.min(Math.max(textarea.scrollHeight, 128), 520);
+        const nextHeight = Math.min(Math.max(textarea.scrollHeight, 128), 1000);
         setTextareaHeight(nextHeight);
     }, [prompt, mentionReferences.length, node.id]);
 
@@ -88,6 +88,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
 
     return (
         <div
+            data-canvas-no-zoom
             className="flex min-h-[260px] w-[520px] min-w-[380px] max-w-[min(760px,calc(100vw-32px))] resize flex-col overflow-hidden rounded-2xl border p-3 shadow-2xl backdrop-blur"
             style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
             onMouseDown={(event) => event.stopPropagation()}
@@ -146,7 +147,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                 value={prompt}
                 references={mentionReferences}
                 onChange={updatePrompt}
-                containerClassName="min-h-0 flex-1"
+                containerClassName="thin-scrollbar min-h-0 flex-1 overflow-y-auto"
                 className="thin-scrollbar h-full min-h-32 w-full resize-none overflow-y-auto rounded-t-xl border border-b-0 px-3 py-2 text-sm leading-5 outline-none"
                 style={{ height: textareaHeight, background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.text, caretColor: theme.node.text }}
                 placeholder={promptPlaceholder(mode, hasImageContent, hasTextContent)}
