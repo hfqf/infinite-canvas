@@ -56,17 +56,6 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
     useEffect(() => {
         const textarea = textareaRef.current;
         if (!textarea) return;
-        textarea.style.height = "auto";
-        const minHeight = 112;
-        const maxHeight = 260;
-        const nextHeight = Math.min(maxHeight, Math.max(minHeight, textarea.scrollHeight));
-        textarea.style.height = `${nextHeight}px`;
-        textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
-    }, [prompt]);
-
-    useEffect(() => {
-        const textarea = textareaRef.current;
-        if (!textarea) return;
         requestAnimationFrame(() => {
             textarea.focus();
             textarea.setSelectionRange(textarea.value.length, textarea.value.length);
@@ -87,7 +76,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
 
     return (
         <div
-            className="rounded-2xl border p-3 shadow-2xl backdrop-blur"
+            className="flex h-[360px] min-h-[260px] w-[520px] min-w-[380px] max-w-[min(760px,calc(100vw-32px))] resize flex-col overflow-auto rounded-2xl border p-3 shadow-2xl backdrop-blur"
             style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
             onMouseDown={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
@@ -145,7 +134,8 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                 value={prompt}
                 references={mentionReferences}
                 onChange={updatePrompt}
-                className="thin-scrollbar min-h-28 max-h-[260px] w-full resize-none rounded-xl border px-3 py-2 text-sm leading-5 outline-none"
+                containerClassName="min-h-0 flex-1"
+                className="thin-scrollbar h-full min-h-32 w-full resize-none overflow-y-auto rounded-xl border px-3 py-2 text-sm leading-5 outline-none"
                 style={{ background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.text, caretColor: theme.node.text }}
                 placeholder={promptPlaceholder(mode, hasImageContent, hasTextContent)}
             />

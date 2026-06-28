@@ -132,6 +132,10 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
                     updateSelectionState();
                     props.onPointerUp?.(event);
                 }}
+                onScroll={(event) => {
+                    syncOverlayScroll();
+                    props.onScroll?.(event);
+                }}
                 onKeyDown={(event) => {
                     if (mention && candidates.length) {
                         if (event.key === "ArrowDown") {
@@ -161,10 +165,6 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
                         return;
                     }
                     onKeyDown?.(event);
-                }}
-                onScroll={(event) => {
-                    syncOverlayScroll();
-                    props.onScroll?.(event);
                 }}
                 onBlur={(event) => {
                     setHasSelection(false);
