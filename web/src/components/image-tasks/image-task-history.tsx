@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { formatBytes, formatDuration } from "@/lib/image-utils";
 import type { AIImageTask, AIImageTaskListResponse, AIImageTaskQuery } from "@/services/api/image-tasks";
+import { imageToBlob } from "@/services/image-storage";
 import { useUserStore } from "@/stores/use-user-store";
 
 type GeneratedImage = {
@@ -76,6 +77,7 @@ export function ImageTaskHistory({ eyebrow = "IMAGES", title = "图片管理", e
     const [appliedDateRange, setAppliedDateRange] = useState<[Dayjs, Dayjs] | null>(null);
     const [detail, setDetail] = useState<HistoryItem | null>(null);
     const [markingId, setMarkingId] = useState("");
+    const [downloadingId, setDownloadingId] = useState("");
 
     const refresh = async () => {
         if (!token) {
@@ -144,6 +146,22 @@ export function ImageTaskHistory({ eyebrow = "IMAGES", title = "图片管理", e
         message.success("已复制提示词");
     };
 
+    const downloadImage = async (item: HistoryItem) => {
+        if (!item.image.dataUrl) return message.warning("暂无可下载图片");
+        const key = `download-image-${item.id}`;
+        setDownloadingId(item.id);
+        message.open({ key, type: "loading", content: "正在准备下载...", duration: 0 });
+        try {
+            const blob = await imageToBlob({ dataUrl: item.image.dataUrl, url: item.image.dataUrl });
+            saveAs(blob, `image-${item.log.id}.png`);
+            message.open({ key, type: "success", content: "已开始下载", duration: 2 });
+        } catch (error) {
+            message.open({ key, type: "error", content: error instanceof Error ? error.message : "下载失败", duration: 3 });
+        } finally {
+            setDownloadingId("");
+        }
+    };
+
     const toggleFeatured = async (taskId: string, featured: boolean) => {
         if (!onToggleFeatured) return;
         const task = tasks.find((item) => item.taskId === taskId || item.id === taskId);
@@ -197,9 +215,9 @@ export function ImageTaskHistory({ eyebrow = "IMAGES", title = "图片管理", e
                 </div>
                 <Spin spinning={loading}>
                     {items.length ? (
-                        <div className="grid grid-cols-1 divide-y divide-stone-100 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4">
+                        <div className="grid auto-rows-fr grid-cols-1 divide-y divide-stone-100 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4">
                             {items.map((item) => (
-                                <HistoryCard key={item.id} item={item} userName={item.log.userId || defaultUserName} marking={markingId === item.log.taskId} onDetail={setDetail} onCopyPrompt={copyPrompt} onToggleFeatured={onToggleFeatured ? toggleFeatured : undefined} />
+                                <HistoryCard key={item.id} item={item} userName={item.log.userId || defaultUserName} marking={markingId === item.log.taskId} downloading={downloadingId === item.id} onDetail={setDetail} onCopyPrompt={copyPrompt} onDownload={downloadImage} onToggleFeatured={onToggleFeatured ? toggleFeatured : undefined} />
                             ))}
                         </div>
                     ) : (
@@ -229,18 +247,18 @@ export function ImageTaskHistory({ eyebrow = "IMAGES", title = "图片管理", e
             </section>
 
             <Modal open={Boolean(detail)} footer={null} width={1180} centered closeIcon={<X className="size-5" />} onCancel={() => setDetail(null)} styles={{ body: { padding: 28 } }}>
-                {detail ? <HistoryDetail item={detail} userName={detail.log.userId || defaultUserName} onCopyPrompt={copyPrompt} onClose={() => setDetail(null)} /> : null}
+                {detail ? <HistoryDetail item={detail} userName={detail.log.userId || defaultUserName} downloading={downloadingId === detail.id} onCopyPrompt={copyPrompt} onDownload={downloadImage} onClose={() => setDetail(null)} /> : null}
             </Modal>
         </main>
     );
 }
 
-function HistoryCard({ item, userName, marking, onDetail, onCopyPrompt, onToggleFeatured }: { item: HistoryItem; userName: string; marking: boolean; onDetail: (item: HistoryItem) => void; onCopyPrompt: (prompt: string) => void; onToggleFeatured?: (taskId: string, featured: boolean) => void }) {
+function HistoryCard({ item, userName, marking, downloading, onDetail, onCopyPrompt, onDownload, onToggleFeatured }: { item: HistoryItem; userName: string; marking: boolean; downloading: boolean; onDetail: (item: HistoryItem) => void; onCopyPrompt: (prompt: string) => void; onDownload: (item: HistoryItem) => void | Promise<void>; onToggleFeatured?: (taskId: string, featured: boolean) => void }) {
     const log = item.log;
     return (
-        <article className="p-6">
+        <article className="flex h-full flex-col p-6">
             <button type="button" className="block w-full overflow-hidden rounded-lg bg-stone-100 text-left" onClick={() => onDetail(item)}>
-                {item.image.dataUrl ? <Image src={item.image.dataUrl} alt={log.title || "生成图片"} preview={false} className="!h-[290px] !w-full object-cover" /> : <EmptyImagePlaceholder />}
+                {item.image.dataUrl ? <Image src={item.image.dataUrl} alt={log.title || "生成图片"} preview={false} className="!h-[240px] !w-full object-cover" /> : <EmptyImagePlaceholder />}
             </button>
             <div className="mt-4 flex items-center justify-between text-sm text-stone-500">
                 <span className="inline-flex items-center gap-1 font-medium">
@@ -248,29 +266,32 @@ function HistoryCard({ item, userName, marking, onDetail, onCopyPrompt, onToggle
                     {formatDate(log.createdAt)}
                 </span>
                 <Space size={10}>
-                    <Button type="text" size="small" icon={<Download className="size-4" />} onClick={() => saveAs(item.image.dataUrl, `image-${log.id}.png`)} />
+                    <Button type="text" size="small" loading={downloading} icon={<Download className="size-4" />} onClick={() => void onDownload(item)} />
                     <Button type="text" size="small" icon={<Copy className="size-4" />} onClick={() => void onCopyPrompt(log.prompt)} />
                 </Space>
             </div>
-            <div className="mt-3 rounded-lg bg-stone-50 p-3 text-sm leading-6 text-stone-600">
-                <span className="font-semibold text-stone-800">{userName}</span>
-                <span className="px-1">·</span>
-                <span>{log.prompt || "暂无提示词"}</span>
-            </div>
+            <button type="button" className="mt-3 h-[86px] rounded-lg bg-stone-50 p-3 text-left text-sm leading-6 text-stone-600" onClick={() => onDetail(item)}>
+                <span className="block truncate font-semibold text-stone-800">{userName}</span>
+                <span className="mt-1 block" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                    {log.prompt || "暂无提示词"}
+                </span>
+            </button>
             <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-stone-500">
                 <span>{formatBytes(item.image.bytes) || "-"}</span>
                 <span className="text-right">{itemSize(item)}</span>
                 <span>生成用时 {formatDuration(item.image.durationMs || log.durationMs)}</span>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-                <Tag className="m-0 rounded-full px-3">{item.mode}</Tag>
-                <Tag className="m-0 rounded-full px-3">托管生图</Tag>
-                <Tag className="m-0 rounded-full px-3">{statusValue(log.status)}</Tag>
-                <Tag className="m-0 rounded-full px-3">{itemSize(item)}</Tag>
-                <Tag className="m-0 rounded-full px-3">{log.credits ? `${log.credits} 积分` : "-"}</Tag>
-                {log.featured ? <Tag color="gold" className="m-0 rounded-full px-3">首页展示</Tag> : null}
+            <div className="mt-3 min-h-[68px] overflow-hidden">
+                <div className="flex flex-wrap gap-2">
+                    <Tag className="m-0 rounded-full px-3">{item.mode}</Tag>
+                    <Tag className="m-0 rounded-full px-3">托管生图</Tag>
+                    <Tag className="m-0 rounded-full px-3">{statusValue(log.status)}</Tag>
+                    <Tag className="m-0 rounded-full px-3">{itemSize(item)}</Tag>
+                    <Tag className="m-0 rounded-full px-3">{log.credits ? `${log.credits} 积分` : "-"}</Tag>
+                    {log.featured ? <Tag color="gold" className="m-0 rounded-full px-3">首页展示</Tag> : null}
+                </div>
             </div>
-            <Space.Compact block className="mt-3">
+            <Space.Compact block className="mt-auto pt-3">
                 <Button className="rounded-lg" icon={<Eye className="size-4" />} onClick={() => onDetail(item)}>
                     查看详情
                 </Button>
@@ -284,7 +305,7 @@ function HistoryCard({ item, userName, marking, onDetail, onCopyPrompt, onToggle
     );
 }
 
-function HistoryDetail({ item, userName, onCopyPrompt, onClose }: { item: HistoryItem; userName: string; onCopyPrompt: (prompt: string) => void; onClose: () => void }) {
+function HistoryDetail({ item, userName, downloading, onCopyPrompt, onDownload, onClose }: { item: HistoryItem; userName: string; downloading: boolean; onCopyPrompt: (prompt: string) => void; onDownload: (item: HistoryItem) => void | Promise<void>; onClose: () => void }) {
     const log = item.log;
     const fields = [
         ["用户", userName],
@@ -323,7 +344,7 @@ function HistoryDetail({ item, userName, onCopyPrompt, onClose }: { item: Histor
                     <div className="mt-5 text-lg text-stone-500">完整提示词</div>
                     <div className="mt-3 min-h-[120px] rounded-2xl bg-stone-50 p-5 text-base leading-8 text-stone-800">{log.prompt || "暂无提示词"}</div>
                     <div className="mt-8 flex flex-wrap justify-end gap-3">
-                        <Button size="large" icon={<Download className="size-5" />} onClick={() => saveAs(item.image.dataUrl, `image-${log.id}.png`)}>
+                        <Button size="large" loading={downloading} icon={<Download className="size-5" />} onClick={() => void onDownload(item)}>
                             下载图片
                         </Button>
                         <Button size="large" icon={<Copy className="size-5" />} onClick={() => void onCopyPrompt(log.prompt)}>

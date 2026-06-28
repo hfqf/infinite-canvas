@@ -24,6 +24,14 @@ export function imageWaitDetailText(info: ImageWaitInfo) {
     return `基础 ${info.baseSeconds} 秒 + ${info.referenceCount} 张参考图 x 60 秒`;
 }
 
+export function imageWaitDurationText(seconds: number) {
+    const value = Math.max(0, Math.floor(seconds));
+    const minutes = Math.floor(value / 60);
+    const restSeconds = value % 60;
+    if (!minutes) return `${restSeconds}秒`;
+    return restSeconds ? `${minutes}分${String(restSeconds).padStart(2, "0")}秒` : `${minutes}分`;
+}
+
 function is4KImageRequest(size: string, quality: string) {
     return isBusiness4KImageRequest(size, quality);
 }

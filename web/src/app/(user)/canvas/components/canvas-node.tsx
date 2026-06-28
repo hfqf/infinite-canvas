@@ -6,7 +6,8 @@ import { ChevronRight, Image as ImageIcon, Music2, RefreshCw, Star, Video } from
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { formatBytes, formatDuration } from "@/lib/image-utils";
-import { imageGenerationWaitInfo, imageWaitDetailText } from "@/lib/image-wait-time";
+import { imageGenerationWaitInfo, imageWaitDetailText, imageWaitDurationText } from "@/lib/image-wait-time";
+import { ProgressCircle } from "@/components/progress-circle";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasResourceMentionTextarea } from "./canvas-resource-mention-textarea";
 import { CanvasNodeType, type CanvasNodeData, type Position } from "../types";
@@ -357,14 +358,22 @@ const nodeContentRenderers = {
 } satisfies Record<CanvasNodeType, (props: NodeContentRendererProps) => ReactNode>;
 
 function LoadingContent({ node, theme }: Pick<NodeContentRendererProps, "node" | "theme">) {
+    const [tick, setTick] = useState(0);
     const waitInfo = imageGenerationWaitInfo({ size: node.metadata?.size, quality: node.metadata?.quality, referenceCount: node.metadata?.references?.length || 0 });
+    const progress = Math.min(99, 10 + (tick / waitInfo.seconds) * 89);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setTick((value) => value + 1), 1000);
+        return () => window.clearInterval(timer);
+    }, []);
+
     return (
         <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-5 text-center" style={{ color: theme.node.activeStroke }}>
-            <div className="size-10 animate-spin rounded-full border-2" style={{ borderColor: theme.node.stroke, borderTopColor: theme.node.activeStroke }} />
+            <ProgressCircle progress={progress} size={46} stroke={3} color={theme.node.activeStroke} trackColor={theme.node.stroke} />
             <span className="text-[10px] tracking-[0.2em]">生成中</span>
             {node.type === CanvasNodeType.Image ? (
                 <div className="max-w-[220px] space-y-1 text-xs leading-5" style={{ color: theme.node.faint }}>
-                    <div style={{ color: theme.node.text }}>预计 {formatDuration(waitInfo.seconds * 1000)} 左右</div>
+                    <div style={{ color: theme.node.text }}>预计 {imageWaitDurationText(waitInfo.seconds)} 左右</div>
                     <div>{imageWaitDetailText(waitInfo)}</div>
                 </div>
             ) : null}

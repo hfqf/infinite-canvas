@@ -19,10 +19,12 @@ export async function GET(request: NextRequest) {
             return new Response("Unsupported media type", { status: 415 });
         }
 
+        const body = await response.arrayBuffer();
         const headers = new Headers();
         headers.set("content-type", contentType);
+        headers.set("content-length", String(body.byteLength));
         headers.set("cache-control", "private, max-age=3600");
-        return new Response(response.body, { status: 200, headers });
+        return new Response(body, { status: 200, headers });
     } catch (error) {
         console.error("Failed to proxy image", url, error);
         return new Response("Failed to fetch image", { status: 502 });

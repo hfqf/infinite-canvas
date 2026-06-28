@@ -20,7 +20,7 @@ import { useThemeStore } from "@/stores/use-theme-store";
 import { nanoid } from "nanoid";
 import { formatBytes, formatDuration, getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
 import { requestEdit, requestGeneration } from "@/services/api/image";
-import { deleteStoredImages, imageToBlob, resolveImageUrl, uploadImage } from "@/services/image-storage";
+import { deleteStoredImages, displayImageUrl, imageToBlob, resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { useAssetStore } from "@/stores/use-asset-store";
 import type { ReferenceImage } from "@/types/image";
 
@@ -294,8 +294,9 @@ export default function ImagePage() {
             const result = snapshot.references.length ? await requestEdit(snapshot.config, snapshot.text, snapshot.references) : await requestGeneration(snapshot.config, snapshot.text);
             const image = result[0];
             if (!image) throw new Error("接口没有返回图片");
-            const meta = await readImageMeta(image.dataUrl);
-            const nextImage = { id: image.id, dataUrl: image.dataUrl, durationMs: performance.now() - itemStartedAt, width: meta.width, height: meta.height, bytes: getDataUrlByteSize(image.dataUrl) };
+            const dataUrl = displayImageUrl(image.dataUrl);
+            const meta = await readImageMeta(dataUrl);
+            const nextImage = { id: image.id, dataUrl, durationMs: performance.now() - itemStartedAt, width: meta.width, height: meta.height, bytes: getDataUrlByteSize(dataUrl) };
             setResults((value) => updateResultAt(value, index, { status: "success", image: nextImage }));
             return nextImage;
         } catch (error) {
@@ -523,7 +524,7 @@ function ResultImageCard({
 }) {
     return (
         <div className="overflow-hidden rounded-lg border border-stone-200 bg-background dark:border-stone-800">
-            <Image src={image.dataUrl} alt={`生成结果 ${index + 1}`} className="aspect-square object-cover" />
+            <Image src={displayImageUrl(image.dataUrl)} alt={`生成结果 ${index + 1}`} className="aspect-square object-cover" />
             <div className="space-y-2 border-t border-stone-200 px-3 py-2.5 dark:border-stone-800">
                 <div className="flex min-w-0 gap-x-2 gap-y-1 text-xs text-stone-500 dark:text-stone-400">
                     <span>
@@ -653,7 +654,7 @@ function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: Ge
                         {thumbnails.length ? (
                             <div className="mt-2 flex gap-1 overflow-hidden">
                                 {thumbnails.map((image, index) => (
-                                    <img key={`${log.id}-${index}`} src={image} alt="" className="size-8 shrink-0 rounded-md object-cover" />
+                                    <img key={`${log.id}-${index}`} src={displayImageUrl(image)} alt="" className="size-8 shrink-0 rounded-md object-cover" />
                                 ))}
                             </div>
                         ) : null}

@@ -1322,17 +1322,23 @@ function InfiniteCanvasPage() {
     );
 
     const pasteImageFiles = useCallback(
-        (files: File[]) => {
+        async (files: File[]) => {
             const targetNodeId = files.length === 1 ? findPasteImageTargetNodeId(nodesRef.current, selectedNodeIdsRef.current) : null;
-            if (targetNodeId) {
-                void replaceImageNodeFromFile(targetNodeId, files[0]);
-                message.success("已替换选中图片节点");
-                return;
-            }
+            const messageKey = `paste-image-${Date.now()}`;
+            message.open({ key: messageKey, type: "loading", content: targetNodeId ? "正在上传并替换图片..." : files.length > 1 ? `正在上传 ${files.length} 张图片...` : "正在上传图片...", duration: 0 });
+            try {
+                if (targetNodeId) {
+                    await replaceImageNodeFromFile(targetNodeId, files[0]);
+                    message.open({ key: messageKey, type: "success", content: "已替换选中图片节点", duration: 2 });
+                    return;
+                }
 
-            const center = getCanvasCenter();
-            files.forEach((file, index) => void createImageFileNode(file, { x: center.x + index * 28, y: center.y + index * 28 }));
-            message.success(files.length > 1 ? `已从剪切板添加 ${files.length} 张图片` : "已从剪切板添加图片");
+                const center = getCanvasCenter();
+                await Promise.all(files.map((file, index) => createImageFileNode(file, { x: center.x + index * 28, y: center.y + index * 28 })));
+                message.open({ key: messageKey, type: "success", content: files.length > 1 ? `已从剪切板添加 ${files.length} 张图片` : "已从剪切板添加图片", duration: 2 });
+            } catch (error) {
+                message.open({ key: messageKey, type: "error", content: error instanceof Error ? error.message : "图片上传失败", duration: 3 });
+            }
         },
         [createImageFileNode, getCanvasCenter, message, replaceImageNodeFromFile],
     );
@@ -1344,7 +1350,7 @@ function InfiniteCanvasPage() {
             const imageFiles = getClipboardImageFiles(event.clipboardData);
             if (imageFiles.length) {
                 event.preventDefault();
-                pasteImageFiles(imageFiles);
+                void pasteImageFiles(imageFiles);
                 return;
             }
 
@@ -1536,6 +1542,7 @@ function InfiniteCanvasPage() {
 
     const downloadNodeImage = useCallback(async (node: CanvasNodeData) => {
         if ((node.type !== CanvasNodeType.Image && node.type !== CanvasNodeType.Svg && node.type !== CanvasNodeType.Video && node.type !== CanvasNodeType.Audio) || !node.metadata?.content) return;
+        const messageKey = `download-node-${node.id}`;
         if (node.type === CanvasNodeType.Svg) {
             saveAs(svgBlob(node.metadata.content), `canvas-svg-${node.id}.svg`);
             return;
@@ -1543,13 +1550,15 @@ function InfiniteCanvasPage() {
         const fileName = `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(node.metadata.mimeType || node.metadata.content)}`;
         try {
             if (node.type === CanvasNodeType.Image) {
+                message.open({ key: messageKey, type: "loading", content: "正在准备下载...", duration: 0 });
                 const blob = await imageToBlob({ dataUrl: node.metadata.content, url: node.metadata.content, storageKey: node.metadata.storageKey });
                 saveAs(blob, fileName);
+                message.open({ key: messageKey, type: "success", content: "已开始下载", duration: 2 });
                 return;
             }
             saveAs(node.metadata.content, fileName);
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "下载失败");
+            message.open({ key: messageKey, type: "error", content: error instanceof Error ? error.message : "下载失败", duration: 3 });
         }
     }, [message]);
 

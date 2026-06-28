@@ -6,7 +6,7 @@ import { nanoid } from "nanoid";
 import { dataUrlToJpegFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { apiPost } from "@/services/api/request";
-import { imageToDataUrl } from "@/services/image-storage";
+import { displayImageUrl, imageToDataUrl } from "@/services/image-storage";
 import type { ReferenceImage } from "@/types/image";
 import { IMAGE_MAX_RATIO, IMAGE_SIZE_STEP, mark4KImageSize, parseImageDimensions, stripImageSizeMarker, validateImageGenerationSize } from "@/constant/image-generation-constraints";
 
@@ -204,7 +204,7 @@ function sleep(ms: number) {
 
 function normalizeImageUrl(value: string) {
     const markdownLink = value.match(/^\[[^\]]+\]\((https?:\/\/[^)]+)\)$/);
-    return markdownLink?.[1] || value;
+    return displayImageUrl(markdownLink?.[1] || value);
 }
 
 function readApiError(data: { error?: { message?: string } | string; msg?: string; detail?: { error?: { message?: string } | string } | string } | undefined) {

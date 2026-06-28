@@ -77,6 +77,12 @@ export async function imageToBlob(image: { url?: string; dataUrl?: string; stora
     return fetchImageBlob(url);
 }
 
+export function displayImageUrl(url?: string) {
+    if (!url) return "";
+    const unwrapped = unwrapImageProxyUrl(url);
+    return unwrapped || url;
+}
+
 export async function deleteStoredImages(keys: Iterable<string>) {
     await Promise.all(
         Array.from(new Set(keys)).map(async (key) => {
@@ -157,4 +163,15 @@ function proxiedImageUrl(url: string) {
     if (/^https?:\/\//i.test(url)) return `/image-proxy?url=${encodeURIComponent(url)}`;
     if (url.startsWith("oss:")) return `/api/v1/oss-image?key=${encodeURIComponent(url)}`;
     return url;
+}
+
+function unwrapImageProxyUrl(url: string) {
+    try {
+        const parsed = new URL(url, typeof window === "undefined" ? "http://localhost" : window.location.origin);
+        if (parsed.pathname !== "/image-proxy") return "";
+        const target = parsed.searchParams.get("url") || "";
+        return /^https?:\/\//i.test(target) ? target : "";
+    } catch {
+        return "";
+    }
 }
