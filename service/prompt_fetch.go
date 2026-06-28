@@ -15,25 +15,10 @@ import (
 )
 
 const (
-	gptImage2RawBase             = "https://raw.githubusercontent.com/EvoLinkAI/awesome-gpt-image-2-API-and-Prompts/main"
 	awesomeGptImageRawBase       = "https://raw.githubusercontent.com/ZeroLu/awesome-gpt-image/main"
 	awesomeGpt4oImagePromptsBase = "https://raw.githubusercontent.com/ImgEdify/Awesome-GPT4o-Image-Prompts/main"
-	youMindGptImage2RawBase      = "https://raw.githubusercontent.com/YouMind-OpenLab/awesome-gpt-image-2/main"
-	youMindNanoBananaProRawBase  = "https://raw.githubusercontent.com/YouMind-OpenLab/awesome-nano-banana-pro-prompts/main"
 	davidWuGptImage2RawBase      = "https://raw.githubusercontent.com/davidwuw0811-boop/awesome-gpt-image2-prompts/main"
 )
-
-var gptImage2CaseFiles = []string{"README.md", "cases/ad-creative.md", "cases/character.md", "cases/comparison.md", "cases/ecommerce.md", "cases/portrait.md", "cases/poster.md", "cases/ui.md"}
-
-type gptImage2Data struct {
-	Records []struct {
-		Title    string `json:"title"`
-		TweetURL string `json:"tweet_url"`
-		ImageDir string `json:"image_dir"`
-		Category string `json:"category"`
-		AddedAt  string `json:"added_at"`
-	} `json:"records"`
-}
 
 type davidWuGptImage2Prompt struct {
 	ID         int    `json:"id"`
@@ -68,16 +53,10 @@ func SyncPromptCategory(category string) ([]model.PromptCategory, error) {
 
 func buildPromptCategory(category string) ([]model.Prompt, error) {
 	switch category {
-	case "gpt-image-2-prompts":
-		return buildGptImage2Prompts()
 	case "awesome-gpt-image":
 		return buildAwesomeGptImagePrompts()
 	case "awesome-gpt4o-image-prompts":
 		return buildAwesomeGpt4oImagePrompts()
-	case "youmind-gpt-image-2":
-		return buildYouMindGptImage2Prompts()
-	case "youmind-nano-banana-pro":
-		return buildYouMindNanoBananaProPrompts()
 	case "davidwu-gpt-image2-prompts":
 		return buildDavidWuGptImage2Prompts()
 	}
@@ -97,42 +76,6 @@ func fetchText(baseURL, file string) (string, error) {
 	}
 	data, err := io.ReadAll(response.Body)
 	return string(data), err
-}
-
-func buildGptImage2Prompts() ([]model.Prompt, error) {
-	cases := map[string]string{}
-	raw, err := fetchText(gptImage2RawBase, "data/ingested_tweets.json")
-	if err != nil {
-		return nil, err
-	}
-	data := gptImage2Data{}
-	if err := json.Unmarshal([]byte(raw), &data); err != nil {
-		return nil, err
-	}
-	for _, file := range gptImage2CaseFiles {
-		markdown, err := fetchText(gptImage2RawBase, file)
-		if err != nil {
-			return nil, err
-		}
-		collectGptImage2Cases(cases, markdown)
-	}
-	items := []model.Prompt{}
-	for _, item := range data.Records {
-		prompt := cases[item.TweetURL]
-		if prompt == "" {
-			continue
-		}
-		image := gptImage2RawBase + "/" + item.ImageDir + "/output.jpg"
-		items = append(items, model.Prompt{ID: "gpt-image-2-prompts-" + leftPad(len(items)+1), Title: item.Title, CoverURL: image, Prompt: prompt, Tags: tagsFromCategory(item.Category), CreatedAt: item.AddedAt, UpdatedAt: item.AddedAt, Preview: markdownPreview([]string{image})})
-	}
-	return items, nil
-}
-
-func collectGptImage2Cases(cases map[string]string, markdown string) {
-	re := regexp.MustCompile("(?s)### Case \\d+: \\[[^\\]]+\\]\\(([^)]+)\\).*?\\*\\*Prompt:\\*\\*\\s*\\r?\\n\\s*```[\\w-]*\\r?\\n(.*?)\\r?\\n```")
-	for _, match := range re.FindAllStringSubmatch(markdown, -1) {
-		cases[match[1]] = strings.TrimSpace(match[2])
-	}
 }
 
 func buildAwesomeGptImagePrompts() ([]model.Prompt, error) {
@@ -182,14 +125,6 @@ func buildAwesomeGpt4oImagePrompts() ([]model.Prompt, error) {
 	return items, nil
 }
 
-func buildYouMindGptImage2Prompts() ([]model.Prompt, error) {
-	return buildYouMindPrompts(youMindGptImage2RawBase, "youmind-gpt-image-2", "gpt-image-2")
-}
-
-func buildYouMindNanoBananaProPrompts() ([]model.Prompt, error) {
-	return buildYouMindPrompts(youMindNanoBananaProRawBase, "youmind-nano-banana-pro", "nano-banana-pro")
-}
-
 func buildDavidWuGptImage2Prompts() ([]model.Prompt, error) {
 	raw, err := fetchText(davidWuGptImage2RawBase, "prompts.json")
 	if err != nil {
@@ -211,28 +146,6 @@ func buildDavidWuGptImage2Prompts() ([]model.Prompt, error) {
 		}
 		image := absoluteImage(davidWuGptImage2RawBase, item.Image)
 		items = append(items, model.Prompt{ID: "davidwu-gpt-image2-prompts-" + leftPad(item.ID), Title: title, CoverURL: image, Prompt: prompt, Tags: davidWuGptImage2Tags(item), Preview: davidWuGptImage2Preview(item, image)})
-	}
-	return items, nil
-}
-
-func buildYouMindPrompts(baseURL, idPrefix, modelTag string) ([]model.Prompt, error) {
-	markdown, err := fetchText(baseURL, "README_zh.md")
-	if err != nil {
-		return nil, err
-	}
-	items := []model.Prompt{}
-	for _, block := range splitBeforeHeading(markdown, "### ") {
-		title := strings.TrimSpace(firstMatch(block, `(?m)^###\s+No\.\s*\d+:\s*(.+)$`))
-		prompt := strings.TrimSpace(firstMatch(block, "(?s)#### .*?提示词\\s*\\r?\\n\\s*```[\\w-]*\\r?\\n(.*?)\\r?\\n```"))
-		if title == "" || prompt == "" {
-			continue
-		}
-		images := extractMarkdownImages(baseURL, block)
-		cover := ""
-		if len(images) > 0 {
-			cover = images[0]
-		}
-		items = append(items, model.Prompt{ID: idPrefix + "-" + leftPad(len(items)+1), Title: title, CoverURL: cover, Prompt: prompt, Tags: youMindTags(title, modelTag), Preview: markdownPreview(images)})
 	}
 	return items, nil
 }
@@ -259,21 +172,8 @@ func firstMatch(value string, pattern string) string {
 	return ""
 }
 
-func tagsFromCategory(category string) []string {
-	return splitTags(regexp.MustCompile(`(?i)\s+Cases$`).ReplaceAllString(category, ""), `\s*(&|and)\s*`)
-}
-
 func tagsFromHeading(heading string) []string {
 	return splitTags(regexp.MustCompile(`[^\p{L}\p{N}/&、与 ]`).ReplaceAllString(heading, ""), `\s*(/|&|、|与)\s*`)
-}
-
-func youMindTags(title, modelTag string) []string {
-	tags := []string{modelTag}
-	parts := strings.SplitN(title, " - ", 2)
-	if len(parts) > 1 {
-		tags = append(tags, tagsFromHeading(parts[0])...)
-	}
-	return tags
 }
 
 func davidWuGptImage2Tags(item davidWuGptImage2Prompt) []string {
