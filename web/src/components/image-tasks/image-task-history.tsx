@@ -8,6 +8,7 @@ import { saveAs } from "file-saver";
 import { useEffect, useMemo, useState } from "react";
 
 import { formatBytes, formatDuration } from "@/lib/image-utils";
+import { SaveUserPromptButton } from "@/components/prompts/save-user-prompt-button";
 import type { AIImageTask, AIImageTaskListResponse, AIImageTaskQuery } from "@/services/api/image-tasks";
 import { imageToBlob } from "@/services/image-storage";
 import { useUserStore } from "@/stores/use-user-store";
@@ -350,6 +351,11 @@ function HistoryDetail({ item, userName, downloading, onCopyPrompt, onDownload, 
                         <Button size="large" icon={<Copy className="size-5" />} onClick={() => void onCopyPrompt(log.prompt)}>
                             复制提示词
                         </Button>
+                        {log.prompt ? (
+                            <SaveUserPromptButton size="large" prompt={log.prompt} title={log.title} source="image-history">
+                                保存提示词
+                            </SaveUserPromptButton>
+                        ) : null}
                         <Button size="large" type="primary" className="!bg-black" onClick={onClose}>
                             关闭
                         </Button>

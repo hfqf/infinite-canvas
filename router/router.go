@@ -37,6 +37,12 @@ func New() *gin.Engine {
 	v1.POST("/images/uploads", gin.WrapF(handler.UploadImage))
 	v1.GET("/oss-image", gin.WrapF(handler.GetOSSImage))
 	v1.GET("/deduction-logs", gin.WrapF(handler.UserAIDeductionLogs))
+	v1.GET("/user-prompts", gin.WrapF(handler.UserPrompts))
+	v1.POST("/user-prompts", gin.WrapF(handler.SaveUserPrompt))
+	v1.POST("/user-prompts/reorder", gin.WrapF(handler.ReorderUserPrompts))
+	v1.DELETE("/user-prompts/:id", func(c *gin.Context) {
+		handler.DeleteUserPrompt(c.Writer, c.Request, c.Param("id"))
+	})
 	v1.POST("/canvas/tool-credits/consume", gin.WrapF(handler.ConsumeCanvasToolCredits))
 	v1.GET("/invitations", gin.WrapF(handler.UserInvitationRecords))
 	v1.GET("/image-tasks", gin.WrapF(handler.UserAIImageTasks))

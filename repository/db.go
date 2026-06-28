@@ -95,6 +95,7 @@ func migrateSchema(db *gorm.DB, driver string) error {
 		&model.AIImageTask{},
 		&model.RechargeOrder{},
 		&model.Prompt{},
+		&model.UserPrompt{},
 		&model.Asset{},
 		&model.Setting{},
 	}
@@ -126,6 +127,10 @@ func autoMigrateLongTextColumns(db *gorm.DB) error {
 		{"prompts", "preview"},
 		{"prompts", "tags"},
 		{"prompts", "cover_url"},
+		{"user_prompts", "prompt"},
+		{"user_prompts", "title"},
+		{"user_prompts", "tags"},
+		{"user_prompts", "source"},
 		{"settings", "value"},
 		{"credit_logs", "remark"},
 		{"ai_image_tasks", "prompt"},

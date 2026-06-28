@@ -30,7 +30,11 @@ export function PromptCard({
             styles={{ body: { padding: 0 } }}
             cover={
                 <button type="button" className="block w-full text-left" onClick={onOpen}>
-                    <img src={item.coverUrl} alt={item.title} className="aspect-[4/3] w-full object-cover" />
+                    {item.coverUrl ? (
+                        <img src={item.coverUrl} alt={item.title} className="aspect-[4/3] w-full object-cover" />
+                    ) : (
+                        <div className="flex aspect-[4/3] w-full items-center justify-center bg-stone-100 px-6 text-center text-sm font-medium text-stone-500 dark:bg-stone-800 dark:text-stone-300">{item.title}</div>
+                    )}
                 </button>
             }
         >

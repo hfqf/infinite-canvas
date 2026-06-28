@@ -5,6 +5,7 @@ import { ArrowUp, LoaderCircle, X } from "lucide-react";
 import { Button } from "antd";
 
 import { ModelPicker } from "@/components/model-picker";
+import { SaveUserPromptButton } from "@/components/prompts/save-user-prompt-button";
 import { defaultConfig, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { CreditSymbol, canvasGenerationCredits } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
@@ -143,6 +144,9 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
             <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                     <CanvasPromptLibrary onSelect={updatePrompt} />
+                    <SaveUserPromptButton prompt={prompt} source={`canvas-${mode}`} className="!h-10 !rounded-full">
+                        保存
+                    </SaveUserPromptButton>
                     {mode === "image" ? (
                         <>
                             <ModelPicker config={config} value={config.model} onChange={(model) => onConfigChange(node.id, { model })} capability="image" onMissingConfig={() => openConfigDialog(true)} />

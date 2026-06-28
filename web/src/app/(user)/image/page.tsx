@@ -9,6 +9,7 @@ import { saveAs } from "file-saver";
 import { ImageSettingsPanel } from "@/components/image-settings-panel";
 import { ModelPicker } from "@/components/model-picker";
 import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
+import { SaveUserPromptButton } from "@/components/prompts/save-user-prompt-button";
 import { AssetPickerModal, type InsertAssetPayload } from "@/app/(user)/canvas/components/asset-picker-modal";
 import { ImageGenerationPending } from "@/components/image-generation-pending";
 import { CreditSymbol, requestCreditCost } from "@/constant/credits";
@@ -355,6 +356,9 @@ export default function ImagePage() {
                                         <Button size="small" icon={<BookOpen className="size-3.5" />} onClick={() => setPromptDialogOpen(true)}>
                                             查看提示词库
                                         </Button>
+                                        <SaveUserPromptButton prompt={prompt} source="image-workbench">
+                                            保存提示词
+                                        </SaveUserPromptButton>
                                         <Button size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => setAssetPickerOpen(true)}>
                                             查看我的素材
                                         </Button>

@@ -31,6 +31,7 @@ description: 当前后端主要数据表与字段说明
 - `ai_image_tasks`
 - `recharge_orders`
 - `prompts`
+- `user_prompts`
 - `assets`
 - `settings`
 
@@ -100,6 +101,23 @@ description: 当前后端主要数据表与字段说明
 | `updated_at` | string | 更新时间 |
 
 `github_url` 仅用于接口返回，不写入数据库。
+
+### user_prompts
+
+用户个人提示词表。用于“我的提示词库”，与公开系统提示词 `prompts` 分表保存，所有读写接口都按 `user_id` 隔离。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | 主键 |
+| `user_id` | string | 用户 ID，查询和写入都必须按当前登录用户隔离 |
+| `title` | string | 标题；为空时由提示词前 24 个字符生成 |
+| `prompt` | text | 提示词内容 |
+| `tags` | json | 标签列表 |
+| `category` | string | 用户自定义分类，默认 `默认` |
+| `sort_order` | number | 用户自定义排序值 |
+| `source` | string | 来源标记，例如系统提示词、图片工作台、视频工作台、画布或生图历史 |
+| `created_at` | string | 创建时间 |
+| `updated_at` | string | 更新时间 |
 
 ### assets
 

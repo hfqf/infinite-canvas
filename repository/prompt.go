@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"sort"
 
 	"github.com/basketikun/infinite-canvas/model"
 	"gorm.io/gorm"
@@ -75,6 +76,61 @@ func ListPromptTags(q model.Query) ([]string, error) {
 	return promptTagsFromItems(items), nil
 }
 
+// ListUserPrompts 按查询条件返回当前用户的个人提示词分页列表。
+func ListUserPrompts(userID string, q model.Query) ([]model.UserPrompt, int64, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, 0, err
+	}
+	q.Normalize()
+	tx := applyUserPromptFilters(db.Model(&model.UserPrompt{}).Where("user_id = ?", userID), q)
+
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var items []model.UserPrompt
+	if err := tx.Order("sort_order asc, updated_at desc").Offset(q.Offset()).Limit(q.PageSize).Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
+// ListUserPromptTags 返回当前用户提示词查询条件下的全部标签。
+func ListUserPromptTags(userID string, q model.Query) ([]string, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+	q.Normalize()
+	q.Tags = nil
+	tx := applyUserPromptFilters(db.Model(&model.UserPrompt{}).Where("user_id = ?", userID), q)
+
+	var items []model.UserPrompt
+	if err := tx.Select("tags").Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return userPromptTagsFromItems(items), nil
+}
+
+// ListUserPromptCategories 返回当前用户的个人提示词分类。
+func ListUserPromptCategories(userID string) ([]string, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+	var categories []string
+	if err := db.Model(&model.UserPrompt{}).
+		Where("user_id = ? AND category <> ''", userID).
+		Distinct().
+		Pluck("category", &categories).Error; err != nil {
+		return nil, err
+	}
+	sort.Strings(categories)
+	return categories, nil
+}
+
 // SavePrompt 保存提示词，并在更新时保留原创建时间。
 func SavePrompt(item model.Prompt) (model.Prompt, error) {
 	db, err := DB()
@@ -90,6 +146,42 @@ func SavePrompt(item model.Prompt) (model.Prompt, error) {
 	return item, db.Save(&item).Error
 }
 
+// SaveUserPrompt 保存个人提示词，并在更新时保留原创建时间和排序值。
+func SaveUserPrompt(item model.UserPrompt) (model.UserPrompt, error) {
+	db, err := DB()
+	if err != nil {
+		return item, err
+	}
+	if saved, ok, err := findUserPrompt(db, item.UserID, item.ID); err != nil {
+		return item, err
+	} else if ok {
+		if item.CreatedAt == "" {
+			item.CreatedAt = saved.CreatedAt
+		}
+		if item.SortOrder <= 0 {
+			item.SortOrder = saved.SortOrder
+		}
+	}
+	return item, db.Save(&item).Error
+}
+
+// MaxUserPromptSortOrder 返回当前用户指定分类的最大排序值。
+func MaxUserPromptSortOrder(userID string, category string) (int, error) {
+	db, err := DB()
+	if err != nil {
+		return 0, err
+	}
+	var max int
+	tx := db.Model(&model.UserPrompt{}).Where("user_id = ?", userID)
+	if isActivePromptOption(category) {
+		tx = tx.Where("category = ?", category)
+	}
+	if err := tx.Select("COALESCE(MAX(sort_order), 0)").Scan(&max).Error; err != nil {
+		return 0, err
+	}
+	return max, nil
+}
+
 // DeletePrompt 删除指定提示词。
 func DeletePrompt(id string) error {
 	db, err := DB()
@@ -97,6 +189,36 @@ func DeletePrompt(id string) error {
 		return err
 	}
 	return db.Delete(&model.Prompt{}, "id = ?", id).Error
+}
+
+// DeleteUserPrompt 删除当前用户的指定个人提示词。
+func DeleteUserPrompt(userID string, id string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return db.Delete(&model.UserPrompt{}, "user_id = ? AND id = ?", userID, id).Error
+}
+
+// ReorderUserPrompts 更新当前用户的个人提示词排序。
+func ReorderUserPrompts(userID string, orders map[string]int, now string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		for id, sortOrder := range orders {
+			if id == "" {
+				continue
+			}
+			if err := tx.Model(&model.UserPrompt{}).
+				Where("user_id = ? AND id = ?", userID, id).
+				Updates(map[string]any{"sort_order": sortOrder, "updated_at": now}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // DeletePrompts 批量删除提示词。
@@ -141,12 +263,37 @@ func applyPromptFilters(tx *gorm.DB, q model.Query) *gorm.DB {
 	return applyPromptTagsFilter(tx, q.Tags)
 }
 
+// applyUserPromptFilters 应用个人提示词列表的搜索条件。
+func applyUserPromptFilters(tx *gorm.DB, q model.Query) *gorm.DB {
+	if q.Keyword != "" {
+		like := "%" + q.Keyword + "%"
+		tx = tx.Where("title LIKE ? OR prompt LIKE ?", like, like)
+	}
+	if isActivePromptOption(q.Category) {
+		tx = tx.Where("category = ?", q.Category)
+	}
+	return applyPromptTagsFilter(tx, q.Tags)
+}
+
 // findPrompt 根据 ID 查询提示词。
 func findPrompt(db *gorm.DB, id string) (model.Prompt, bool, error) {
 	item := model.Prompt{}
 	err := db.Where("id = ?", id).First(&item).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return model.Prompt{}, false, nil
+	}
+	return item, err == nil, err
+}
+
+// findUserPrompt 根据用户和 ID 查询个人提示词。
+func findUserPrompt(db *gorm.DB, userID string, id string) (model.UserPrompt, bool, error) {
+	if id == "" || userID == "" {
+		return model.UserPrompt{}, false, nil
+	}
+	item := model.UserPrompt{}
+	err := db.Where("user_id = ? AND id = ?", userID, id).First(&item).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return model.UserPrompt{}, false, nil
 	}
 	return item, err == nil, err
 }
@@ -164,6 +311,20 @@ func applyPromptTagsFilter(tx *gorm.DB, tags []string) *gorm.DB {
 }
 
 func promptTagsFromItems(items []model.Prompt) []string {
+	seen := map[string]bool{}
+	tags := []string{}
+	for _, item := range items {
+		for _, tag := range item.Tags {
+			if tag != "" && !seen[tag] {
+				seen[tag] = true
+				tags = append(tags, tag)
+			}
+		}
+	}
+	return tags
+}
+
+func userPromptTagsFromItems(items []model.UserPrompt) []string {
 	seen := map[string]bool{}
 	tags := []string{}
 	for _, item := range items {

@@ -2,19 +2,30 @@
 
 import { Check, Search } from "lucide-react";
 import { type UIEvent, useEffect, useState } from "react";
-import { App, Empty, Input, Modal, Spin, Tag } from "antd";
+import { App, Empty, Input, Modal, Segmented, Spin, Tag } from "antd";
 
-import { ALL_PROMPTS_OPTION } from "@/services/api/prompts";
+import { ALL_PROMPTS_OPTION, userPromptToPrompt } from "@/services/api/prompts";
 import { cn } from "@/lib/utils";
+import { useUserStore } from "@/stores/use-user-store";
 import { PromptCard } from "./prompt-card";
-import { usePromptList } from "./use-prompt-list";
+import { usePromptList, useUserPromptList } from "./use-prompt-list";
+
+type PromptSource = "mine" | "system";
 
 export function PromptSelectDialog({ open, onOpenChange, onSelect }: { open: boolean; onOpenChange: (open: boolean) => void; onSelect: (prompt: string) => void }) {
     const { message } = App.useApp();
+    const token = useUserStore((state) => state.token);
+    const [source, setSource] = useState<PromptSource>(token ? "mine" : "system");
     const [keyword, setKeyword] = useState("");
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [selectedCategory, setSelectedCategory] = useState(ALL_PROMPTS_OPTION);
-    const { query, items, tags: promptTags, categories: promptCategories } = usePromptList({ keyword, tags: selectedTags, category: selectedCategory, enabled: open });
+    const systemList = usePromptList({ keyword, tags: selectedTags, category: selectedCategory, enabled: open && source === "system" });
+    const userList = useUserPromptList({ keyword, tags: selectedTags, category: selectedCategory, enabled: open && source === "mine" });
+    const activeList = source === "mine" ? userList : systemList;
+    const query = activeList.query;
+    const items = source === "mine" ? userList.items.map(userPromptToPrompt) : systemList.items;
+    const promptTags = activeList.tags;
+    const promptCategories = activeList.categories;
     const toggleTag = (tag: string) => {
         if (tag === ALL_PROMPTS_OPTION) return setSelectedTags([]);
         setSelectedTags((items) => (items.includes(tag) ? items.filter((item) => item !== tag) : [...items, tag]));
@@ -28,6 +39,19 @@ export function PromptSelectDialog({ open, onOpenChange, onSelect }: { open: boo
         if (query.isError) message.error(query.error instanceof Error ? query.error.message : "获取提示词失败");
     }, [message, query.error, query.isError]);
 
+    useEffect(() => {
+        if (!open) return;
+        setSource(token ? "mine" : "system");
+        setSelectedTags([]);
+        setSelectedCategory(ALL_PROMPTS_OPTION);
+    }, [open, token]);
+
+    const handleSourceChange = (value: PromptSource) => {
+        setSource(value);
+        setSelectedTags([]);
+        setSelectedCategory(ALL_PROMPTS_OPTION);
+    };
+
     const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
         const target = event.currentTarget;
         if (query.hasNextPage && !query.isFetchingNextPage && target.scrollTop + target.clientHeight >= target.scrollHeight - 160) void query.fetchNextPage();
@@ -36,6 +60,16 @@ export function PromptSelectDialog({ open, onOpenChange, onSelect }: { open: boo
     return (
         <Modal title="提示词库" open={open} onCancel={() => onOpenChange(false)} footer={null} width={1040} centered>
             <div data-canvas-no-zoom onWheelCapture={(event) => event.stopPropagation()}>
+                <div className="mb-5 flex justify-center">
+                    <Segmented
+                        value={source}
+                        options={[
+                            { label: "我的提示词", value: "mine" },
+                            { label: "系统提示词", value: "system" },
+                        ]}
+                        onChange={(value) => handleSourceChange(value as PromptSource)}
+                    />
+                </div>
                 <div className="mx-auto max-w-2xl">
                     <Input size="large" prefix={<Search className="size-4 text-stone-400" />} value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="按标题查询" />
                 </div>
@@ -75,7 +109,7 @@ export function PromptSelectDialog({ open, onOpenChange, onSelect }: { open: boo
                             <PromptCard key={item.id} item={item} onOpen={() => selectPrompt(item.prompt)} onCopy={() => selectPrompt(item.prompt)} actionLabel="使用此提示词" actionIcon={<Check className="size-3.5" />} actionType="primary" />
                         ))}
                     </div>
-                    {!query.isLoading && items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有找到匹配的提示词" className="py-8" /> : null}
+                    {!query.isLoading && items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={source === "mine" && !token ? "请先登录后使用我的提示词库" : "没有找到匹配的提示词"} className="py-8" /> : null}
                     {query.isFetchingNextPage ? (
                         <div className="py-4 text-center">
                             <Spin size="small" />
