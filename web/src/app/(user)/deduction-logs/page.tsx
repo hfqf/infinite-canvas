@@ -17,6 +17,8 @@ type DeductionExtra = {
     imageUrl?: string;
     taskId?: string;
     frozenCredits?: number;
+    tool?: string;
+    toolName?: string;
 };
 
 type DeductionRow = CreditLog & { parsedExtra: DeductionExtra };
@@ -54,8 +56,8 @@ export default function MyDeductionLogsPage() {
         {
             title: "类型",
             dataIndex: "type",
-            width: 100,
-            render: (_, item) => <Tag color={deductionTypeColor(item.type)}>{deductionTypeLabel(item.type)}</Tag>,
+            width: 150,
+            render: (_, item) => <Tag color={deductionTypeColor(item.type)}>{deductionTypeLabel(item)}</Tag>,
         },
         {
             title: "金额",
@@ -111,7 +113,7 @@ export default function MyDeductionLogsPage() {
                     <Form layout="vertical">
                         <Form.Item label="关键词">
                             <Space.Compact style={{ width: 520, maxWidth: "100%" }}>
-                                <Input value={keywordText} placeholder="搜索任务、提示词、图片链接或赠送记录" allowClear onChange={(event) => setKeywordText(event.target.value)} onPressEnter={() => search()} />
+                                <Input value={keywordText} placeholder="搜索任务、提示词、工具名、图片链接或赠送记录" allowClear onChange={(event) => setKeywordText(event.target.value)} onPressEnter={() => search()} />
                                 <Button icon={<SearchOutlined />} type="primary" onClick={() => search()}>
                                     查询
                                 </Button>
@@ -171,11 +173,12 @@ export default function MyDeductionLogsPage() {
     );
 }
 
-function deductionTypeLabel(type: string) {
+function deductionTypeLabel(item: DeductionRow) {
+    const type = item.type;
     if (type === "ai_freeze") return "冻结";
     if (type === "ai_freeze_release") return "释放";
     if (type === "ai_consume") return "扣款";
-    if (type === "canvas_tool_consume") return "画布工具";
+    if (type === "canvas_tool_consume") return item.parsedExtra.toolName ? `画布工具：${item.parsedExtra.toolName}` : item.parsedExtra.tool ? `画布工具：${item.parsedExtra.tool}` : "画布工具";
     if (type === "invite_register_bonus") return "邀请赠送";
     if (type === "invite_reward") return "邀请奖励";
     return type || "-";

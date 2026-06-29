@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -187,5 +188,15 @@ func TestConsumeCanvasToolCreditsUsesConfiguredToolCost(t *testing.T) {
 	}
 	if list.Total == 0 || list.Items[0].Type != model.CreditLogTypeCanvasToolConsume || list.Items[0].Amount != -2 {
 		t.Fatalf("logs=%#v total=%d, want canvas tool consume -2", list.Items, list.Total)
+	}
+	if list.Items[0].Remark != "画布工具：裁剪（crop）" {
+		t.Fatalf("remark = %q, want tool label", list.Items[0].Remark)
+	}
+	var extra map[string]string
+	if err := json.Unmarshal([]byte(list.Items[0].Extra), &extra); err != nil {
+		t.Fatal(err)
+	}
+	if extra["tool"] != "crop" || extra["toolName"] != "裁剪" {
+		t.Fatalf("extra=%#v, want tool and toolName", extra)
 	}
 }

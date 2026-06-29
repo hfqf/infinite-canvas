@@ -511,14 +511,15 @@ func ConsumeCanvasToolCredits(userID string, tool string) (model.AuthUser, error
 	if !ok {
 		return model.AuthUser{}, safeMessageError{message: "积分不足"}
 	}
-	extra, _ := json.Marshal(map[string]string{"tool": tool})
+	toolName := canvasToolName(tool)
+	extra, _ := json.Marshal(map[string]string{"tool": tool, "toolName": toolName})
 	_, err = repository.SaveCreditLog(model.CreditLog{
 		ID:        newID("credit"),
 		UserID:    userID,
 		Type:      model.CreditLogTypeCanvasToolConsume,
 		Amount:    -credits,
 		Balance:   user.Credits - user.FrozenCredits,
-		Remark:    "画布工具 " + tool,
+		Remark:    fmt.Sprintf("画布工具：%s（%s）", toolName, tool),
 		Extra:     string(extra),
 		CreatedAt: now(),
 	})
@@ -526,6 +527,46 @@ func ConsumeCanvasToolCredits(userID string, tool string) (model.AuthUser, error
 		return model.AuthUser{}, err
 	}
 	return model.PublicUser(user), nil
+}
+
+func canvasToolName(tool string) string {
+	names := map[string]string{
+		"info":          "信息",
+		"delete":        "删除",
+		"retry":         "重试",
+		"saveAsset":     "存素材",
+		"download":      "下载",
+		"edit":          "编辑",
+		"editText":      "编辑文字",
+		"generateImage": "文本生图",
+		"config":        "生成配置",
+		"decreaseFont":  "缩小字号",
+		"increaseFont":  "增大字号",
+		"uploadImage":   "上传图片",
+		"uploadVideo":   "上传视频",
+		"uploadAudio":   "上传音频",
+		"copyPrompt":    "复制提示词",
+		"reversePrompt": "反推提示词",
+		"replace":       "替换图片",
+		"resize":        "锁比例",
+		"maskEdit":      "局部编辑",
+		"crop":          "裁剪",
+		"split":         "切图",
+		"upscale":       "放大",
+		"superResolve":  "AI 超分",
+		"vectorize":     "转矢量",
+		"decompose":     "平面拆解",
+		"clarify":       "模糊变高清",
+		"angle":         "多角度",
+		"view":          "查看大图",
+	}
+	if name, ok := names[tool]; ok {
+		return name
+	}
+	if tool == "" {
+		return "未知工具"
+	}
+	return tool
 }
 
 func EnsureUserCredits(userID string, credits int) error {
