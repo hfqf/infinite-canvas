@@ -68,4 +68,4 @@ DATABASE_DSN=/app/data/infinite-canvas.db
 
 如果需要让火山方舟拉取本地上传的 Seedance 参考素材，还需要把 `PUBLIC_BASE_URL` 设置为公网可访问的站点地址。
 
-主应用镜像已内置 `png2svg-clean-node`、Node 依赖和 ImageMagick，用于画布图片节点“转矢量”的后端 SVG 转换。如果不使用 Docker 部署，需要在后端运行环境安装 Node.js、ImageMagick，并在 `png2svg-clean-node` 目录执行 `npm install`；可通过 `PNG2SVG_CLEAN_TOOL_DIR`、`PNG2SVG_CLEAN_NODE_PATH`、`PNG2SVG_CLEAN_PROFILE`、`PNG2SVG_CLEAN_TIMEOUT_SEC` 和 `IMAGE_MAGICK_PATH` 调整工具路径和参数。
+主应用镜像已内置 `png2svg-clean-node`、Node 依赖、ImageMagick 和 Potrace，用于画布图片节点“转矢量”的后端 SVG 转换。普通模式继续使用 `png2svg-clean-node`，Logo 模式会使用 ImageMagick + Potrace 的 `cleanLogo` 预设以减少碎块并保留品牌色。如果不使用 Docker 部署，需要在后端运行环境安装 Node.js、ImageMagick、Potrace，并在 `png2svg-clean-node` 目录执行 `npm install`；可通过 `PNG2SVG_CLEAN_TOOL_DIR`、`PNG2SVG_CLEAN_NODE_PATH`、`PNG2SVG_CLEAN_PROFILE`、`PNG2SVG_CLEAN_TIMEOUT_SEC`、`IMAGE_MAGICK_PATH` 和 `POTRACE_PATH` 调整工具路径和参数。

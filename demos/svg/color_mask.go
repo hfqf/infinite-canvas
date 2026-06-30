@@ -108,7 +108,21 @@ func runColorMaskJob(ctx context.Context, input vectorizeRequest, data []byte) (
 	body.WriteString(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">`, width, height, width, height) + "\n")
 	body.WriteString(fmt.Sprintf(`<rect width="100%%" height="100%%" fill="%s"/>`, assignment.Background.Hex) + "\n")
 
-	metrics := metricsResult{SourceColors: sourceColors, QuantizedColors: len(assignment.Layers) + 1, Background: assignment.Background.Hex}
+	metrics := metricsResult{
+		SourceColors:    sourceColors,
+		QuantizedColors: len(assignment.Layers) + 1,
+		Background:      assignment.Background.Hex,
+		Request: vectorizeParams{
+			Mode:              "colorMask",
+			Colors:            maxColors,
+			LongEdge:          longEdge,
+			MinComponentRatio: minComponentRatio,
+			MaxHoleRatio:      maxHoleRatio,
+			MaskCloseRadius:   input.MaskCloseRadius,
+			LightDilateRadius: input.LightDilateRadius,
+			DarkDilateRadius:  input.DarkDilateRadius,
+		},
+	}
 	for layerIndex, layer := range assignment.Layers {
 		maskPath := filepath.Join(jobDir, fmt.Sprintf("color-%02d-mask.png", layerIndex))
 		layerSVGPath := filepath.Join(jobDir, fmt.Sprintf("color-%02d.svg", layerIndex))

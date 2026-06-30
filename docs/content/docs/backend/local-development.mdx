@@ -18,7 +18,7 @@ cp .env.example .env
 - 后端端口是 `8080`
 - 前端端口是 `3000`
 - SQLite 数据库是 `data/infinite-canvas.db`
-- 图片转 SVG 使用仓库内 `png2svg-clean-node`，后端会调用 `node bin/png2svg-clean.mjs`，并由该工具调用 ImageMagick 预处理和 `@neplex/vectorizer` 矢量化；本地开发需要先在 `png2svg-clean-node` 目录执行 `npm install`，并确保 `magick` 可用，必要时可通过 `PNG2SVG_CLEAN_TOOL_DIR`、`PNG2SVG_CLEAN_NODE_PATH`、`PNG2SVG_CLEAN_PROFILE`、`PNG2SVG_CLEAN_TIMEOUT_SEC` 和 `IMAGE_MAGICK_PATH` 调整。
+- 图片转 SVG 普通模式使用仓库内 `png2svg-clean-node`，后端会调用 `node bin/png2svg-generic-85.mjs`，并由该工具调用 ImageMagick 预处理和 `@neplex/vectorizer` 矢量化；Logo 模式使用 ImageMagick + Potrace 的 `cleanLogo` 预设。本地开发需要先在 `png2svg-clean-node` 目录执行 `npm install`，并确保 `magick` 和 `potrace` 可用，必要时可通过 `PNG2SVG_CLEAN_TOOL_DIR`、`PNG2SVG_CLEAN_NODE_PATH`、`PNG2SVG_CLEAN_PROFILE`、`PNG2SVG_CLEAN_TIMEOUT_SEC`、`IMAGE_MAGICK_PATH` 和 `POTRACE_PATH` 调整。
 
 ## 2. 启动后端
 

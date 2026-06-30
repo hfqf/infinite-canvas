@@ -29,12 +29,30 @@ type VectorizeInput struct {
 }
 
 type VectorizeResult struct {
-	Content  string `json:"content"`
-	Width    int    `json:"width"`
-	Height   int    `json:"height"`
-	Bytes    int    `json:"bytes"`
-	MimeType string `json:"mimeType"`
-	Engine   string `json:"engine"`
+	Content  string           `json:"content"`
+	Width    int              `json:"width"`
+	Height   int              `json:"height"`
+	Bytes    int              `json:"bytes"`
+	MimeType string           `json:"mimeType"`
+	Engine   string           `json:"engine"`
+	Preset   *VectorizePreset `json:"preset,omitempty"`
+}
+
+type VectorizePreset struct {
+	Name              string  `json:"name"`
+	Engine            string  `json:"engine"`
+	Colors            int     `json:"colors,omitempty"`
+	LongEdge          int     `json:"longEdge"`
+	MinComponentRatio float64 `json:"minComponentRatio"`
+	MaxHoleRatio      float64 `json:"maxHoleRatio"`
+	MergeDistance     int     `json:"mergeDistance"`
+	MergeHueDistance  int     `json:"mergeHueDistance"`
+	MergeLightness    int     `json:"mergeLightness"`
+	MergeSaturation   float64 `json:"mergeSaturation"`
+	LightMinAreaRatio float64 `json:"lightMinAreaRatio"`
+	MaskCloseRadius   int     `json:"maskCloseRadius"`
+	LightDilateRadius int     `json:"lightDilateRadius"`
+	DarkDilateRadius  int     `json:"darkDilateRadius"`
 }
 
 func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
@@ -61,8 +79,18 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	if err := runPng2SVGClean(ctx, inputPath, outputPath); err != nil {
-		return VectorizeResult{}, err
+	if isCleanLogoVectorizeMode(input.Mode) {
+		if err := runCleanLogoVectorize(ctx, inputPath, outputPath); err != nil {
+			return VectorizeResult{}, err
+		}
+	} else if isIllustrationVectorizeMode(input.Mode) {
+		if err := runIllustrationVectorize(ctx, inputPath, outputPath); err != nil {
+			return VectorizeResult{}, err
+		}
+	} else {
+		if err := runPng2SVGClean(ctx, inputPath, outputPath); err != nil {
+			return VectorizeResult{}, err
+		}
 	}
 
 	svg, err := os.ReadFile(outputPath)
@@ -80,7 +108,12 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 		Bytes:    len(svg),
 		MimeType: vectorizeMimeType,
 		Engine:   vectorizeEngine(input.Mode),
+		Preset:   vectorizePreset(input.Mode),
 	}, nil
+}
+
+func runIllustrationVectorize(ctx context.Context, inputPath string, outputPath string) error {
+	return runCleanLogoPotraceVectorize(ctx, inputPath, outputPath, illustrationVectorizeOptions())
 }
 
 func runPng2SVGClean(ctx context.Context, inputPath string, outputPath string) error {
@@ -140,7 +173,28 @@ func resolvePng2SVGCleanToolDir() (string, error) {
 }
 
 func vectorizeEngine(mode string) string {
+	if isCleanLogoVectorizeMode(mode) {
+		return "clean-logo-potrace"
+	}
+	if isIllustrationVectorizeMode(mode) {
+		return "illustration-potrace"
+	}
 	return "png2svg-clean-node"
+}
+
+func vectorizePreset(mode string) *VectorizePreset {
+	if isCleanLogoVectorizeMode(mode) {
+		return cleanLogoVectorizePreset()
+	}
+	if isIllustrationVectorizeMode(mode) {
+		return illustrationVectorizePreset()
+	}
+	return nil
+}
+
+func isIllustrationVectorizeMode(mode string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(mode))
+	return normalized == "illustration" || normalized == "material" || normalized == "asset"
 }
 
 func readVectorizeInput(input VectorizeInput) ([]byte, string, error) {

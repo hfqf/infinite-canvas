@@ -22,6 +22,23 @@ export type CanvasNodeStatus = "idle" | "success" | "loading" | "error";
 export type CanvasGenerationMode = "text" | "image" | "video" | "audio";
 export type CanvasImageGenerationType = "generation" | "edit";
 
+export type CanvasVectorizePreset = {
+    name: string;
+    engine: string;
+    colors?: number;
+    longEdge: number;
+    minComponentRatio: number;
+    maxHoleRatio: number;
+    mergeDistance: number;
+    mergeHueDistance: number;
+    mergeLightness: number;
+    mergeSaturation: number;
+    lightMinAreaRatio: number;
+    maskCloseRadius: number;
+    lightDilateRadius: number;
+    darkDilateRadius: number;
+};
+
 export type CanvasNodeMetadata = {
     content?: string;
     composerContent?: string;
@@ -56,6 +73,9 @@ export type CanvasNodeMetadata = {
     storageKey?: string;
     mimeType?: string;
     bytes?: number;
+    engine?: string;
+    preset?: CanvasVectorizePreset;
+    vectorizeMode?: string;
     durationMs?: number;
 };
 

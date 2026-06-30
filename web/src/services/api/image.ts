@@ -27,6 +27,23 @@ type ImageApiResponse = {
     msg?: string;
 };
 
+export type VectorizePreset = {
+    name: string;
+    engine: string;
+    colors?: number;
+    longEdge: number;
+    minComponentRatio: number;
+    maxHoleRatio: number;
+    mergeDistance: number;
+    mergeHueDistance: number;
+    mergeLightness: number;
+    mergeSaturation: number;
+    lightMinAreaRatio: number;
+    maskCloseRadius: number;
+    lightDilateRadius: number;
+    darkDilateRadius: number;
+};
+
 export type VectorizeImageResult = {
     content: string;
     dataUrl: string;
@@ -35,6 +52,7 @@ export type VectorizeImageResult = {
     bytes: number;
     mimeType: string;
     engine?: string;
+    preset?: VectorizePreset;
 };
 
 const QUALITY_BASE: Record<string, number> = {
@@ -138,11 +156,10 @@ function parseImagePayload(payload: ImageApiResponse) {
         throw new Error("图片任务仍在处理中，请稍后重试");
     }
     const items = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.result?.data) ? payload.result.data : [];
-    const images =
-        items
-            .map(resolveImageDataUrl)
-            .filter((value): value is string => Boolean(value))
-            .map((dataUrl) => ({ id: nanoid(), dataUrl }));
+    const images = items
+        .map(resolveImageDataUrl)
+        .filter((value): value is string => Boolean(value))
+        .map((dataUrl) => ({ id: nanoid(), dataUrl }));
 
     if (images.length === 0) {
         throw new Error("接口没有返回图片");
@@ -271,7 +288,9 @@ function refreshRemoteUser(config: AiConfig) {
     if (config.channelMode === "remote") void useUserStore.getState().hydrateUser();
 }
 
-export async function requestVectorizeImage(image: string, mode: "general" | "logo" | "colorMask" = "colorMask") {
+export type VectorizeImageMode = "general" | "logo" | "colorMask" | "cleanLogo" | "illustration";
+
+export async function requestVectorizeImage(image: string, mode: VectorizeImageMode = "logo") {
     const token = useUserStore.getState().token;
     const value = image.trim();
     const payload = /^https?:\/\//i.test(value) ? { imageUrl: value, mode } : { dataUrl: value, mode };

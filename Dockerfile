@@ -42,7 +42,7 @@ ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 ENV PROMPT_DATA_DIR=/app/data/prompts
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates imagemagick && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates imagemagick potrace && rm -rf /var/lib/apt/lists/*
 # Bump ImageMagick resource limits: 4096²×Q16×RGBA + morphology operations 容易撞 256MiB 缓存上限。
 RUN sed -i 's|name="memory" value="256MiB"|name="memory" value="2GiB"|; s|name="area" value="128MP"|name="area" value="256MP"|' /etc/ImageMagick-6/policy.xml
 RUN if ! command -v magick >/dev/null 2>&1 && command -v convert >/dev/null 2>&1; then ln -s "$(command -v convert)" /usr/local/bin/magick; fi

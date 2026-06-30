@@ -32,6 +32,8 @@ type Config struct {
 	Png2SVGCleanNodePath         string `env:"PNG2SVG_CLEAN_NODE_PATH" envDefault:"node"`
 	Png2SVGCleanProfile          string `env:"PNG2SVG_CLEAN_PROFILE" envDefault:"generic-85"`
 	Png2SVGCleanTimeoutSec       int    `env:"PNG2SVG_CLEAN_TIMEOUT_SEC" envDefault:"90"`
+	ImageMagickPath              string `env:"IMAGE_MAGICK_PATH" envDefault:"magick"`
+	PotracePath                  string `env:"POTRACE_PATH" envDefault:"potrace"`
 	LinuxDoAuthorizeURL          string `env:"LINUX_DO_AUTHORIZE_URL" envDefault:"https://connect.linux.do/oauth2/authorize"`
 	LinuxDoTokenURL              string `env:"LINUX_DO_TOKEN_URL" envDefault:"https://connect.linux.do/oauth2/token"`
 	LinuxDoUserInfoURL           string `env:"LINUX_DO_USERINFO_URL" envDefault:"https://connect.linux.do/api/user"`

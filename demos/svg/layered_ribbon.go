@@ -65,7 +65,7 @@ func runLayeredRibbonJob(ctx context.Context, input vectorizeRequest, data []byt
 	}
 	palette := readPalette(quantizedImage)
 	background := detectBackgroundLayer(quantizedImage, palette, defaultMergeDistance, defaultMergeHueDistance, defaultMergeLightness, defaultMergeSaturation)
-	layers := buildTraceLayers(palette, width*height, background.Keys, defaultMergeDistance, defaultMergeHueDistance, defaultMergeLightness, defaultMergeSaturation)
+	layers := buildTraceLayers(palette, width*height, background.Keys, defaultMergeDistance, defaultMergeHueDistance, defaultMergeLightness, defaultMergeSaturation, false)
 	if len(layers) == 0 {
 		return jobResult{}, errors.New("no traceable color layers")
 	}
@@ -74,7 +74,22 @@ func runLayeredRibbonJob(ctx context.Context, input vectorizeRequest, data []byt
 	})
 
 	ribbons := make([]ribbonLayer, 0, 2)
-	metrics := metricsResult{SourceColors: sourceColors, QuantizedColors: quantizedColors, Background: background.Hex}
+	metrics := metricsResult{
+		SourceColors:    sourceColors,
+		QuantizedColors: quantizedColors,
+		Background:      background.Hex,
+		Request: vectorizeParams{
+			Mode:              "layeredRibbon",
+			Colors:            colors,
+			LongEdge:          longEdge,
+			MinComponentRatio: defaultMinComponentRatio,
+			MaxHoleRatio:      defaultMaxHoleRatio,
+			MergeDistance:     defaultMergeDistance,
+			MergeHueDistance:  defaultMergeHueDistance,
+			MergeLightness:    defaultMergeLightness,
+			MergeSaturation:   defaultMergeSaturation,
+		},
+	}
 	var body strings.Builder
 	body.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	body.WriteString(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">`, width, height, width, height) + "\n")
