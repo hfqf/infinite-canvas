@@ -72,10 +72,7 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 		return VectorizeResult{}, err
 	}
 
-	timeout := time.Duration(config.Cfg.Png2SVGCleanTimeoutSec) * time.Second
-	if timeout <= 0 {
-		timeout = 90 * time.Second
-	}
+	timeout := vectorizeTimeout(input.Mode)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -110,6 +107,25 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 		Engine:   vectorizeEngine(input.Mode),
 		Preset:   vectorizePreset(input.Mode),
 	}, nil
+}
+
+func vectorizeTimeout(mode string) time.Duration {
+	seconds := config.Cfg.Png2SVGCleanTimeoutSec
+	if isCleanLogoVectorizeMode(mode) {
+		seconds = config.Cfg.VectorizeLogoTimeoutSec
+	} else if isIllustrationVectorizeMode(mode) {
+		seconds = config.Cfg.VectorizeIllustrationTimeoutSec
+	}
+	if seconds <= 0 {
+		if isIllustrationVectorizeMode(mode) {
+			seconds = 180
+		} else if isCleanLogoVectorizeMode(mode) {
+			seconds = 120
+		} else {
+			seconds = 90
+		}
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func runIllustrationVectorize(ctx context.Context, inputPath string, outputPath string) error {

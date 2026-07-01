@@ -21,9 +21,10 @@ import (
 )
 
 const (
-	cleanLogoLongEdge             = 4096
-	illustrationLongEdge          = 4096
-	illustrationColors            = 96
+	cleanLogoLongEdge             = 1024
+	illustrationLongEdge          = 1024
+	illustrationColors            = 64
+	illustrationMaxTraceLayers    = 64
 	cleanLogoMinComponentRatio    = 0.00005
 	illustrationMinComponentRatio = 0.000005
 	cleanLogoMaxHoleRatio         = 0.00008
@@ -89,6 +90,7 @@ type cleanLogoVectorizeOptions struct {
 	MergeLightness        float64
 	MergeSaturation       float64
 	LightMinAreaRatio     float64
+	MaxTraceLayers        int
 	PreservePaletteLayers bool
 	RemoveSpeckles        bool
 	FillSmallHoles        bool
@@ -169,6 +171,7 @@ func illustrationVectorizeOptions() cleanLogoVectorizeOptions {
 		MergeLightness:        illustrationMergeLightness,
 		MergeSaturation:       illustrationMergeSaturation,
 		LightMinAreaRatio:     illustrationLightMinAreaRatio,
+		MaxTraceLayers:        illustrationMaxTraceLayers,
 		PreservePaletteLayers: true,
 		RemoveSpeckles:        false,
 		FillSmallHoles:        false,
@@ -214,6 +217,9 @@ func runCleanLogoPotraceVectorize(ctx context.Context, inputPath string, outputP
 	palette := cleanLogoReadPalette(img)
 	background := cleanLogoDetectBackgroundWithOptions(img, palette, options)
 	layers := cleanLogoBuildTraceLayersWithOptions(palette, width*height, background.Keys, options)
+	if options.MaxTraceLayers > 0 && len(layers) > options.MaxTraceLayers {
+		layers = layers[:options.MaxTraceLayers]
+	}
 	if len(layers) == 0 {
 		return safeMessageError{message: "未识别到可转 SVG 的图层"}
 	}
@@ -235,10 +241,13 @@ func runCleanLogoPotraceVectorize(ctx context.Context, inputPath string, outputP
 	minComponentArea := int(math.Max(4, float64(width*height)*options.MinComponentRatio))
 	maxHoleArea := int(math.Max(4, float64(width*height)*options.MaxHoleRatio))
 	for index, layer := range layers {
+		if err := ctx.Err(); err != nil {
+			return vectorizeCommandError(options.Name, "处理图层", err, "")
+		}
 		maskPath := filepath.Join(workDir, fmt.Sprintf("clean-logo-layer-%02d-mask.png", index))
 		layerSVGPath := filepath.Join(workDir, fmt.Sprintf("clean-logo-layer-%02d.svg", index))
 		if err := cleanLogoWriteLayerMask(img, layer, maskPath); err != nil {
-			return err
+			return fmt.Errorf("%s write layer mask %02d failed: %w", options.Name, index, err)
 		}
 		layerMinComponentArea := cleanLogoMinComponentAreaForLayerWithOptions(layer, width*height, minComponentArea, options)
 		stats, err := cleanLogoCleanMaskWithOptions(maskPath, options.RemoveSpeckles, options.FillSmallHoles, layerMinComponentArea, maxHoleArea)
@@ -1184,9 +1193,24 @@ func cleanLogoExtractPotraceGroup(path string) (string, error) {
 func cleanLogoRunCommand(ctx context.Context, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("%s failed: %w: %s", filepath.Base(name), err, strings.TrimSpace(string(output)))
+		return vectorizeCommandError(filepath.Base(name), strings.Join(args, " "), err, strings.TrimSpace(string(output)))
 	}
 	return nil
+}
+
+func vectorizeCommandError(tool string, stage string, err error, output string) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return safeMessageError{message: "转 SVG 超时，请降低图片尺寸或改用 Logo 模式后重试"}
+	}
+	message := strings.TrimSpace(output)
+	errText := strings.ToLower(err.Error() + " " + message)
+	if strings.Contains(errText, "signal: killed") || strings.Contains(errText, "killed") || strings.Contains(errText, "cannot allocate memory") {
+		return safeMessageError{message: "转 SVG 失败：图片过大或服务器内存不足，请降低图片尺寸后重试"}
+	}
+	if message != "" {
+		return fmt.Errorf("%s failed at %s: %w: %s", tool, stage, err, message)
+	}
+	return fmt.Errorf("%s failed at %s: %w", tool, stage, err)
 }
 
 func cleanLogoIsBackgroundCompanion(item cleanLogoPaletteColor, background cleanLogoTraceLayer, borderCount int) bool {

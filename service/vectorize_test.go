@@ -90,11 +90,11 @@ func TestVectorizePresetReturnsIllustrationParameters(t *testing.T) {
 	if got.Engine != "illustration-potrace" {
 		t.Fatalf("preset engine = %q, want illustration-potrace", got.Engine)
 	}
-	if got.LongEdge != 4096 {
-		t.Fatalf("preset longEdge = %d, want 4096", got.LongEdge)
+	if got.LongEdge != 1024 {
+		t.Fatalf("preset longEdge = %d, want 1024", got.LongEdge)
 	}
-	if got.Colors != 96 {
-		t.Fatalf("preset colors = %d, want 96", got.Colors)
+	if got.Colors != 64 {
+		t.Fatalf("preset colors = %d, want 64", got.Colors)
 	}
 	if got.MinComponentRatio != 0.000005 {
 		t.Fatalf("preset minComponentRatio = %.8f, want 0.000005", got.MinComponentRatio)
@@ -174,8 +174,8 @@ func TestVectorizePresetReturnsCleanLogoParametersForLogoModes(t *testing.T) {
 		if got.Engine != "clean-logo-potrace" {
 			t.Fatalf("preset engine = %q, want clean-logo-potrace", got.Engine)
 		}
-		if got.LongEdge != 4096 {
-			t.Fatalf("preset longEdge = %d, want 4096", got.LongEdge)
+		if got.LongEdge != 1024 {
+			t.Fatalf("preset longEdge = %d, want 1024", got.LongEdge)
 		}
 		if got.MinComponentRatio != 0.00005 {
 			t.Fatalf("preset minComponentRatio = %.8f, want 0.00005", got.MinComponentRatio)
@@ -211,8 +211,8 @@ func TestVectorizePresetReturnsNilForGeneralMode(t *testing.T) {
 }
 
 func TestCleanLogoProductionConstantsMatchRecommendedPreset(t *testing.T) {
-	if cleanLogoLongEdge != 4096 {
-		t.Fatalf("cleanLogoLongEdge = %d, want 4096", cleanLogoLongEdge)
+	if cleanLogoLongEdge != 1024 {
+		t.Fatalf("cleanLogoLongEdge = %d, want 1024", cleanLogoLongEdge)
 	}
 	if cleanLogoMinComponentRatio != 0.00005 {
 		t.Fatalf("cleanLogoMinComponentRatio = %.8f, want 0.00005", cleanLogoMinComponentRatio)
@@ -639,8 +639,8 @@ func TestVectorizeImageLogoModeUsesCleanLogoPreset(t *testing.T) {
 			if result.Preset == nil {
 				t.Fatalf("preset = nil, want cleanLogo preset")
 			}
-			if result.Preset.Name != "cleanLogo" || result.Preset.LongEdge != 4096 {
-				t.Fatalf("preset = %#v, want cleanLogo preset with longEdge 4096", result.Preset)
+			if result.Preset.Name != "cleanLogo" || result.Preset.LongEdge != 1024 {
+				t.Fatalf("preset = %#v, want cleanLogo preset with longEdge 1024", result.Preset)
 			}
 			if got := estimateCleanLogoVectorizeColors(context.Background(), vectorizeMagickPath(t), tt.samplePath); got != tt.wantColors {
 				t.Fatalf("estimated colors = %d, want %d", got, tt.wantColors)

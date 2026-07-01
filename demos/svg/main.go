@@ -34,7 +34,7 @@ import (
 
 const (
 	defaultPort              = "8091"
-	defaultLongEdge          = 4096
+	defaultLongEdge          = 1024
 	defaultColors            = 16
 	defaultMinComponentRatio = 0.00005
 	defaultMaxHoleRatio      = 0.00008
@@ -82,13 +82,14 @@ type artifact struct {
 }
 
 type jobResult struct {
-	ID        string        `json:"id"`
-	Width     int           `json:"width"`
-	Height    int           `json:"height"`
-	SVGURL    string        `json:"svgUrl"`
-	Preview   string        `json:"previewUrl"`
-	Artifacts []artifact    `json:"artifacts"`
-	Metrics   metricsResult `json:"metrics"`
+	ID         string        `json:"id"`
+	Width      int           `json:"width"`
+	Height     int           `json:"height"`
+	SVGURL     string        `json:"svgUrl"`
+	Preview    string        `json:"previewUrl"`
+	Artifacts  []artifact    `json:"artifacts"`
+	Metrics    metricsResult `json:"metrics"`
+	DurationMs int64         `json:"durationMs"`
 }
 
 type batchItemResult struct {
@@ -277,11 +278,14 @@ func handleVectorize(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"code": 1, "data": nil, "msg": "invalid request"})
 		return
 	}
+	startedAt := time.Now()
 	result, err := runJob(r.Context(), input)
+	durationMs := time.Since(startedAt).Milliseconds()
 	if err != nil {
-		writeJSON(w, map[string]any{"code": 1, "data": nil, "msg": err.Error()})
+		writeJSON(w, map[string]any{"code": 1, "data": map[string]any{"durationMs": durationMs}, "msg": err.Error()})
 		return
 	}
+	result.DurationMs = durationMs
 	writeJSON(w, map[string]any{"code": 0, "data": result, "msg": "ok"})
 }
 
@@ -1272,7 +1276,7 @@ func runBackendLogoJob(ctx context.Context, input vectorizeRequest, data []byte)
 func applyCleanLogoDefaults(input vectorizeRequest) vectorizeRequest {
 	input.Mode = "cleanLogo"
 	if input.LongEdge <= 0 {
-		input.LongEdge = 4096
+		input.LongEdge = 1024
 	}
 	if input.MinComponentRatio <= 0 {
 		input.MinComponentRatio = 0.00005
@@ -1301,10 +1305,10 @@ func applyCleanLogoDefaults(input vectorizeRequest) vectorizeRequest {
 func applyIllustrationDefaults(input vectorizeRequest) vectorizeRequest {
 	input.Mode = "illustration"
 	if input.Colors <= 0 {
-		input.Colors = 96
+		input.Colors = 64
 	}
 	if input.LongEdge <= 0 {
-		input.LongEdge = 4096
+		input.LongEdge = 1024
 	}
 	if input.MinComponentRatio <= 0 {
 		input.MinComponentRatio = 0.000005
@@ -2901,7 +2905,7 @@ const indexHTML = `<!doctype html>
       </select>
     </div>
     <div class="control" data-slider="colors" data-label="Colors" data-value="0" data-min="0" data-max="128" data-step="1" data-hint="0 为自动色数；越高越保留多色细节但更容易碎。"></div>
-    <div class="control" data-slider="longEdge" data-label="Long edge" data-value="4096" data-min="512" data-max="8192" data-step="128" data-hint="归一化图片最长边，越大细节越多、耗时越长。"></div>
+    <div class="control" data-slider="longEdge" data-label="Long edge" data-value="1024" data-min="512" data-max="8192" data-step="128" data-hint="归一化图片最长边，越大细节越多、耗时越长。"></div>
     <div class="control" data-slider="minComponentRatio" data-label="Min component ratio" data-value="0.00005" data-min="0" data-max="0.001" data-step="0.000001" data-hint="过滤小碎片，值越大删除越多小组件。"></div>
     <div class="control" data-slider="maxHoleRatio" data-label="Max hole ratio" data-value="0.00008" data-min="0" data-max="0.001" data-step="0.000001" data-hint="填补小孔洞，值越大越容易把小洞抹平。"></div>
     <div class="control" data-slider="mergeDistance" data-label="Merge distance" data-value="64" data-min="0" data-max="220" data-step="1" data-hint="近似颜色合并距离，调大可减少碎色块。"></div>
@@ -2944,6 +2948,7 @@ let requestRevision = 0;
 let isVectorizing = false;
 let rerunAfterCurrent = false;
 let currentDataUrl = '';
+let runTimer = 0;
 const sliderIds = [
   'colors',
   'longEdge',
@@ -2961,7 +2966,7 @@ const sliderIds = [
 const modePresets = {
   cleanLogo: {
     colors: 0,
-    longEdge: 4096,
+    longEdge: 1024,
     minComponentRatio: 0.00005,
     maxHoleRatio: 0.00008,
     mergeDistance: 64,
@@ -2974,8 +2979,8 @@ const modePresets = {
     darkDilateRadius: 0
   },
   illustration: {
-    colors: 96,
-    longEdge: 4096,
+    colors: 64,
+    longEdge: 1024,
     minComponentRatio: 0.000005,
     maxHoleRatio: 0.00001,
     mergeDistance: 18,
@@ -2989,7 +2994,7 @@ const modePresets = {
   },
   colorMask: {
     colors: 16,
-    longEdge: 4096,
+    longEdge: 1024,
     minComponentRatio: 0.00001,
     maxHoleRatio: 0.00004,
     mergeDistance: 48,
@@ -3076,6 +3081,12 @@ function scheduleVectorize(delay = 0) {
   }, delay);
 }
 
+function formatDuration(ms) {
+  const value = Math.max(0, Number(ms) || 0);
+  if (value < 1000) return Math.round(value) + 'ms';
+  return (value / 1000).toFixed(value < 10000 ? 2 : 1) + 's';
+}
+
 function qualityPathLimit(metrics) {
   return Number(metrics?.request?.colors) >= 32 ? 12 : 8;
 }
@@ -3159,7 +3170,14 @@ async function runVectorize(revision = requestRevision, showMissingFileAlert = t
   }
   isVectorizing = true;
   const serial = ++runSerial;
-  statusEl.textContent = 'Processing... #' + serial;
+  const startedAt = performance.now();
+  window.clearInterval(runTimer);
+  statusEl.textContent = 'Processing... #' + serial + ' · ' + formatDuration(0);
+  runTimer = window.setInterval(() => {
+    if (serial === runSerial && isVectorizing) {
+      statusEl.textContent = 'Processing... #' + serial + ' · ' + formatDuration(performance.now() - startedAt);
+    }
+  }, 200);
   renderQuality(null);
   renderArtifacts([]);
   visualComparisonEl.removeAttribute('src');
@@ -3182,11 +3200,13 @@ async function runVectorize(revision = requestRevision, showMissingFileAlert = t
     }
     if (serial !== runSerial) return;
     if (payload.code !== 0) {
-      statusEl.textContent = payload.msg || 'Failed';
+      const duration = payload.data?.durationMs ?? performance.now() - startedAt;
+      statusEl.textContent = (payload.msg || 'Failed') + ' · ' + formatDuration(duration);
       return;
     }
     previewEl.src = payload.data.previewUrl + '?t=' + Date.now();
-    metricsEl.textContent = JSON.stringify(payload.data.metrics, null, 2);
+    const metricsPayload = { durationMs: payload.data.durationMs, ...payload.data.metrics };
+    metricsEl.textContent = JSON.stringify(metricsPayload, null, 2);
     renderQuality(payload.data.metrics);
     renderArtifacts(payload.data.artifacts);
     const visualArtifact = (payload.data.artifacts || []).find((item) => item.name === 'visual-comparison.png');
@@ -3194,11 +3214,12 @@ async function runVectorize(revision = requestRevision, showMissingFileAlert = t
       visualComparisonEl.src = visualArtifact.url + '?t=' + Date.now();
     }
     const visualLink = visualArtifact ? ' · <a href="' + visualArtifact.url + '" target="_blank">visual-comparison.png</a>' : '';
-    statusEl.innerHTML = 'Done #' + serial + ': <a href="' + payload.data.svgUrl + '" target="_blank">output.svg</a>' + visualLink;
+    statusEl.innerHTML = 'Done #' + serial + ' · ' + formatDuration(payload.data.durationMs) + ': <a href="' + payload.data.svgUrl + '" target="_blank">output.svg</a>' + visualLink;
   } catch (error) {
     if (serial !== runSerial) return;
-    statusEl.textContent = error instanceof Error ? error.message : 'Failed';
+    statusEl.textContent = (error instanceof Error ? error.message : 'Failed') + ' · ' + formatDuration(performance.now() - startedAt);
   } finally {
+    if (serial === runSerial) window.clearInterval(runTimer);
     if (serial === runSerial) runButton.disabled = false;
     isVectorizing = false;
     if (rerunAfterCurrent) {

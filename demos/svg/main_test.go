@@ -46,8 +46,8 @@ func TestParseHistogramChannel(t *testing.T) {
 }
 
 func TestCleanLogoLabDefaultsMatchRecommendedPreset(t *testing.T) {
-	if defaultLongEdge != 4096 {
-		t.Fatalf("defaultLongEdge = %d, want 4096", defaultLongEdge)
+	if defaultLongEdge != 1024 {
+		t.Fatalf("defaultLongEdge = %d, want 1024", defaultLongEdge)
 	}
 	if defaultMinComponentRatio != 0.00005 {
 		t.Fatalf("defaultMinComponentRatio = %.8f, want 0.00005", defaultMinComponentRatio)
@@ -94,8 +94,11 @@ func TestApplyIllustrationDefaultsPreservesComplexArtwork(t *testing.T) {
 	if got.Mode != "illustration" {
 		t.Fatalf("mode = %q, want illustration", got.Mode)
 	}
-	if got.Colors != 96 {
-		t.Fatalf("colors = %d, want 96", got.Colors)
+	if got.Colors != 64 {
+		t.Fatalf("colors = %d, want 64", got.Colors)
+	}
+	if got.LongEdge != 1024 {
+		t.Fatalf("longEdge = %d, want 1024", got.LongEdge)
 	}
 	if got.MinComponentRatio != 0.000005 {
 		t.Fatalf("minComponentRatio = %.8f, want 0.000005", got.MinComponentRatio)

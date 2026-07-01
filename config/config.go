@@ -12,47 +12,49 @@ import (
 )
 
 type Config struct {
-	Port                         string `env:"PORT" envDefault:"8080"`
-	AdminUsername                string `env:"ADMIN_USERNAME" envDefault:"admin"`
-	AdminPassword                string `env:"ADMIN_PASSWORD" envDefault:"infinite-canvas"`
-	JWTSecret                    string `env:"JWT_SECRET" envDefault:"infinite-canvas"`
-	JWTExpireHours               int    `env:"JWT_EXPIRE_HOURS" envDefault:"168"`
-	DatabaseDriver               string `env:"DATABASE_DRIVER"`
-	StorageDriver                string `env:"STORAGE_DRIVER" envDefault:"sqlite"`
-	DatabaseDSN                  string `env:"DATABASE_DSN" envDefault:"data/infinite-canvas.db"`
-	ImageStorageDriver           string `env:"FIGO_STORAGE_DRIVER" envDefault:"oss"`
-	AliyunOSSEndpoint            string `env:"ALIYUN_OSS_ENDPOINT"`
-	AliyunOSSBucket              string `env:"ALIYUN_OSS_BUCKET"`
-	AliyunOSSAccessKeyID         string `env:"ALIYUN_OSS_ACCESS_KEY_ID"`
-	AliyunOSSAccessKeySecret     string `env:"ALIYUN_OSS_ACCESS_KEY_SECRET"`
-	AliyunOSSPublicBaseURL       string `env:"ALIYUN_OSS_PUBLIC_BASE_URL"`
-	PublicBaseURL                string `env:"PUBLIC_BASE_URL"`
-	Png2SVGCleanToolDir          string `env:"PNG2SVG_CLEAN_TOOL_DIR" envDefault:"png2svg-clean-node"`
-	Png2SVGCleanBin              string `env:"PNG2SVG_CLEAN_BIN" envDefault:"bin/png2svg-generic-85.mjs"`
-	Png2SVGCleanNodePath         string `env:"PNG2SVG_CLEAN_NODE_PATH" envDefault:"node"`
-	Png2SVGCleanProfile          string `env:"PNG2SVG_CLEAN_PROFILE" envDefault:"generic-85"`
-	Png2SVGCleanTimeoutSec       int    `env:"PNG2SVG_CLEAN_TIMEOUT_SEC" envDefault:"90"`
-	ImageMagickPath              string `env:"IMAGE_MAGICK_PATH" envDefault:"magick"`
-	PotracePath                  string `env:"POTRACE_PATH" envDefault:"potrace"`
-	LinuxDoAuthorizeURL          string `env:"LINUX_DO_AUTHORIZE_URL" envDefault:"https://connect.linux.do/oauth2/authorize"`
-	LinuxDoTokenURL              string `env:"LINUX_DO_TOKEN_URL" envDefault:"https://connect.linux.do/oauth2/token"`
-	LinuxDoUserInfoURL           string `env:"LINUX_DO_USERINFO_URL" envDefault:"https://connect.linux.do/api/user"`
-	WechatPayEnabled             bool   `env:"WECHAT_PAY_ENABLED" envDefault:"false"`
-	WechatPayAppID               string `env:"WECHAT_PAY_APP_ID"`
-	WechatPayMchID               string `env:"WECHAT_PAY_MCH_ID"`
-	WechatPayAPIv3Secret         string `env:"WECHAT_PAY_API_V3_SECRET"`
-	WechatPayKeyPath             string `env:"WECHAT_PAY_KEY_PATH"`
-	WechatPayCertificateSerialNo string `env:"WECHAT_PAY_CERTIFICATE_SERIAL_NO"`
-	WechatPayPublicKeyID         string `env:"WECHAT_PAY_PUBLIC_KEY_ID"`
-	WechatPayPublicKeyPath       string `env:"WECHAT_PAY_PUBLIC_KEY_PATH"`
-	WechatPaySkipNotifyVerify    bool   `env:"WECHAT_PAY_SKIP_NOTIFY_VERIFY" envDefault:"false"`
-	WechatPayNotifyURL           string `env:"WECHAT_PAY_NOTIFY_URL"`
-	VerificationProvider         string `env:"FIGO_VERIFICATION_PROVIDER" envDefault:"noop"`
-	SMTPHost                     string `env:"FIGO_SMTP_HOST"`
-	SMTPPort                     string `env:"FIGO_SMTP_PORT"`
-	SMTPUsername                 string `env:"FIGO_SMTP_USERNAME"`
-	SMTPPassword                 string `env:"FIGO_SMTP_PASSWORD"`
-	SMTPFrom                     string `env:"FIGO_SMTP_FROM"`
+	Port                            string `env:"PORT" envDefault:"8080"`
+	AdminUsername                   string `env:"ADMIN_USERNAME" envDefault:"admin"`
+	AdminPassword                   string `env:"ADMIN_PASSWORD" envDefault:"infinite-canvas"`
+	JWTSecret                       string `env:"JWT_SECRET" envDefault:"infinite-canvas"`
+	JWTExpireHours                  int    `env:"JWT_EXPIRE_HOURS" envDefault:"168"`
+	DatabaseDriver                  string `env:"DATABASE_DRIVER"`
+	StorageDriver                   string `env:"STORAGE_DRIVER" envDefault:"sqlite"`
+	DatabaseDSN                     string `env:"DATABASE_DSN" envDefault:"data/infinite-canvas.db"`
+	ImageStorageDriver              string `env:"FIGO_STORAGE_DRIVER" envDefault:"oss"`
+	AliyunOSSEndpoint               string `env:"ALIYUN_OSS_ENDPOINT"`
+	AliyunOSSBucket                 string `env:"ALIYUN_OSS_BUCKET"`
+	AliyunOSSAccessKeyID            string `env:"ALIYUN_OSS_ACCESS_KEY_ID"`
+	AliyunOSSAccessKeySecret        string `env:"ALIYUN_OSS_ACCESS_KEY_SECRET"`
+	AliyunOSSPublicBaseURL          string `env:"ALIYUN_OSS_PUBLIC_BASE_URL"`
+	PublicBaseURL                   string `env:"PUBLIC_BASE_URL"`
+	Png2SVGCleanToolDir             string `env:"PNG2SVG_CLEAN_TOOL_DIR" envDefault:"png2svg-clean-node"`
+	Png2SVGCleanBin                 string `env:"PNG2SVG_CLEAN_BIN" envDefault:"bin/png2svg-generic-85.mjs"`
+	Png2SVGCleanNodePath            string `env:"PNG2SVG_CLEAN_NODE_PATH" envDefault:"node"`
+	Png2SVGCleanProfile             string `env:"PNG2SVG_CLEAN_PROFILE" envDefault:"generic-85"`
+	Png2SVGCleanTimeoutSec          int    `env:"PNG2SVG_CLEAN_TIMEOUT_SEC" envDefault:"90"`
+	VectorizeLogoTimeoutSec         int    `env:"VECTORIZE_LOGO_TIMEOUT_SEC" envDefault:"120"`
+	VectorizeIllustrationTimeoutSec int    `env:"VECTORIZE_ILLUSTRATION_TIMEOUT_SEC" envDefault:"180"`
+	ImageMagickPath                 string `env:"IMAGE_MAGICK_PATH" envDefault:"magick"`
+	PotracePath                     string `env:"POTRACE_PATH" envDefault:"potrace"`
+	LinuxDoAuthorizeURL             string `env:"LINUX_DO_AUTHORIZE_URL" envDefault:"https://connect.linux.do/oauth2/authorize"`
+	LinuxDoTokenURL                 string `env:"LINUX_DO_TOKEN_URL" envDefault:"https://connect.linux.do/oauth2/token"`
+	LinuxDoUserInfoURL              string `env:"LINUX_DO_USERINFO_URL" envDefault:"https://connect.linux.do/api/user"`
+	WechatPayEnabled                bool   `env:"WECHAT_PAY_ENABLED" envDefault:"false"`
+	WechatPayAppID                  string `env:"WECHAT_PAY_APP_ID"`
+	WechatPayMchID                  string `env:"WECHAT_PAY_MCH_ID"`
+	WechatPayAPIv3Secret            string `env:"WECHAT_PAY_API_V3_SECRET"`
+	WechatPayKeyPath                string `env:"WECHAT_PAY_KEY_PATH"`
+	WechatPayCertificateSerialNo    string `env:"WECHAT_PAY_CERTIFICATE_SERIAL_NO"`
+	WechatPayPublicKeyID            string `env:"WECHAT_PAY_PUBLIC_KEY_ID"`
+	WechatPayPublicKeyPath          string `env:"WECHAT_PAY_PUBLIC_KEY_PATH"`
+	WechatPaySkipNotifyVerify       bool   `env:"WECHAT_PAY_SKIP_NOTIFY_VERIFY" envDefault:"false"`
+	WechatPayNotifyURL              string `env:"WECHAT_PAY_NOTIFY_URL"`
+	VerificationProvider            string `env:"FIGO_VERIFICATION_PROVIDER" envDefault:"noop"`
+	SMTPHost                        string `env:"FIGO_SMTP_HOST"`
+	SMTPPort                        string `env:"FIGO_SMTP_PORT"`
+	SMTPUsername                    string `env:"FIGO_SMTP_USERNAME"`
+	SMTPPassword                    string `env:"FIGO_SMTP_PASSWORD"`
+	SMTPFrom                        string `env:"FIGO_SMTP_FROM"`
 }
 
 var Cfg Config
