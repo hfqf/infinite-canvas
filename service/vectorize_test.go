@@ -3,12 +3,16 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/png"
+	"io"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -77,6 +81,125 @@ func TestVectorizeEngineUsesIllustrationBranchForIllustrationMode(t *testing.T) 
 			t.Fatalf("vectorizeEngine(%q)=%q, want illustration-potrace", mode, got)
 		}
 	}
+}
+
+func TestVectorizeImageUsesRecraftProviderWhenConfigured(t *testing.T) {
+	originalProvider := config.Cfg.VectorizeProvider
+	originalKey := config.Cfg.RecraftAPIKey
+	originalBaseURL := config.Cfg.RecraftAPIBaseURL
+	t.Cleanup(func() {
+		config.Cfg.VectorizeProvider = originalProvider
+		config.Cfg.RecraftAPIKey = originalKey
+		config.Cfg.RecraftAPIBaseURL = originalBaseURL
+	})
+
+	var sawVectorizeRequest bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/images/vectorize":
+			sawVectorizeRequest = true
+			if got := r.Header.Get("Authorization"); got != "Bearer test-recraft-key" {
+				t.Fatalf("Authorization = %q, want Bearer token", got)
+			}
+			if err := r.ParseMultipartForm(2 << 20); err != nil {
+				t.Fatalf("ParseMultipartForm() error = %v", err)
+			}
+			file, header, err := r.FormFile("file")
+			if err != nil {
+				t.Fatalf("multipart field file missing: %v", err)
+			}
+			defer file.Close()
+			if header.Filename == "" {
+				t.Fatalf("multipart filename is empty")
+			}
+			data, err := io.ReadAll(file)
+			if err != nil {
+				t.Fatalf("read uploaded file: %v", err)
+			}
+			if len(data) == 0 {
+				t.Fatalf("uploaded file is empty")
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"image": map[string]string{"url": serverURL(r) + "/result.svg"},
+			})
+		case "/result.svg":
+			w.Header().Set("Content-Type", "image/svg+xml")
+			_, _ = io.WriteString(w, `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="6"><path d="M0 0h12v6H0z"/></svg>`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	config.Cfg.VectorizeProvider = "recraft"
+	config.Cfg.RecraftAPIKey = "test-recraft-key"
+	config.Cfg.RecraftAPIBaseURL = server.URL + "/v1"
+
+	source := image.NewRGBA(image.Rect(0, 0, 12, 6))
+	vectorizeFillRect(source, image.Rect(0, 0, 12, 6), color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff})
+	var encoded strings.Builder
+	writer := base64.NewEncoder(base64.StdEncoding, &encoded)
+	if err := png.Encode(writer, source); err != nil {
+		t.Fatalf("encode source png: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close base64 encoder: %v", err)
+	}
+
+	result, err := VectorizeImage(VectorizeInput{
+		DataURL: "data:image/png;base64," + encoded.String(),
+		Mode:    "logo",
+	})
+	if err != nil {
+		t.Fatalf("VectorizeImage() error = %v", err)
+	}
+	if !sawVectorizeRequest {
+		t.Fatalf("Recraft vectorize endpoint was not called")
+	}
+	if result.Engine != "recraft-vectorize" {
+		t.Fatalf("engine = %q, want recraft-vectorize", result.Engine)
+	}
+	if result.Width != 12 || result.Height != 6 {
+		t.Fatalf("size = %dx%d, want 12x6", result.Width, result.Height)
+	}
+	if !strings.Contains(result.Content, "<path") {
+		t.Fatalf("content does not include vector path: %s", result.Content)
+	}
+}
+
+func TestVectorizeImageRejectsLargeRecraftInput(t *testing.T) {
+	originalProvider := config.Cfg.VectorizeProvider
+	originalKey := config.Cfg.RecraftAPIKey
+	originalBaseURL := config.Cfg.RecraftAPIBaseURL
+	t.Cleanup(func() {
+		config.Cfg.VectorizeProvider = originalProvider
+		config.Cfg.RecraftAPIKey = originalKey
+		config.Cfg.RecraftAPIBaseURL = originalBaseURL
+	})
+
+	config.Cfg.VectorizeProvider = "recraft"
+	config.Cfg.RecraftAPIKey = "test-recraft-key"
+	config.Cfg.RecraftAPIBaseURL = "http://127.0.0.1"
+
+	largePayload := strings.Repeat("a", recraftMaxInputBytes+1)
+	_, err := VectorizeImage(VectorizeInput{
+		DataURL: "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte(largePayload)),
+		Mode:    "logo",
+	})
+	if err == nil {
+		t.Fatalf("VectorizeImage() error = nil, want large Recraft input error")
+	}
+	if !strings.Contains(err.Error(), "10MB") {
+		t.Fatalf("error = %q, want 10MB limit message", err.Error())
+	}
+}
+
+func serverURL(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
 }
 
 func TestVectorizePresetReturnsIllustrationParameters(t *testing.T) {

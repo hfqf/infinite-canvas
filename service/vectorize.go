@@ -1,11 +1,14 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,6 +22,7 @@ import (
 
 const (
 	vectorizeMaxInputBytes = 40 << 20
+	recraftMaxInputBytes   = 10 << 20
 	vectorizeMimeType      = "image/svg+xml"
 )
 
@@ -76,7 +80,15 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	if isCleanLogoVectorizeMode(input.Mode) {
+	engine := vectorizeEngine(input.Mode)
+	preset := vectorizePreset(input.Mode)
+	if shouldUseRecraftVectorize() {
+		if err := runRecraftVectorize(ctx, data, ext, outputPath); err != nil {
+			return VectorizeResult{}, err
+		}
+		engine = "recraft-vectorize"
+		preset = nil
+	} else if isCleanLogoVectorizeMode(input.Mode) {
 		if err := runCleanLogoVectorize(ctx, inputPath, outputPath); err != nil {
 			return VectorizeResult{}, err
 		}
@@ -104,8 +116,8 @@ func VectorizeImage(input VectorizeInput) (VectorizeResult, error) {
 		Height:   height,
 		Bytes:    len(svg),
 		MimeType: vectorizeMimeType,
-		Engine:   vectorizeEngine(input.Mode),
-		Preset:   vectorizePreset(input.Mode),
+		Engine:   engine,
+		Preset:   preset,
 	}, nil
 }
 
@@ -130,6 +142,118 @@ func vectorizeTimeout(mode string) time.Duration {
 
 func runIllustrationVectorize(ctx context.Context, inputPath string, outputPath string) error {
 	return runCleanLogoPotraceVectorize(ctx, inputPath, outputPath, illustrationVectorizeOptions())
+}
+
+type recraftVectorizeResponse struct {
+	Image struct {
+		URL string `json:"url"`
+	} `json:"image"`
+	URL      string `json:"url"`
+	ImageURL string `json:"image_url"`
+}
+
+func shouldUseRecraftVectorize() bool {
+	provider := strings.ToLower(strings.TrimSpace(config.Cfg.VectorizeProvider))
+	return provider == "recraft" && strings.TrimSpace(config.Cfg.RecraftAPIKey) != ""
+}
+
+func runRecraftVectorize(ctx context.Context, data []byte, ext string, outputPath string) error {
+	apiKey := strings.TrimSpace(config.Cfg.RecraftAPIKey)
+	if apiKey == "" {
+		return safeMessageError{message: "未配置 Recraft API Key，无法使用外部转矢量服务"}
+	}
+	if len(data) > recraftMaxInputBytes {
+		return safeMessageError{message: "图片超过 Recraft 10MB 限制，请压缩后重试"}
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(config.Cfg.RecraftAPIBaseURL), "/")
+	if baseURL == "" {
+		baseURL = "https://external.api.recraft.ai/v1"
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	filename := "input" + ext
+	if ext == "" {
+		filename = "input.png"
+	}
+	fileWriter, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		return err
+	}
+	if _, err := fileWriter.Write(data); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/images/vectorize", &body)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	client := http.Client{Timeout: vectorizeTimeout("recraft")}
+	response, err := client.Do(request)
+	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return safeMessageError{message: "Recraft 转矢量超时，请稍后重试"}
+		}
+		return safeMessageError{message: "Recraft 转矢量请求失败"}
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return safeMessageError{message: fmt.Sprintf("Recraft 转矢量失败，状态码 %d", response.StatusCode)}
+	}
+	var payload recraftVectorizeResponse
+	if err := json.NewDecoder(io.LimitReader(response.Body, 2<<20)).Decode(&payload); err != nil {
+		return safeMessageError{message: "Recraft 转矢量响应解析失败"}
+	}
+	svgURL := strings.TrimSpace(payload.Image.URL)
+	if svgURL == "" {
+		svgURL = strings.TrimSpace(payload.URL)
+	}
+	if svgURL == "" {
+		svgURL = strings.TrimSpace(payload.ImageURL)
+	}
+	if svgURL == "" {
+		return safeMessageError{message: "Recraft 转矢量响应缺少 SVG 地址"}
+	}
+	svg, err := downloadRecraftSVG(ctx, svgURL)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(outputPath, svg, 0o600)
+}
+
+func downloadRecraftSVG(ctx context.Context, svgURL string) ([]byte, error) {
+	parsed, err := url.Parse(strings.TrimSpace(svgURL))
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return nil, safeMessageError{message: "Recraft 返回的 SVG 地址格式不支持"}
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, safeMessageError{message: "下载 Recraft SVG 超时，请稍后重试"}
+		}
+		return nil, safeMessageError{message: "下载 Recraft SVG 失败"}
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, safeMessageError{message: "下载 Recraft SVG 失败"}
+	}
+	svg, err := io.ReadAll(io.LimitReader(response.Body, vectorizeMaxInputBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(svg) > vectorizeMaxInputBytes {
+		return nil, safeMessageError{message: "Recraft SVG 过大，无法处理"}
+	}
+	return svg, nil
 }
 
 func runPng2SVGClean(ctx context.Context, inputPath string, outputPath string) error {

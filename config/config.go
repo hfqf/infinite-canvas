@@ -32,6 +32,9 @@ type Config struct {
 	Png2SVGCleanNodePath            string `env:"PNG2SVG_CLEAN_NODE_PATH" envDefault:"node"`
 	Png2SVGCleanProfile             string `env:"PNG2SVG_CLEAN_PROFILE" envDefault:"generic-85"`
 	Png2SVGCleanTimeoutSec          int    `env:"PNG2SVG_CLEAN_TIMEOUT_SEC" envDefault:"90"`
+	VectorizeProvider               string `env:"VECTORIZE_PROVIDER" envDefault:"recraft"`
+	RecraftAPIKey                   string `env:"RECRAFT_API_KEY"`
+	RecraftAPIBaseURL               string `env:"RECRAFT_API_BASE_URL" envDefault:"https://external.api.recraft.ai/v1"`
 	VectorizeLogoTimeoutSec         int    `env:"VECTORIZE_LOGO_TIMEOUT_SEC" envDefault:"120"`
 	VectorizeIllustrationTimeoutSec int    `env:"VECTORIZE_ILLUSTRATION_TIMEOUT_SEC" envDefault:"180"`
 	ImageMagickPath                 string `env:"IMAGE_MAGICK_PATH" envDefault:"magick"`

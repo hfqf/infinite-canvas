@@ -4,7 +4,17 @@
 
 **Goal:** Tune a stable logo-to-SVG preset that keeps the main background, preserves logo contours, keeps text readable, produces clean edges, avoids fragmented path output, and preserves brand colors.
 
-**Current Recommendation:** Use `mode: "cleanLogo"` with `colors: 0`. `colors=0` means automatic color-count selection based on significant brand-color hue groups.
+**Current Recommendation:** Production `/api/v1/images/vectorize` should prefer the external Recraft vectorization provider (`VECTORIZE_PROVIDER=recraft` + `RECRAFT_API_KEY`) for real user traffic. The local `cleanLogo`/Potrace preset remains as the fallback/debug path and as the SVG Lab comparison baseline.
+
+## 2026-07-05 Recraft Provider Integration
+
+- Added `VECTORIZE_PROVIDER`, `RECRAFT_API_KEY`, and `RECRAFT_API_BASE_URL` config so production can route PNG/JPG-to-SVG through Recraft without changing the canvas API contract.
+- `/api/v1/images/vectorize` keeps the same request/response shape. When Recraft is configured, the backend uploads the image as multipart `file`, downloads the returned SVG URL, validates the result as SVG, and reports `engine: "recraft-vectorize"`.
+- Local Potrace/png2svg branches are still present and covered by branch-selection tests, so missing Recraft configuration can still use the historical local flow.
+- Recraft input is capped at 10MB before upload, matching the external service limit and returning a clear user-facing error instead of a remote 4xx.
+- Local ignored `.env` is configured with the provided Recraft key; committed files only include empty placeholders.
+
+Previous local fallback recommendation: use `mode: "cleanLogo"` with `colors: 0`. `colors=0` means automatic color-count selection based on significant brand-color hue groups.
 
 ## Current Preset
 
