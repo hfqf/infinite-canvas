@@ -5,6 +5,7 @@ import type { ChangeEvent as ReactChangeEvent, DragEvent as ReactDragEvent, Mous
 import { useParams, useRouter } from "next/navigation";
 import { Home, ImageIcon, Images, List, Menu, Music2, Plus, ReceiptText, Redo2, Settings2, Trash2, Undo2, Upload, Video } from "lucide-react";
 import { saveAs } from "file-saver";
+import copy from "copy-to-clipboard";
 
 import { requestEdit, requestGeneration, requestImageQuestion, requestVectorizeImage, type VectorizeImageMode } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
@@ -24,6 +25,7 @@ import { canvasGenerationCredits, modelSupports4K } from "@/constant/credits";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
 import { getClipboardImageFiles } from "../utils/canvas-clipboard";
 import { canvasNodeImageToDataUrlInput } from "../utils/canvas-node-image-source";
+import { isMobileBrowser, runCanvasImageDownloadStrategy } from "../utils/canvas-mobile-image-download";
 import { findPasteImageTargetNodeId } from "../utils/canvas-paste-image";
 import { buildCanvasSuperResolvePrompt, resolveCanvasSuperResolveSize } from "../utils/canvas-super-resolve";
 import { svgBlob, svgToDataUrl } from "../utils/canvas-svg";
@@ -248,7 +250,7 @@ function ConnectionCreateOption({ theme, icon, title, description, onClick }: { 
 }
 
 function InfiniteCanvasPage() {
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
     const params = useParams<{ id: string }>();
     const router = useRouter();
     const projectId = params.id;
@@ -1588,6 +1590,38 @@ function InfiniteCanvasPage() {
         setNodes((prev) => prev.map((node) => (node.id === nodeId ? applyNodeConfigPatch(node, patch) : node)));
     }, []);
 
+    const showMobileImageDownloadFallback = useCallback(
+        (shareUrl: string) => {
+            if (!shareUrl) {
+                message.success("已尝试保存到手机");
+                return;
+            }
+
+            copy(shareUrl);
+            const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+            if (!canShare) {
+                message.success("已尝试保存到手机，图片链接已复制");
+                return;
+            }
+
+            modal.confirm({
+                title: "已尝试保存图片",
+                content: "如图片未保存到相册，图片链接已复制，也可以继续使用系统分享。",
+                okText: "系统分享",
+                cancelText: "知道了",
+                async onOk() {
+                    try {
+                        await navigator.share({ title: "画布图片", url: shareUrl });
+                    } catch (error) {
+                        if (error instanceof DOMException && error.name === "AbortError") return;
+                        message.error(error instanceof Error ? error.message : "分享失败");
+                    }
+                },
+            });
+        },
+        [message, modal],
+    );
+
     const downloadNodeImage = useCallback(
         async (node: CanvasNodeData) => {
             if ((node.type !== CanvasNodeType.Image && node.type !== CanvasNodeType.Svg && node.type !== CanvasNodeType.Video && node.type !== CanvasNodeType.Audio) || !node.metadata?.content) return;
@@ -1599,10 +1633,26 @@ function InfiniteCanvasPage() {
             const fileName = `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(node.metadata.mimeType || node.metadata.content)}`;
             try {
                 if (node.type === CanvasNodeType.Image) {
-                    message.open({ key: messageKey, type: "loading", content: "正在准备下载...", duration: 0 });
+                    const isMobile = isMobileBrowser();
+                    message.open({ key: messageKey, type: "loading", content: isMobile ? "正在尝试保存图片..." : "正在准备下载...", duration: 0 });
                     const blob = await imageToBlob({ dataUrl: node.metadata.content, url: node.metadata.content, storageKey: node.metadata.storageKey });
-                    saveAs(blob, fileName);
-                    message.open({ key: messageKey, type: "success", content: "已开始下载", duration: 2 });
+                    const result = await runCanvasImageDownloadStrategy({
+                        blob,
+                        fileName,
+                        currentUrl: node.metadata.content,
+                        isMobile,
+                        saveBlob: saveAs,
+                        ensureRemoteImage: token ? () => uploadImage(blob) : undefined,
+                    });
+                    if (result.uploaded) {
+                        setNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, metadata: { ...item.metadata, ...imageMetadata(result.uploaded as UploadedImage) } } : item)));
+                    }
+                    message.open({ key: messageKey, type: "success", content: isMobile ? "已尝试保存到手机" : "已开始下载", duration: 2 });
+                    if (isMobile && result.uploadError) {
+                        message.warning("图片链接获取失败，本机保存已尝试");
+                        return;
+                    }
+                    if (isMobile) showMobileImageDownloadFallback(result.shareUrl);
                     return;
                 }
                 saveAs(node.metadata.content, fileName);
@@ -1610,7 +1660,7 @@ function InfiniteCanvasPage() {
                 message.open({ key: messageKey, type: "error", content: error instanceof Error ? error.message : "下载失败", duration: 3 });
             }
         },
-        [message],
+        [message, showMobileImageDownloadFallback, token],
     );
 
     const saveNodeAsset = useCallback(
