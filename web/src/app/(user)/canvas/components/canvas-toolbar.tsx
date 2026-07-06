@@ -1,5 +1,5 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { App, Button, Segmented, Switch } from "antd";
 import { CircleDot, Eraser, FolderOpen, Grid2x2, Hand, Image as ImageIcon, Info, Library, Moon, Music2, Palette, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
 
@@ -7,6 +7,7 @@ import { canvasThemes, type CanvasBackgroundMode, type CanvasColorTheme, type Ca
 import { useThemeStore } from "@/stores/use-theme-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
+import { resolveCanvasToolbarDock, type CanvasToolbarDock } from "../utils/canvas-toolbar-layout";
 
 export function CanvasToolbar({
     selectedCount,
@@ -61,10 +62,20 @@ export function CanvasToolbar({
     const [tipX, setTipX] = useState(0);
     const [appearanceOpen, setAppearanceOpen] = useState(false);
     const [panelX, setPanelX] = useState(0);
+    const [dock, setDock] = useState<CanvasToolbarDock>("bottom");
     const dockStyle = { background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item, boxShadow: colorTheme === "dark" ? "0 18px 45px rgba(0,0,0,.32)" : "0 16px 40px rgba(28,25,23,.12)" };
     const hoverStyle = { background: theme.toolbar.itemHover, color: theme.toolbar.activeText };
     const activeStyle = { background: theme.toolbar.activeBg, color: theme.toolbar.activeText };
     const tip = hovered ? toolLabel(hovered) : "";
+    const isRightDock = dock === "right";
+
+    useEffect(() => {
+        const updateDock = () => setDock(resolveCanvasToolbarDock(window.innerWidth));
+        updateDock();
+        window.addEventListener("resize", updateDock);
+        return () => window.removeEventListener("resize", updateDock);
+    }, []);
+
     const guardAction = <T extends unknown[]>(action: (...args: T) => void) => {
         return (...args: T) => {
             if (!token) {
@@ -76,9 +87,18 @@ export function CanvasToolbar({
     };
 
     return (
-        <div className="pointer-events-none absolute bottom-5 z-50 flex justify-center" style={{ left: 300, right: 16 }}>
-            {tip ? <DockTip label={tip} x={tipX} theme={theme} /> : null}
-            <div ref={wrapRef} className="thin-scrollbar pointer-events-auto flex h-14 max-w-full items-center gap-1 overflow-x-auto rounded-xl border px-2 shadow-lg backdrop-blur [&>*]:shrink-0" style={dockStyle}>
+        <div
+            className={`pointer-events-none absolute z-50 flex ${isRightDock ? "items-end" : "justify-center"}`}
+            style={isRightDock ? { right: 12, top: "50%", transform: "translateY(-50%)" } : { left: 300, right: 16, bottom: 20 }}
+        >
+            {tip && !isRightDock ? <DockTip label={tip} x={tipX} theme={theme} /> : null}
+            <div
+                ref={wrapRef}
+                className={`thin-scrollbar pointer-events-auto flex max-w-full gap-1 overflow-auto rounded-xl border shadow-lg backdrop-blur [&>*]:shrink-0 ${
+                    isRightDock ? "max-h-[calc(100vh-180px)] w-12 flex-col items-center px-1.5 py-2" : "h-14 items-center overflow-x-auto px-2"
+                }`}
+                style={dockStyle}
+            >
                 <ToolbarButton id="tool-hand" label="移动/选择" active={!selectedCount} hovered={hovered} activeStyle={activeStyle} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={guardAction(onDeselect)}>
                     <Hand className="size-4.5" />
                 </ToolbarButton>
@@ -88,7 +108,7 @@ export function CanvasToolbar({
                 <ToolbarButton id="tool-redo" label="重做" disabled={!canRedo} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={guardAction(onRedo)}>
                     <Redo2 className="size-4.5" />
                 </ToolbarButton>
-                <Divider theme={theme} />
+                <Divider theme={theme} vertical={isRightDock} />
                 <ToolbarButton id="tool-text" label="文本" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={guardAction(onAddText)}>
                     <Type className="size-4.5" />
                 </ToolbarButton>
@@ -107,7 +127,7 @@ export function CanvasToolbar({
                 <ToolbarButton id="tool-upload" label="上传素材" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={guardAction(onUpload)}>
                     <Upload className="size-4.5" />
                 </ToolbarButton>
-                <Divider theme={theme} />
+                <Divider theme={theme} vertical={isRightDock} />
                 <ToolbarButton id="tool-library" label="素材库" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={guardAction(onOpenAssetLibrary)}>
                     <Library className="size-4.5" />
                 </ToolbarButton>
@@ -133,13 +153,13 @@ export function CanvasToolbar({
                 </ToolbarButton>
                 {selectedCount ? (
                     <>
-                        <Divider theme={theme} />
+                        <Divider theme={theme} vertical={isRightDock} />
                         <ToolbarButton id="tool-delete" label="删除选中" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={guardAction(onDelete)} danger>
                             <Trash2 className="size-4.5" />
                         </ToolbarButton>
                     </>
                 ) : null}
-                <Divider theme={theme} />
+                <Divider theme={theme} vertical={isRightDock} />
                 <ToolbarButton id="tool-clear" label="清空画布" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={guardAction(onClear)} danger>
                     <Eraser className="size-4.5" />
                 </ToolbarButton>
@@ -147,8 +167,8 @@ export function CanvasToolbar({
 
             {appearanceOpen ? (
                 <div
-                    className="pointer-events-auto absolute bottom-[72px] z-30 w-[248px] -translate-x-1/2 rounded-xl border p-2.5 shadow-xl backdrop-blur"
-                    style={{ left: panelX || "50%", background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item }}
+                    className={`pointer-events-auto absolute z-30 w-[248px] rounded-xl border p-2.5 shadow-xl backdrop-blur ${isRightDock ? "right-[60px] top-1/2 -translate-y-1/2" : "bottom-[72px] -translate-x-1/2"}`}
+                    style={{ left: isRightDock ? undefined : panelX || "50%", background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item }}
                 >
                     <div className="px-1 pb-2 text-sm font-medium opacity-65">画布外观</div>
                     <div className="px-1 pb-1.5 text-[11px] font-medium opacity-50">主题模式</div>
@@ -257,8 +277,8 @@ function ToolbarButton({
     );
 }
 
-function Divider({ theme }: { theme: CanvasTheme }) {
-    return <div className="mx-1 h-6 w-px" style={{ background: theme.toolbar.border }} />;
+function Divider({ theme, vertical = false }: { theme: CanvasTheme; vertical?: boolean }) {
+    return <div className={vertical ? "my-1 h-px w-6" : "mx-1 h-6 w-px"} style={{ background: theme.toolbar.border }} />;
 }
 
 function CanvasThemeButton({ colorTheme, targetTheme, onThemeChange, children }: { colorTheme: CanvasColorTheme; targetTheme: CanvasColorTheme; onThemeChange: (theme: CanvasColorTheme) => void; children: ReactNode }) {

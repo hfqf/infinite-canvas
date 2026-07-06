@@ -17,6 +17,7 @@ import { useUserStore } from "@/stores/use-user-store";
 
 type UserStatusActionsProps = {
     showConfig?: boolean;
+    compact?: boolean;
     variant?: "default" | "canvas";
     onOpenShortcuts?: () => void;
     accountOpen?: boolean;
@@ -25,7 +26,7 @@ type UserStatusActionsProps = {
     getPopupContainer?: (node: HTMLElement) => HTMLElement;
 };
 
-export function UserStatusActions({ showConfig = true, variant = "default", onOpenShortcuts, accountOpen, onAccountOpenChange, accountRef, getPopupContainer }: UserStatusActionsProps) {
+export function UserStatusActions({ showConfig = true, compact = false, variant = "default", onOpenShortcuts, accountOpen, onAccountOpenChange, accountRef, getPopupContainer }: UserStatusActionsProps) {
     const theme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
     const user = useUserStore((state) => state.user);
@@ -51,7 +52,7 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
     ];
 
     return (
-        <div className="inline-flex shrink-0 items-center gap-1">
+        <div className={cn("inline-flex shrink-0 items-center", compact ? "gap-0.5" : "gap-1")}>
             {user ? (
                 <Link href="/deduction-logs" className={naturalIconClass} style={iconStyle} aria-label="我的流水" title="我的流水">
                     <ReceiptText className="size-4" />
@@ -66,7 +67,10 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
             {user ? (
                 <Link
                     href="/image-history"
-                    className="inline-flex h-7 shrink-0 items-center gap-1 px-1.5 text-xs font-medium text-stone-600 transition hover:text-stone-950 dark:text-stone-300 dark:hover:text-white"
+                    className={cn(
+                        "inline-flex h-7 shrink-0 items-center text-xs font-medium text-stone-600 transition hover:text-stone-950 dark:text-stone-300 dark:hover:text-white",
+                        compact ? "w-7 justify-center overflow-hidden px-0 [&_span]:hidden" : "gap-1 px-1.5",
+                    )}
                     style={iconStyle}
                     aria-label="生图历史"
                     title="生图历史"
@@ -80,7 +84,8 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
                 <Tooltip title="当前积分余额" placement="bottom">
                     <div
                         className={cn(
-                            "flex h-8 shrink-0 items-center gap-1.5 px-1.5 text-xs font-medium tabular-nums opacity-75 transition hover:opacity-100",
+                            "flex h-8 shrink-0 items-center text-xs font-medium tabular-nums opacity-75 transition hover:opacity-100",
+                            compact ? "w-7 justify-center overflow-hidden px-0 [&_span]:hidden" : "gap-1.5 px-1.5",
                             variant === "default" ? "text-stone-600 dark:text-stone-300" : "",
                         )}
                         style={variant === "canvas" ? { color: canvasTheme.node.text } : undefined}

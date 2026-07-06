@@ -26,6 +26,7 @@ import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image
 import { getClipboardImageFiles } from "../utils/canvas-clipboard";
 import { canvasNodeImageToDataUrlInput } from "../utils/canvas-node-image-source";
 import { isMobileBrowser, runCanvasImageDownloadStrategy } from "../utils/canvas-mobile-image-download";
+import { resolveCanvasTopBarMode, type CanvasTopBarMode } from "../utils/canvas-toolbar-layout";
 import { findPasteImageTargetNodeId } from "../utils/canvas-paste-image";
 import { buildCanvasSuperResolvePrompt, resolveCanvasSuperResolveSize } from "../utils/canvas-super-resolve";
 import { svgBlob, svgToDataUrl } from "../utils/canvas-svg";
@@ -3292,6 +3293,15 @@ function CanvasTopBar({
     const accountRef = useRef<HTMLDivElement>(null);
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
     const [accountOpen, setAccountOpen] = useState(false);
+    const [topBarMode, setTopBarMode] = useState<CanvasTopBarMode>(() => (typeof window === "undefined" ? "full" : resolveCanvasTopBarMode(window.innerWidth)));
+    const isCompactTopBar = topBarMode === "compact";
+
+    useEffect(() => {
+        const syncTopBarMode = () => setTopBarMode(resolveCanvasTopBarMode(window.innerWidth));
+        syncTopBarMode();
+        window.addEventListener("resize", syncTopBarMode);
+        return () => window.removeEventListener("resize", syncTopBarMode);
+    }, []);
 
     useEffect(() => {
         if (!isTitleEditing) return;
@@ -3313,8 +3323,8 @@ function CanvasTopBar({
 
     return (
         <>
-            <div className="pointer-events-none absolute left-0 right-0 top-0 z-50 flex h-16 items-center justify-between px-4">
-                <div className="pointer-events-auto flex min-w-0 items-center gap-3">
+            <div className={`pointer-events-none absolute left-0 right-0 top-0 z-50 flex h-16 items-center justify-between ${isCompactTopBar ? "gap-2 px-2" : "px-4"}`}>
+                <div className={`pointer-events-auto flex min-w-0 flex-1 items-center ${isCompactTopBar ? "gap-1.5" : "gap-3"}`}>
                     <Dropdown
                         trigger={["click"]}
                         menu={{
@@ -3349,13 +3359,13 @@ function CanvasTopBar({
                                     if (event.key === "Enter") onFinishTitleEditing();
                                     if (event.key === "Escape") onCancelTitleEditing();
                                 }}
-                                className="max-w-[280px] bg-transparent p-0 text-left text-lg font-semibold tracking-normal outline-none"
+                                className={`bg-transparent p-0 text-left font-semibold tracking-normal outline-none ${isCompactTopBar ? "max-w-24 text-base" : "max-w-[280px] text-lg"}`}
                                 style={{ color: theme.node.text }}
                             />
                         ) : (
                             <button
                                 type="button"
-                                className="max-w-[280px] truncate border-b border-dashed border-transparent text-left text-lg font-semibold tracking-normal transition hover:border-current"
+                                className={`truncate border-b border-dashed border-transparent text-left font-semibold tracking-normal transition hover:border-current ${isCompactTopBar ? "max-w-24 text-base" : "max-w-[280px] text-lg"}`}
                                 onDoubleClick={onStartTitleEditing}
                                 title="双击修改画布名称"
                             >
@@ -3365,9 +3375,10 @@ function CanvasTopBar({
                     </div>
                 </div>
 
-                <div className="pointer-events-auto flex items-center gap-1.5">
+                <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
                     <UserStatusActions
                         variant="canvas"
+                        compact={isCompactTopBar}
                         accountOpen={accountOpen}
                         onAccountOpenChange={setAccountOpen}
                         accountRef={accountRef}
